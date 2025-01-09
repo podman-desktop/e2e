@@ -39,7 +39,7 @@ on:
         type: 'string'
         required: true
       images_version:
-        default: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.3"'
+        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         description: 'Testing images versions, no spaces'
         type: 'string'
         required: true

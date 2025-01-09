@@ -31,7 +31,7 @@ on:
         type: string
         required: true
       images_version:
-        default: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.2"'
+        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         description: 'Testing images versions, no spaces'
         type: 'string'
         required: true
@@ -71,7 +71,7 @@ jobs:
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.2"'
+        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
         echo "FORK=${{ github.event.inputs.fork || env.DEFAULT_FORK }}" >> $GITHUB_ENV
         echo "BRANCH=${{ github.event.inputs.branch || env.DEFAULT_BRANCH }}" >> $GITHUB_ENV
