@@ -51,8 +51,8 @@ on:
         description: 'Testing images versions, no spaces'
         type: 'string'
         required: true
-      mapt_version:
-        default: 'v0.7.3'
+      mapt_params:
+        default: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.3"'
         description: 'Mapt image version'
         type: 'string'
         required: true
@@ -62,8 +62,6 @@ jobs:
     name: ${{ matrix.windows-version }} - Debug
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    env:
-      MAPT_IMAGE: quay.io/redhat-developer/mapt
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +71,7 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_MAPT_VERSION: 'v0.7.3'
+        DEFAULT_MAPT_PARAMS: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.3"'
         DEFAULT_EXT_TESTS: '0'
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
@@ -82,7 +80,6 @@ jobs:
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
-        echo "MAPT_VERSION=${{ github.event.inputs.mapt_version || env.DEFAULT_MAPT_VERSION }}" >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "EXT_TESTS=${{ github.event.inputs.ext_tests || env.DEFAULT_EXT_TESTS }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
@@ -94,6 +91,8 @@ jobs:
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+         echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
       run: |
