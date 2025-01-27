@@ -52,7 +52,7 @@ on:
         type: 'string'
         required: true
       mapt_params:
-        default: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.3"'
+        default: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.4"'
         description: 'Mapt image version'
         type: 'string'
         required: true
@@ -71,7 +71,7 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_MAPT_PARAMS: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.3"'
+        DEFAULT_MAPT_PARAMS: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.7.4"'
         DEFAULT_EXT_TESTS: '0'
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
