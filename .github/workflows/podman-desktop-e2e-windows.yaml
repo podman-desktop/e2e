@@ -1,5 +1,5 @@
 name: Podman Desktop E2E with Podman installation
-run-name: Podman Desktop E2E with Podman installation ${{ inputs.debug == 'true' && '- Debug' || '' }}
+run-name: Podman Desktop E2E with Podman installation ${{ inputs.podman_provider != '' && inputs.podman_provider || 'WSL' }} ${{ inputs.debug == 'true' && '- Debug' || '' }}
 
 on:
   schedule:
