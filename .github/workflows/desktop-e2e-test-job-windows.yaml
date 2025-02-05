@@ -1,5 +1,5 @@
 name: Test Workflow Podman Desktop E2E with Podman
-run-name: Debugging Desktop E2E Tests with Podman ${{ github.event.inputs.podman_version }}
+run-name: Debugging Desktop E2E Tests with Podman ${{ inputs.podman_provider != '' && inputs.podman_provider || '' }}
 
 on:
   workflow_dispatch:
