@@ -1,5 +1,5 @@
-name: Podman Desktop Podman-Remote E2E Stress Test
-run-name: Podman Desktop Remote-Podman E2E Stress Test
+name: Podman Desktop E2E UI Stress Test
+run-name: Podman Desktop E2E UI Stress Test
 
 on:
   schedule:
@@ -12,17 +12,17 @@ on:
         type: string
         required: true
       npm_target:
-        default: 'test:e2e:stress-test'
+        default: 'test:e2e:ui-stress'
         description: 'npm target to run tests'
         type: string
         required: true
       podman_remote_url:
-        default: 'https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe'
+        default: 'https://github.com/containers/podman/releases/download/v5.3.2/podman-5.3.2-setup.exe'
         description: 'podman latest released version exe'
         type: string
         required: true
       podman_options:
-        default: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
+        default: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         description: 'Podman machine configuration options, no spaces'
         type: 'string'
         required: true
@@ -43,9 +43,9 @@ on:
         description: 'Testing images versions, no spaces'
         type: 'string'
         required: true
-      host_flavor:
-        default: 'Standard_D8s_v4'
-        description: 'Azure agent flavor, ie: Standard_D4a_v4 or others'
+      host_params: 
+        default: 'CPUS="8",MEMORY="16"'
+        description: Number of CPUs and GBs of memory, no spaces
         type: 'string'
         required: true
 jobs:
@@ -53,9 +53,6 @@ jobs:
     name: ${{ matrix.windows-version }} - ${{ matrix.windows-featurepack }}
     timeout-minutes: 90
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
     env:
       MAPT_VERSION: v0.7.4
       MAPT_IMAGE: quay.io/redhat-developer/mapt
@@ -70,9 +67,9 @@ jobs:
       env:
         DEFAULT_NPM_TARGET: 'test:e2e:stress-test'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
-        DEFAULT_PODMAN_OPTIONS: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
+        DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        DEFAULT_HOST_FLAVOR: 'Standard_D8s_v4'
+        DEFAULT_HOST_PARAMS: 'CPUS="8",MEMORY="16"'
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.3"'
@@ -81,7 +78,8 @@ jobs:
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
-        echo "HOST_FLAVOR=${{ github.event.inputs.host_flavor || env.DEFAULT_HOST_FLAVOR }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.host_params || env.DEFAULT_HOST_PARAMS }}" >> | awk -F ',' \
+        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "HOST_PARAMS_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
@@ -105,7 +103,9 @@ jobs:
             --conn-details-output '/workspace' \
             --windows-version '${{ matrix.windows-version }}' \
             --windows-featurepack '${{ matrix.windows-featurepack }}' \
-            --vmsize '${{ env.HOST_FLAVOR }}' \
+            --nested-virt \
+            --cpus '${{ env.HOST_PARAMS_CPUS }}' \
+            --memory '${{ env.HOST_PARAMS_MEMORY }}' \
             --tags project=podman-desktop \
             --spot
         # Check logs 
@@ -208,7 +208,7 @@ jobs:
                 -userNetworking ${{ env.PODMAN_NETWORKING }} \
                 -podmanProvider ${{ env.PODMAN_PROVIDER }} \
                 -envVars ${{ env.ENV_VARS }} \
-                -scriptPaths 'stress_test_remote.ps1'
+                -scriptPaths 'stress_test_ui.ps1'
         # check logs
         podman logs -f pde2e-runner-run
 
@@ -236,6 +236,7 @@ jobs:
         fail_on_failure: true
         include_passed: true
         detailed_summary: true
+        annotate_only: true
         require_tests:  true
         report_paths: '**/*results.xml'
 
