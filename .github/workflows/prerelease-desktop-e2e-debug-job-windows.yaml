@@ -131,17 +131,17 @@ jobs:
         # we need to create a content for host, id_rsa, username, userpassword files from repository tmp secrets.
         # should be secrets.REMOTE_HOST, secrets.REMOTE_USER, secrets.REMOTE_RSA, secrets.REMOTE_PASS
         cat << EOF > ./host
-            ${{ secrets.REMOTE_HOST }}
+        ${{ secrets.REMOTE_HOST }}
         EOF
         cat << EOF > ./username
-        cat ${{ secrets.REMOTE_USER }}
+        ${{ secrets.REMOTE_USER }}
         EOF
         cat << EOF > ./id_rsa
-        cat ${{ secrets.REMOTE_RSA }}
+        ${{ secrets.REMOTE_RSA }}
         EOF
         chmod 600 ./id_rsa
         cat << EOF > ./userpassword
-        cat ${{ secrets.REMOTE_PASS }}
+        ${{ secrets.REMOTE_PASS }}
         EOF
 
     - name: Check instance system info
