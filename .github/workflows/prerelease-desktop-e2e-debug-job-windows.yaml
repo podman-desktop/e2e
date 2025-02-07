@@ -5,10 +5,11 @@ on:
   workflow_dispatch:
     inputs:
       create_machine:
-        default: true
-        description: 'If to create new machine - default to true, or to use existing(requires manual setup)'
-        type: boolean
-        required: true
+        description: 'If to create new machine - defaults to true, or to use existing(requires manual setup)'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
       pd_repo_options:
         default: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         description: 'Podman Desktop Extension repo, fork and branch'
@@ -100,7 +101,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
-      if: ${{ env.CREATE_MACHINE }}
+      if: ${{ env.CREATE_MACHINE == 'true' }}
       run: |
         # Create instance
         podman run -d --name windows-create --rm \
@@ -125,7 +126,7 @@ jobs:
         podman logs -f windows-create
 
     - name: Setup Connection to Existing instance
-      if: ${{ ! env.CREATE_MACHINE }}
+      if: ${{ env.CREATE_MACHINE == 'false' }}
       run: |
         # we need to create a content for host, id_rsa, username, userpassword files from repository tmp secrets.
         # should be secrets.REMOTE_HOST, secrets.REMOTE_USER, secrets.REMOTE_RSA, secrets.REMOTE_PASS
