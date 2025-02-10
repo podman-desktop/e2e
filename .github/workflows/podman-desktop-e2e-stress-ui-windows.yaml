@@ -65,7 +65,7 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_NPM_TARGET: 'test:e2e:stress-test'
+        DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
