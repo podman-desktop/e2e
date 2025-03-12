@@ -86,10 +86,9 @@ jobs:
  
     - name: Install podman
       run: |
-        wget --version
         wget ${{ env.PODMAN_URL }}
         tar -xvf podman-remote-static-linux_amd64.tar.gz
-        sudo mv podman /usr/local/bin/
+        sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
         podman --version
 
     - name: Install & build Podman Desktop for E2E tests
