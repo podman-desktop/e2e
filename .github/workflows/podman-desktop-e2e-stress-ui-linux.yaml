@@ -93,8 +93,7 @@ jobs:
 
     - name: Install QEMU (podman dependency)
       run: |
-        sudo apt update
-        sudo apt install -y qemu-kvm qemu-img
+        sudo apt-get install qemu-system
 
     - name: Install & build Podman Desktop for E2E tests
       working-directory: ./podman-desktop
