@@ -91,6 +91,11 @@ jobs:
         sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
         podman --version
 
+    - name: Install QEMU (podman dependency)
+      run: |
+        sudo apt update
+        sudo apt install -y qemu-kvm qemu-img
+
     - name: Install & build Podman Desktop for E2E tests
       working-directory: ./podman-desktop
       run: |
