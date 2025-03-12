@@ -100,6 +100,7 @@ jobs:
         #download latest version
         curl -s https://api.github.com/repos/containers/gvisor-tap-vsock/releases/latest | awk 'BEGIN { FS = "\"\\s*:\\s*" } /browser_download_url/ && /linux-amd64/ {print $2}' | xargs wget -O gvproxy-linux-amd64
         chmod +x ./gvproxy-linux-amd64
+        mkdir -p /usr/local/lib/podman/
         sudo mv gvproxy-linux-amd64 /usr/local/lib/podman/gvproxy
 
     - name: Install & build Podman Desktop for E2E tests
@@ -137,6 +138,33 @@ jobs:
         if [ ${{ env.PODMAN_START }} == 1 ]; then
           podman machine start
         fi
+
+    - name: Create expected objects for the UI stress test
+      run: |
+        tinyImage="quay.io/podman/hello:latest" # ~0'8MB
+        smallImage="quay.io/sclorg/nginx-122-micro-c9s:20230718" # ~70MB
+        mediumImage="docker.io/library/nginx:latest" # ~200MB
+        largeImage="registry.access.redhat.com/ubi8/httpd-24-3:latest" # ~460MB
+        testImage=$tinyImage
+  
+        podman pull $testImage
+
+        for ((imgNum=1; imgNum<=$OBJECT_NUM; imgNum++)); do
+          # create images
+          taggedImage="localhost/my-image-$imgNum:latest"
+          echo "Tagging image: $testImage as $taggedImage"
+          podman tag $testImage $taggedImage
+
+          # create containers
+          containerName="my-container-$imgNum"
+          echo "Creating container: $containerName"
+          podman run -d --name $containerName $taggedImage
+
+          #create pods
+          podName="my-pod-$imgNum"
+          echo "Creating pod: $podName"
+          podman pod create --name $podName
+        done
 
     - name: Run UI stress tests
       working-directory: ./podman-desktop
