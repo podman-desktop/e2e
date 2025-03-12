@@ -1,0 +1,152 @@
+name: Podman Desktop E2E UI Stress Test (Linux)
+run-name: Podman Desktop E2E UI Stress Test (Linux)
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' #run every monday at 5AM
+  workflow_dispatch:
+    inputs:
+      pd_repo_options:
+        default: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
+        description: 'Podman Desktop repo, fork and branch'
+        type: string
+        required: true
+      npm_target:
+        default: 'test:e2e:ui-stress'
+        description: 'npm target to run tests'
+        type: string
+        required: true
+      podman_remote_url:
+        default: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-remote-static-linux_amd64.tar.gz'
+        description: 'podman latest released version exe'
+        type: string
+        required: true
+      podman_options:
+        default: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
+        description: 'Podman machine configuration options, no spaces'
+        type: 'string'
+        required: true
+      env_vars:
+        default: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
+        type: 'string'
+        required: true
+      images_version:
+        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
+        description: 'Testing images versions, no spaces'
+        type: 'string'
+        required: true
+
+jobs:
+  linux:
+    name: linux
+    timeout-minutes: 90
+    runs-on: ubuntu-latest
+    env:
+      MAPT_VERSION: v0.7.4
+      MAPT_IMAGE: quay.io/redhat-developer/mapt
+
+    steps:
+    - name: Set the default env. variables
+      env:
+        DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
+        DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
+        DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
+        DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        DEFAULT_URL: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-remote-static-linux_amd64.tar.gz'
+        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.3"'
+      run: |
+        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
+        echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
+        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
+        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+ 
+    - name: Checkout podman desktop
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.PD_REPO }}/${{ env.PD_FORK }}
+        ref: ${{ env.PD_BRANCH }}
+        path: podman-desktop
+ 
+    - name: Install node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+ 
+    - name: Install pnpm 
+      uses: pnpm/action-setup@v4
+      with:
+        run_install: false
+        package_json_file: ./podman-desktop/package.json
+ 
+    - name: Install podman
+      run: |
+        wget --version
+        wget ${{ env.PODMAN_URL }}
+        tar -xvf podman-remote-static-linux_amd64.tar.gz
+        sudo mv podman /usr/local/bin/
+        podman --version
+
+    - name: Install & build Podman Desktop for E2E tests
+      working-directory: ./podman-desktop
+      run: |
+        pnpm install
+        pnpm test:e2e:build
+       
+    - name: Ensure getting current HEAD version of the test framework
+      working-directory: ./podman-desktop
+      run: |
+        # workaround for https://github.com/containers/podman-desktop-extension-bootc/issues/712
+        version=$(npm view @podman-desktop/tests-playwright@next version)
+        echo "Version of @podman-desktop/tests-playwright to be used: $version"
+        jq --arg version "$version" '.devDependencies."@podman-desktop/tests-playwright" = $version' package.json > package.json_tmp && mv package.json_tmp package.json
+      shell: bash
+ 
+    - name: Revert unprivileged user namespace restrictions in Ubuntu 24.04
+      run: |
+        # allow unprivileged user namespace
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+ 
+    - name: Setup podman machine
+      if: ${{ env.PODMAN_INIT }} == 1
+      run: |
+        podman_flags=""
+        if [ ${{ env.PODMAN_ROOTFUL }} == 1 ]; then
+          podman_flags+="--rootful "
+        elif [ ${{ env.PODMAN_NETWORKING }} == 1 ]; then
+          podman_flags+="--user-mode-networking "
+        fi
+  
+        podman machine init $podman_flags
+
+        if [ ${{ env.PODMAN_START }} == 1 ]; then
+          podman machine start
+        fi
+
+    - name: Run UI stress tests
+      working-directory: ./podman-desktop
+      env:
+        PODMAN_DESKTOP_ARGS: ${{ github.workspace }}/podman-desktop
+      run: pnpm ${{ env.NPM_TARGET }}
+      
+    - name: Publish Test Report
+      uses: mikepenz/action-junit-report@v5
+      if: always() # always run even if the previous step fails
+      with:
+        fail_on_failure: true
+        include_passed: true
+        detailed_summary: true
+        annotate_only: true
+        require_tests:  true
+        report_paths: '**/*results.xml'
+ 
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: e2e-tests-linux
+        path: ./**/tests/**/output/
