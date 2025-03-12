@@ -95,6 +95,13 @@ jobs:
       run: |
         sudo apt-get install qemu-system
 
+    - name: Install gvproxy (podman dependency)
+      run: |
+        #download latest version
+        curl -s https://api.github.com/repos/containers/gvisor-tap-vsock/releases/latest | awk 'BEGIN { FS = "\"\\s*:\\s*" } /browser_download_url/ && /linux-amd64/ {print $2}' | xargs wget -O gvproxy-linux-amd64
+        chmod +x ./gvproxy-linux-amd64
+        sudo mv gvproxy-linux-amd64 /usr/local/lib/podman/gvproxy
+
     - name: Install & build Podman Desktop for E2E tests
       working-directory: ./podman-desktop
       run: |
