@@ -98,6 +98,11 @@ jobs:
     - name: Install virtiofsd (qemu dependency)
       run: |
         sudo apt-get install virtiofsd
+        dpkg -L virtiofsd || echo "virtiofsd package not found"
+        which virtiofsd || echo "virtiofsd not in PATH"
+        ls -l /usr/libexec/virtiofsd || echo "virtiofsd not found in /usr/libexec"
+        export PATH=$PATH:/usr/libexec
+        podman machine info | jq '.[] | .Host.virtiofsd'
 
     - name: Install gvproxy (podman dependency)
       run: |
