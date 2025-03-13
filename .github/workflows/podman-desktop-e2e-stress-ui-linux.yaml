@@ -97,7 +97,7 @@ jobs:
 
     - name: Install virtiofsd (qemu dependency)
       run: |
-        sudo apt-get install libcap-ng-dev libseccomp-dev
+        sudo apt-get install virtiofsd
 
     - name: Install gvproxy (podman dependency)
       run: |
