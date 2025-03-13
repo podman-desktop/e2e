@@ -137,7 +137,7 @@ jobs:
             --nested-virt \
             --cpus 4 \
             --memory 8 \
-            -tags project=podman-desktop,source=github,org=${{github.repository_owner}},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} \
+            --tags project=podman-desktop,source=github,org=${{github.repository_owner}},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} \
             --spot
         # Check logs 
         podman logs -f windows-create
