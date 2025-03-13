@@ -12,15 +12,19 @@ on:
         type: string
         required: true
       npm_target:
-        default: 'test:e2e:remote'
+        default: 'test:e2e:remote:run'
         description: 'npm target to run tests'
         type: string
         required: true
       podman_remote_url:
-        default: 'https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe'
+        default: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-5.4.0-setup.exe'
         description: 'podman latest released version exe'
         type: string
         required: true
+      podman_desktop_url:
+        description: 'podman desktop testing-prerelease setup-exe url'
+        type: string
+        required: false
       podman_options:
         default: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
         description: 'Podman machine configuration options, no spaces'
@@ -43,21 +47,14 @@ on:
         description: 'Testing images versions, no spaces'
         type: 'string'
         required: true
-      host_flavor:
-        default: 'Standard_D8s_v4'
-        description: 'Azure agent flavor, ie: Standard_D4a_v4 or others'
-        type: 'string'
-        required: true
+
 jobs:
   windows:
     name: ${{ matrix.windows-version }} - ${{ matrix.windows-featurepack }}
     timeout-minutes: 90
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
     env:
-      MAPT_VERSION: v0.7.4
+      MAPT_VERSION: v0.8.0
       MAPT_IMAGE: quay.io/redhat-developer/mapt
     strategy:
       fail-fast: false
@@ -66,22 +63,54 @@ jobs:
         windows-featurepack: ['24h2-ent']
 
     steps:
+    - name: Get Podman version used by Desktop
+      run: |
+        version=$(curl https://raw.githubusercontent.com/podman-desktop/podman-desktop/main/extensions/podman/packages/extension/src/podman5.json | jq -r '.version')
+        echo "Default Podman Version from Podman Desktop: ${version}"
+        echo "PD_PODMAN_VERSION=${version}" >> $GITHUB_ENV
+
+    - name: Get Latest Podman Desktop testing prerelease
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        tag=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/tags?pages=1" | jq -r '.[0].name')
+        echo "Tag: $tag"
+        # releaes id
+        id=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/tags/$tag" | jq -r '.id')
+        echo "Release ID: $id"
+        # list assets with setup-x64.exe suffix
+        url=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/$id/assets" | jq -r '.[] | select (.name | test("setup-x64.exe$"))' | jq -r '.browser_download_url')
+        echo "Podman Desktop testing prerelease url: ${url}"
+        echo "DEFAULT_PD_URL=${url}" >> $GITHUB_ENV
+
     - name: Set the default env. variables
       env:
-        DEFAULT_NPM_TARGET: 'test:e2e:remote'
+        DEFAULT_NPM_TARGET: 'test:e2e:remote:run'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_PODMAN_OPTIONS: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        DEFAULT_HOST_FLAVOR: 'Standard_D8s_v4'
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true'
-        DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.3"'
+        DEFAULT_VERSION: "${{ env.PD_PODMAN_VERSION || '5.4.0' }}"
+        DEFAULT_URL: 'https://github.com/containers/podman/releases/download/v$DEFAULT_VERSION/podman-$DEFAULT_VERSION-setup.exe'
+        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
+        echo "PD_URL=${{ github.event.inputs.podman_desktop_url || env.DEFAULT_PD_URL }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
-        echo "HOST_FLAVOR=${{ github.event.inputs.host_flavor || env.DEFAULT_HOST_FLAVOR }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
@@ -105,8 +134,10 @@ jobs:
             --conn-details-output '/workspace' \
             --windows-version '${{ matrix.windows-version }}' \
             --windows-featurepack '${{ matrix.windows-featurepack }}' \
-            --vmsize '${{ env.HOST_FLAVOR }}' \
-            --tags project=podman-desktop \
+            --nested-virt \
+            --cpus 4 \
+            --memory 8 \
+            -tags project=podman-desktop,source=github,org=${{github.repository_owner}},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }} \
             --spot
         # Check logs 
         podman logs -f windows-create
@@ -132,28 +163,6 @@ jobs:
         podman wait --condition running x-session
         # Check logs for the x session
         podman logs x-session
-
-    - name: Setup dependencies and build Podman Desktop locally
-      run: |
-        podman run -d --name pde2e-builder-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_CLEANUP=false \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          quay.io/odockal/pde2e-builder:${{ env.PDE2E_BUILDER }}-windows \
-              pd-e2e/builder.ps1 \
-                -targetFolder pd-e2e \
-                -resultsFolder results \
-                -fork ${{ env.PD_FORK }} \
-                -branch ${{ env.PD_BRANCH }} \
-                -envVars ${{ env.ENV_VARS }}
-        # check logs
-        podman logs -f pde2e-builder-run
 
     - name: Download Podman nightly, do not initialize
       run: |
@@ -199,6 +208,7 @@ jobs:
                 -targetFolder pd-e2e \
                 -resultsFolder results \
                 -podmanPath $(cat results/podman-location.log) \
+                -pdUrl ${{ env.PD_URL }} \
                 -fork ${{ env.PD_FORK }} \
                 -branch ${{ env.PD_BRANCH }} \
                 -npmTarget ${{ env.NPM_TARGET }} \
@@ -234,6 +244,7 @@ jobs:
       if: always() # always run even if the previous step fails
       with:
         fail_on_failure: true
+        annotate_only: true
         include_passed: true
         detailed_summary: true
         require_tests:  true
