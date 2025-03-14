@@ -136,7 +136,7 @@ jobs:
 
         if [ ${{ env.PODMAN_START }} == 1 ]; then
           export PATH=$PATH:/usr/libexec
-          podman machine start"
+          podman machine start
         fi
 
     - name: Create expected objects for the UI stress test
