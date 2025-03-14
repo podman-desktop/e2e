@@ -89,23 +89,14 @@ jobs:
         wget ${{ env.PODMAN_URL }}
         tar -xvf podman-remote-static-linux_amd64.tar.gz
         sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
-        podman --version
 
-    - name: Install QEMU (podman dependency)
+    - name: Install dependencies
       run: |
+        #qemu
         sudo apt-get install qemu-system
-
-    - name: Install virtiofsd (qemu dependency)
-      run: |
+        #virtiofsd
         sudo apt-get install virtiofsd
-        dpkg -L virtiofsd || echo "virtiofsd package not found"
-        which virtiofsd || echo "virtiofsd not in PATH"
-        ls -l /usr/libexec/virtiofsd || echo "virtiofsd not found in /usr/libexec"
-        export PATH=$PATH:/usr/libexec
-
-    - name: Install gvproxy (podman dependency)
-      run: |
-        #download latest version
+        #gvproxy
         curl -s https://api.github.com/repos/containers/gvisor-tap-vsock/releases/latest | awk 'BEGIN { FS = "\"\\s*:\\s*" } /browser_download_url/ && /linux-amd64/ {print $2}' | xargs wget -O gvproxy-linux-amd64
         chmod +x ./gvproxy-linux-amd64
         sudo mkdir -p /usr/local/lib/podman/
@@ -140,11 +131,12 @@ jobs:
         elif [ ${{ env.PODMAN_NETWORKING }} == 1 ]; then
           podman_flags+="--user-mode-networking "
         fi
-  
+        
         podman machine init $podman_flags
 
         if [ ${{ env.PODMAN_START }} == 1 ]; then
-          podman machine start
+          export PATH=$PATH:/usr/libexec
+          podman machine start"
         fi
 
     - name: Create expected objects for the UI stress test
