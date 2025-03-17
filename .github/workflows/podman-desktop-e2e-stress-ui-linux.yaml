@@ -135,7 +135,8 @@ jobs:
   
         podman pull $testImage
 
-        for ((imgNum=1; imgNum<=$OBJECT_NUM; imgNum++)); do
+        for imgNum in $(seq 1 $OBJECT_NUM);
+        do
           # create images
           taggedImage="localhost/my-image-$imgNum:latest"
           echo "Tagging image: $testImage as $taggedImage"
