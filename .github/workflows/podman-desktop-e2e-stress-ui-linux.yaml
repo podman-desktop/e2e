@@ -37,7 +37,6 @@ jobs:
         DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_ENV_VARS: 'OBJECT_NUM=100'
-        DEFAULT_URL: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-remote-static-linux_amd64.tar.gz'
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
