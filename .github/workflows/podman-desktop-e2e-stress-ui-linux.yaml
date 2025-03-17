@@ -16,24 +16,9 @@ on:
         description: 'npm target to run tests'
         type: string
         required: true
-      podman_remote_url:
-        default: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-remote-static-linux_amd64.tar.gz'
-        description: 'podman latest released version exe'
-        type: string
-        required: true
-      podman_options:
-        default: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
-        description: 'Podman machine configuration options, no spaces'
-        type: 'string'
-        required: true
       env_vars:
-        default: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        default: 'OBJECT_NUM=100'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
-        type: 'string'
-        required: true
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        description: 'Testing images versions, no spaces'
         type: 'string'
         required: true
 
@@ -50,21 +35,14 @@ jobs:
     - name: Set the default env. variables
       env:
         DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
-        DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        DEFAULT_ENV_VARS: 'OBJECT_NUM=100'
         DEFAULT_URL: 'https://github.com/containers/podman/releases/download/v5.4.0/podman-remote-static-linux_amd64.tar.gz'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.2",PODMAN="v0.0.2",RUNNER="v0.0.3"'
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
  
     - name: Checkout podman desktop
       uses: actions/checkout@v4
@@ -127,6 +105,9 @@ jobs:
 
     - name: Create expected objects for the UI stress test
       run: |
+        export "$ENV_VARS"
+        echo "OBJECT_NUM=$OBJECT_NUM" >> $GITHUB_ENV
+
         tinyImage="quay.io/podman/hello:latest" # ~0'8MB
         smallImage="quay.io/sclorg/nginx-122-micro-c9s:20230718" # ~70MB
         mediumImage="docker.io/library/nginx:latest" # ~200MB
@@ -134,6 +115,9 @@ jobs:
         testImage=$tinyImage
   
         podman pull $testImage
+        
+        echo "OBJECT_NUM: $OBJECT_NUM"
+        echo "seq 1 OBJECT_NUM: $(seq 1 $OBJECT_NUM)"
 
         for imgNum in $(seq 1 $OBJECT_NUM);
         do
@@ -152,6 +136,7 @@ jobs:
           echo "Creating pod: $podName"
           podman pod create --name $podName
         done
+      shell: sh
 
     - name: Run UI stress tests
       working-directory: ./podman-desktop
