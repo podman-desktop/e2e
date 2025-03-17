@@ -83,24 +83,6 @@ jobs:
       with:
         run_install: false
         package_json_file: ./podman-desktop/package.json
- 
-    - name: Install podman
-      run: |
-        wget ${{ env.PODMAN_URL }}
-        tar -xvf podman-remote-static-linux_amd64.tar.gz
-        sudo mv bin/podman-remote-static-linux_amd64 /usr/local/bin/podman
-
-    - name: Install dependencies
-      run: |
-        #qemu
-        sudo apt-get install qemu-system
-        #virtiofsd
-        sudo apt-get install virtiofsd
-        #gvproxy
-        curl -s https://api.github.com/repos/containers/gvisor-tap-vsock/releases/latest | awk 'BEGIN { FS = "\"\\s*:\\s*" } /browser_download_url/ && /linux-amd64/ {print $2}' | xargs wget -O gvproxy-linux-amd64
-        chmod +x ./gvproxy-linux-amd64
-        sudo mkdir -p /usr/local/lib/podman/
-        sudo mv gvproxy-linux-amd64 /usr/local/lib/podman/gvproxy
 
     - name: Install & build Podman Desktop for E2E tests
       working-directory: ./podman-desktop
@@ -117,27 +99,31 @@ jobs:
         jq --arg version "$version" '.devDependencies."@podman-desktop/tests-playwright" = $version' package.json > package.json_tmp && mv package.json_tmp package.json
       shell: bash
  
+    - name: Update podman to 5.x
+      run: |
+        echo "ubuntu version from kubic repository to install podman we need (v5)"
+        ubuntu_version='23.10'
+        echo "Add unstable kubic repo into list of available sources and get the repo key"
+        sudo sh -c "echo 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list"
+        curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add -
+        echo "install necessary dependencies for criu package which is not part of ${ubuntu_version}"
+        sudo apt-get install --allow-unauthenticated -qq libprotobuf32t64 python3-protobuf libnet1
+        echo "install criu manually from static location"
+        curl -sLO http://cz.archive.ubuntu.com/ubuntu/pool/universe/c/criu/criu_3.16.1-2_amd64.deb && sudo dpkg -i criu_3.16.1-2_amd64.deb
+        echo "Updating all dependencies..."
+        sudo apt-get update --allow-insecure-repositories -qq
+        echo "installing/update podman package..."
+        sudo apt-get -qq -y install --allow-unauthenticated podman || { echo "Start fallback steps for podman nightly installation from a static mirror" && \
+          sudo sh -c "echo 'deb http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list" && \
+          curl -L "http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add - && \
+          sudo apt-get --allow-insecure-repositories update && \
+          sudo apt-get --allow-unauthenticated -y install podman; }
+        podman version
+
     - name: Revert unprivileged user namespace restrictions in Ubuntu 24.04
       run: |
         # allow unprivileged user namespace
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
- 
-    - name: Setup podman machine
-      if: ${{ env.PODMAN_INIT }} == 1
-      run: |
-        podman_flags=""
-        if [ ${{ env.PODMAN_ROOTFUL }} == 1 ]; then
-          podman_flags+="--rootful "
-        elif [ ${{ env.PODMAN_NETWORKING }} == 1 ]; then
-          podman_flags+="--user-mode-networking "
-        fi
-        
-        podman machine init $podman_flags
-
-        if [ ${{ env.PODMAN_START }} == 1 ]; then
-          export PATH=$PATH:/usr/libexec
-          podman machine start
-        fi
 
     - name: Create expected objects for the UI stress test
       run: |
