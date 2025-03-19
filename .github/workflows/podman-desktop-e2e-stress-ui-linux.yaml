@@ -16,12 +16,22 @@ on:
         description: 'npm target to run tests'
         type: string
         required: true
-      env_vars:
-        default: 'OBJECT_NUM=100'
-        description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
+      object_num:
+        default: '100'
+        description: 'Number of podman objects (images, containers, pods) of each type to generate'
         type: 'string'
         required: true
-
+      image_size:
+        default: 'tinyImage'
+        description: 'Image size to be used for generating podman objects'
+        type: 'choice'
+        options:
+          - tiny
+          - small
+          - medium
+          - large
+        required: true
+        
 jobs:
   linux:
     name: linux
@@ -34,14 +44,16 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        DEFAULT_ENV_VARS: 'OBJECT_NUM=100'
+        DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
+        DEFAULT_OBJECT_NUM: '100'
+        DEFAULT_IMAGE_SIZE: 'tiny'
       run: |
-        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
+        echo "OBJECT_NUM=${{ github.event.inputs.object_num || env.DEFAULT_OBJECT_NUM }}" >> $GITHUB_ENV
+        echo "IMAGE_SIZE=${{ github.event.inputs.image_size || env.DEFAULT_IMAGE_SIZE }}" >> $GITHUB_ENV
  
     - name: Checkout podman desktop
       uses: actions/checkout@v4
@@ -104,21 +116,22 @@ jobs:
 
     - name: Create expected objects for the UI stress test
       run: |
-        export "$ENV_VARS"
-        echo "OBJECT_NUM=$OBJECT_NUM" >> $GITHUB_ENV
-
         tinyImage="quay.io/podman/hello:latest" # ~0'8MB
         smallImage="quay.io/sclorg/nginx-122-micro-c9s:20230718" # ~70MB
         mediumImage="docker.io/library/nginx:latest" # ~200MB
         largeImage="registry.access.redhat.com/ubi8/httpd-24-3:latest" # ~460MB
-        testImage=$tinyImage
+
+        case "$IMAGE_SIZE" in
+          tiny) testImage="$tinyImage" ;;
+          small) testImage="$smallImage" ;;
+          medium) testImage="$mediumImage" ;;
+          large) testImage="$largeImage" ;;
+          *) echo "Unknown IMAGE_SIZE: $IMAGE_SIZE"; exit 1 ;;
+        esac
   
         podman pull $testImage
-        
-        echo "OBJECT_NUM: $OBJECT_NUM"
-        echo "seq 1 OBJECT_NUM: $(seq 1 $OBJECT_NUM)"
 
-        for imgNum in $(seq 1 $OBJECT_NUM);
+        for imgNum in $(seq 1 ${{ env.OBJECT_NUM }});
         do
           # create images
           taggedImage="localhost/my-image-$imgNum:latest"
