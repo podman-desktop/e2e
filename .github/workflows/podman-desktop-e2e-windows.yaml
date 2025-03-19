@@ -23,7 +23,7 @@ on:
         required: true
       env_vars:
         default: 'TEST_PODMAN_MACHINE=true'
-        description: 'Env. Variables passed into target machine'
+        description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
         type: 'string'
         required: true
       debug:
