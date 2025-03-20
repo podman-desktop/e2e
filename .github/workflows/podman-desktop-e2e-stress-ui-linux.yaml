@@ -58,7 +58,7 @@ jobs:
     - name: Checkout podman desktop
       uses: actions/checkout@v4
       with:
-        repository: ${{ env.PD_REPO }}/${{ env.PD_FORK }}
+        repository: ${{ env.PD_FORK }}/${{ env.PD_REPO }}
         ref: ${{ env.PD_BRANCH }}
         path: podman-desktop
  
@@ -128,10 +128,14 @@ jobs:
           large) testImage="$largeImage" ;;
           *) echo "Unknown IMAGE_SIZE: $IMAGE_SIZE"; exit 1 ;;
         esac
-  
-        podman pull $testImage
+        
+        echo "IMAGE_SIZE: $IMAGE_SIZE"
 
-        for imgNum in $(seq 1 ${{ env.OBJECT_NUM }});
+        podman pull $testImage
+        
+        echo "OBJECT_NUM: $OBJECT_NUM"
+
+        for imgNum in $(seq 1 $OBJECT_NUM);
         do
           # create images
           taggedImage="localhost/my-image-$imgNum:latest"
