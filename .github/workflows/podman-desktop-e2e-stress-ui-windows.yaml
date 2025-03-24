@@ -1,5 +1,5 @@
-name: Podman Desktop E2E UI Stress Test
-run-name: Podman Desktop E2E UI Stress Test
+name: Podman Desktop E2E UI Stress Test (Windows)
+run-name: Podman Desktop E2E UI Stress Test (Windows)
 
 on:
   schedule:

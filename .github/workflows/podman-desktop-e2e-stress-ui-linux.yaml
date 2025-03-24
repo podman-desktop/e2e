@@ -1,0 +1,178 @@
+name: Podman Desktop E2E UI Stress Test (Linux)
+run-name: Podman Desktop E2E UI Stress Test (Linux)
+
+on:
+  schedule:
+    - cron: '0 5 * * 1' #run every monday at 5AM
+  workflow_dispatch:
+    inputs:
+      pd_repo_options:
+        default: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
+        description: 'Podman Desktop repo, fork and branch'
+        type: string
+        required: true
+      npm_target:
+        default: 'test:e2e:ui-stress'
+        description: 'npm target to run tests'
+        type: string
+        required: true
+      object_num:
+        default: '100'
+        description: 'Number of podman objects (images, containers, pods) of each type to generate'
+        type: 'string'
+        required: true
+      image_size:
+        default: 'tinyImage'
+        description: 'Image size to be used for generating podman objects'
+        type: 'choice'
+        options:
+          - tiny
+          - small
+          - medium
+          - large
+        required: true
+        
+jobs:
+  linux:
+    name: linux
+    timeout-minutes: 90
+    runs-on: ubuntu-24.04
+    env:
+      MAPT_VERSION: v0.7.4
+      MAPT_IMAGE: quay.io/redhat-developer/mapt
+
+    steps:
+    - name: Set the default env. variables
+      env:
+        DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
+        DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
+        DEFAULT_OBJECT_NUM: '100'
+        DEFAULT_IMAGE_SIZE: 'tiny'
+      run: |
+        echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
+        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
+        echo "OBJECT_NUM=${{ github.event.inputs.object_num || env.DEFAULT_OBJECT_NUM }}" >> $GITHUB_ENV
+        echo "IMAGE_SIZE=${{ github.event.inputs.image_size || env.DEFAULT_IMAGE_SIZE }}" >> $GITHUB_ENV
+ 
+    - name: Checkout podman desktop
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.PD_FORK }}/${{ env.PD_REPO }}
+        ref: ${{ env.PD_BRANCH }}
+        path: podman-desktop
+ 
+    - name: Install node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+ 
+    - name: Install pnpm 
+      uses: pnpm/action-setup@v4
+      with:
+        run_install: false
+        package_json_file: ./podman-desktop/package.json
+
+    - name: Install & build Podman Desktop for E2E tests
+      working-directory: ./podman-desktop
+      run: |
+        pnpm install
+        pnpm test:e2e:build
+       
+    - name: Ensure getting current HEAD version of the test framework
+      working-directory: ./podman-desktop
+      run: |
+        # workaround for https://github.com/containers/podman-desktop-extension-bootc/issues/712
+        version=$(npm view @podman-desktop/tests-playwright@next version)
+        echo "Version of @podman-desktop/tests-playwright to be used: $version"
+        jq --arg version "$version" '.devDependencies."@podman-desktop/tests-playwright" = $version' package.json > package.json_tmp && mv package.json_tmp package.json
+      shell: bash
+ 
+    - name: Update podman to 5.x
+      run: |
+        echo "ubuntu version from kubic repository to install podman we need (v5)"
+        ubuntu_version='23.10'
+        echo "Add unstable kubic repo into list of available sources and get the repo key"
+        sudo sh -c "echo 'deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list"
+        curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add -
+        echo "install necessary dependencies for criu package which is not part of ${ubuntu_version}"
+        sudo apt-get install --allow-unauthenticated -qq libprotobuf32t64 python3-protobuf libnet1
+        echo "install criu manually from static location"
+        curl -sLO http://cz.archive.ubuntu.com/ubuntu/pool/universe/c/criu/criu_3.16.1-2_amd64.deb && sudo dpkg -i criu_3.16.1-2_amd64.deb
+        echo "Updating all dependencies..."
+        sudo apt-get update --allow-insecure-repositories -qq
+        echo "installing/update podman package..."
+        sudo apt-get -qq -y install --allow-unauthenticated podman || { echo "Start fallback steps for podman nightly installation from a static mirror" && \
+          sudo sh -c "echo 'deb http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/ /' > /etc/apt/sources.list.d/devel:kubic:libcontainers:unstable.list" && \
+          curl -L "http://ftp.lysator.liu.se/pub/opensuse/repositories/devel:/kubic:/libcontainers:/unstable/xUbuntu_${ubuntu_version}/Release.key" | sudo apt-key add - && \
+          sudo apt-get --allow-insecure-repositories update && \
+          sudo apt-get --allow-unauthenticated -y install podman; }
+        podman version
+
+    - name: Revert unprivileged user namespace restrictions in Ubuntu 24.04
+      run: |
+        # allow unprivileged user namespace
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+    - name: Create expected objects for the UI stress test
+      run: |
+        tinyImage="quay.io/podman/hello:latest" # ~0'8MB
+        smallImage="quay.io/sclorg/nginx-122-micro-c9s:20230718" # ~70MB
+        mediumImage="docker.io/library/nginx:latest" # ~200MB
+        largeImage="registry.access.redhat.com/ubi8/httpd-24-3:latest" # ~460MB
+
+        case "$IMAGE_SIZE" in
+          tiny) testImage="$tinyImage" ;;
+          small) testImage="$smallImage" ;;
+          medium) testImage="$mediumImage" ;;
+          large) testImage="$largeImage" ;;
+          *) echo "Unknown IMAGE_SIZE: $IMAGE_SIZE"; exit 1 ;;
+        esac
+        
+        echo "IMAGE_SIZE: $IMAGE_SIZE"
+
+        podman pull $testImage
+        
+        echo "OBJECT_NUM: $OBJECT_NUM"
+
+        for imgNum in $(seq 1 $OBJECT_NUM);
+        do
+          # create images
+          taggedImage="localhost/my-image-$imgNum:latest"
+          echo "Tagging image: $testImage as $taggedImage"
+          podman tag $testImage $taggedImage
+
+          # create containers
+          containerName="my-container-$imgNum"
+          echo "Creating container: $containerName"
+          podman run -d --name $containerName $taggedImage
+
+          #create pods
+          podName="my-pod-$imgNum"
+          echo "Creating pod: $podName"
+          podman pod create --name $podName
+        done
+      shell: sh
+
+    - name: Run UI stress tests
+      working-directory: ./podman-desktop
+      env:
+        PODMAN_DESKTOP_ARGS: ${{ github.workspace }}/podman-desktop
+      run: pnpm ${{ env.NPM_TARGET }}
+      
+    - name: Publish Test Report
+      uses: mikepenz/action-junit-report@v5
+      if: always() # always run even if the previous step fails
+      with:
+        fail_on_failure: true
+        include_passed: true
+        detailed_summary: true
+        annotate_only: true
+        require_tests:  true
+        report_paths: '**/*results.xml'
+ 
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: e2e-tests-linux
+        path: ./**/tests/**/output/
