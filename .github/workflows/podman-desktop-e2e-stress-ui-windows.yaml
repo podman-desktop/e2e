@@ -107,7 +107,9 @@ jobs:
             --cpus '${{ env.HOST_PARAMS_CPUS }}' \
             --memory '${{ env.HOST_PARAMS_MEMORY }}' \
             --tags project=podman-desktop \
-            --spot
+            --spot \
+            # Workaround for https://github.com/redhat-developer/mapt/issues/451
+            --spot-excluded-regions southafricawest,australiacentral2
         # Check logs 
         podman logs -f windows-create
 

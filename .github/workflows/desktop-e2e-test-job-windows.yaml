@@ -112,7 +112,9 @@ jobs:
             --windows-featurepack '${{ matrix.windows-featurepack }}' \
             --vmsize 'Standard_D8s_v4' \
             --tags project=podman-desktop \
-            --spot
+            --spot \
+            # Workaround for https://github.com/redhat-developer/mapt/issues/451
+            --spot-excluded-regions southafricawest,australiacentral2
         # Check logs 
         podman logs -f windows-create
 
