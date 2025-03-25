@@ -121,7 +121,9 @@ jobs:
             --cpus 8 \
             --memory 16 \
             --tags project=podman-desktop \
-            --spot
+            --spot \
+            # Workaround for https://github.com/redhat-developer/mapt/issues/451
+            --spot-excluded-regions southafricawest,australiacentral2
         # Check logs 
         podman logs -f windows-create
 
