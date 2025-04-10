@@ -31,7 +31,11 @@ on:
           - medium
           - large
         required: true
-        
+      env_vars:
+        default: 'KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
+        description: 'Env. Variables used in the test host, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
+        type: 'string'
+        required: true
 jobs:
   linux:
     name: linux
@@ -48,13 +52,16 @@ jobs:
         DEFAULT_NPM_TARGET: 'test:e2e:ui-stress'
         DEFAULT_OBJECT_NUM: '100'
         DEFAULT_IMAGE_SIZE: 'tiny'
+        DEFAULT_ENV_VARS: 'KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
       run: |
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "OBJECT_NUM=${{ github.event.inputs.object_num || env.DEFAULT_OBJECT_NUM }}" >> $GITHUB_ENV
         echo "IMAGE_SIZE=${{ github.event.inputs.image_size || env.DEFAULT_IMAGE_SIZE }}" >> $GITHUB_ENV
- 
+        echo "${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" | awk -F ',' \
+        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
+
     - name: Checkout podman desktop
       uses: actions/checkout@v4
       with:
