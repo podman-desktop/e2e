@@ -34,7 +34,7 @@ on:
         - hyperv
         required: true
       env_vars:
-        default: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        default: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
         type: 'string'
         required: true
@@ -70,7 +70,7 @@ jobs:
         DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_HOST_PARAMS: 'CPUS="8",MEMORY="16"'
-        DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100'
+        DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
