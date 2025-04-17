@@ -54,7 +54,7 @@ jobs:
     timeout-minutes: 90
     runs-on: ubuntu-latest
     env:
-      MAPT_VERSION: v0.8.0
+      MAPT_VERSION: ${{ vars.MAPT_VERSION_TAG }}
       MAPT_IMAGE: quay.io/redhat-developer/mapt
     strategy:
       fail-fast: false
