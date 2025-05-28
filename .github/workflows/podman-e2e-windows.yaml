@@ -9,24 +9,49 @@ jobs:
   windows:
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      checks: write
     env:
       MAPT_VERSION: ${{ vars.MAPT_VERSION_TAG }}
       MAPT_IMAGE: quay.io/redhat-developer/mapt
+      PODMAN_BACKEND_VERSION: v4.7.1
+      PODMAN_DESKTOP_E2E_VERSION: v1.1.0
     strategy:
       fail-fast: false
       matrix:
         windows-version: ['10','11']
-        windows-featurepack: ['22h2-ent', '23h2-ent']
+        windows-featurepack: ['22h2-ent', '24h2-ent']
         exclude:
         - windows-version: '10'
-          windows-featurepack: '23h2-ent'
+          windows-featurepack: '24h2-ent'
         - windows-version: '11'
           windows-featurepack: '22h2-ent'
 
     steps:
+    - name: Get Latest Podman Desktop testing prerelease
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        tag=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/tags?pages=1" | jq -r '.[0].name')
+        echo "Tag: $tag"
+        # releaes id
+        id=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/tags/$tag" | jq -r '.id')
+        echo "Release ID: $id"
+        # list assets with -x64.exe suffix
+        url=$(curl --request GET \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/$id/assets" | jq -r '.[] | select (.name | test("-x64.exe$") and (contains("setup-x64.exe") | not))' | jq -r '.browser_download_url')
+        echo "Podman Desktop testing prerelease url: ${url}"
+        echo "DEFAULT_PD_URL=${url}" >> $GITHUB_ENV
+
     - name: Create instance
       run: |
         # Create instance
@@ -43,7 +68,9 @@ jobs:
             --conn-details-output '/workspace' \
             --windows-version '${{ matrix.windows-version }}' \
             --windows-featurepack '${{ matrix.windows-featurepack }}' \
-            --vmsize 'Standard_D8s_v4' \
+            --nested-virt \
+            --cpus 8 \
+            --memory 16 \
             --tags project=podman-desktop \
             --spot
         # Check logs 
@@ -73,8 +100,6 @@ jobs:
         
     - name: Run podman desktop e2e
       run: |
-        # Get latest built 
-        tag=$(curl --silent https://api.github.com/repos/podman-desktop/podman-desktop/releases | jq -r 'map(select(.prerelease)) | first | .tag_name')
         # Run e2e tests
         podman run --rm -d --name pd-e2e-windows \
           -e TARGET_HOST=$(cat host) \
@@ -85,12 +110,12 @@ jobs:
           -e OUTPUT_FOLDER=/data \
           -e DEBUG=true \
           -v $PWD:/data:z \
-          quay.io/rhqp/podman-desktop-e2e:v1.1.0-windows-amd64  \
+          quay.io/rhqp/podman-desktop-e2e:${{ env.PODMAN_DESKTOP_E2E_VERSION }}-windows-amd64  \
               pd-e2e/run.ps1 \
                   -wslInstallFix 'false' \
                   -targetFolder pd-e2e \
-                  -pdUrl "https://github.com/podman-desktop/podman-desktop/releases/download/${tag}/podman-desktop-${tag:1}.exe" \
-                  -junitResultsFilename podman-desktop-e2e-results-${tag}.xml \
+                  -pdUrl ${{ env.DEFAULT_PD_URL }} \
+                  -junitResultsFilename podman-desktop-e2e-results.xml \
                   -resultsFolder pd-e2e-results
         # Check logs 
         podman logs -f pd-e2e-windows
@@ -98,23 +123,21 @@ jobs:
     - name: Run podman functional e2e test
       timeout-minutes: 60
       run: |
-        # Get latest built 
-        tag=$(curl --silent https://api.github.com/repos/podman-desktop/podman-desktop/releases | jq -r 'map(select(.prerelease)) | first | .tag_name')
         # Run e2e tests
         podman run --rm -d --name podman-e2e \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
           -e TARGET_HOST_KEY_PATH=/data/id_rsa \
           -e TARGET_FOLDER=podman-e2e \
-          -e TARGET_RESULTS=podman-e2e-results-${tag}.xml \
+          -e TARGET_RESULTS=podman-e2e-results.xml \
           -e OUTPUT_FOLDER=/data \
           -e DEBUG=true \
           -v $PWD:/data:z \
-          quay.io/rhqp/podman-backend-e2e:v4.7.1-windows-amd64 \
+          quay.io/rhqp/podman-backend-e2e:${{ env.PODMAN_BACKEND_VERSION }}-windows-amd64 \
               podman-e2e/run.ps1 \
                 -targetFolder podman-e2e \
                 -podmanStart "true" \
-                -junitResultsFilename podman-e2e-results-${tag}.xml 
+                -junitResultsFilename podman-e2e-results.xml 
         # Check logs 
         podman logs -f podman-e2e
 
@@ -143,6 +166,7 @@ jobs:
         include_passed: true
         detailed_summary: true
         require_tests:  true
+        annotate_only: true
         report_paths: '**/*results*.xml'
 
     - name: Upload e2e test artifacts
@@ -151,5 +175,6 @@ jobs:
       with:
         name: E2E-results-windows-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
-          podman-e2e-results-*.xml
+          podman-e2e-results*.xml
+          podman-desktop-e2e-results*.xml
           pd-e2e-results/*
