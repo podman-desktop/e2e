@@ -33,6 +33,16 @@ on:
         - wsl
         - hyperv
         required: true
+      image_size:
+        default: 'tiny'
+        description: 'Image size to be used for generating podman objects'
+        type: 'choice'
+        options:
+          - tiny
+          - small
+          - medium
+          - large
+        required: true
       env_vars:
         default: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
@@ -70,6 +80,7 @@ jobs:
         DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=0,NETWORKING=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_HOST_PARAMS: 'CPUS="8",MEMORY="16"'
+        DEFAULT_IMAGE_SIZE: 'tiny'
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
@@ -77,7 +88,7 @@ jobs:
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
-        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
+        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }},IMAGE_SIZE=${{ github.event.inputs.image_size || env.DEFAULT_IMAGE_SIZE}}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.host_params || env.DEFAULT_HOST_PARAMS }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "HOST_PARAMS_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
