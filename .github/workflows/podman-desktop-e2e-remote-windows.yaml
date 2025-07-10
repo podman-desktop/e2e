@@ -1,4 +1,4 @@
-name: Podman Desktop Podman-Remote E2E with Nightly Podman
+name: PD: Podman-Remote E2E (Nightly)
 run-name: Podman Desktop Remote-Podman E2E Tests in Production mode
 
 on:

@@ -1,4 +1,4 @@
-name: Debug Workflow for Testing-Prereleases Podman Desktop E2E
+name: Debug: E2E (Testing Pre-Releases)
 run-name: Debugging Nightly Podman Desktop E2E Tests
 
 on:

@@ -1,4 +1,4 @@
-name: Test Workflow Podman Desktop E2E with Podman
+name: Test Workflow PD E2E with Podman
 run-name: Debugging Desktop E2E Tests with Podman ${{ inputs.podman_provider != '' && inputs.podman_provider || '' }}
 
 on:

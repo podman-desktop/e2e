@@ -1,4 +1,4 @@
-name: Podman Desktop Kubernetes E2E with Podman Latest
+name: PD: k8s E2E with Podman Latest
 
 on:
   schedule:
