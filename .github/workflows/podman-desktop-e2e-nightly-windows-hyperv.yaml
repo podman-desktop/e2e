@@ -1,4 +1,4 @@
-name: Podman Desktop E2E with Podman Latest HyperV
+name: PD: E2E with Podman Latest HyperV
 
 on:
   schedule:

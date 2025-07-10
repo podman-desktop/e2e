@@ -1,4 +1,4 @@
-name: Podman Desktop E2E UI Stress Test (Linux)
+name: PD: UI Stress Tests (Linux)
 run-name: Podman Desktop E2E UI Stress Test (Linux)
 
 on:
