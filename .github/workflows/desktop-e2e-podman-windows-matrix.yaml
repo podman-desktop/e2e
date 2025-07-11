@@ -1,4 +1,4 @@
-name: PD: E2E with Podman set
+name: PD E2E with Podman set
 run-name: Desktop E2E Tests with Podman ${{ inputs.podman_provider != '' && inputs.podman_provider || '' }}
 
 on:
