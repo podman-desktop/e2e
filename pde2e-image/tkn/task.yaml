@@ -1,0 +1,275 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: pde2e-exec
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing
+    tekton.dev/displayName: "Podman Desktop E2E Test executor"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    This task can setup podman and create podman machine, build podman desktop and run e2e tests
+
+  workspaces:
+  - name: pipelines-data
+  
+  params:
+  # Target host parameters
+  - name: host
+    description: host to connect to the provisioned machine
+  - name: username
+    description: username to connect to the provisioned machine
+  - name: userpassword
+    description: user password required to run installers with privileges
+  - name: key
+    description: key file name to connect to the provisioned machine within the workspace resources path   
+  - name: os
+    description: type of platform per target host (windows, darwin)
+    default: windows
+  - name: arch
+    description: type of arch per target host for windows only amd64, for darwin amd64 or arm64 
+    default: amd64
+  - name: workspace-resources-path
+    description: path on workspace to find resources to connect to the target machine
+  # PDE2E Runner parameters
+  - name: image-version
+    description: pde2e-exec image version
+    default: '0.0.1'
+  - name: pd-url
+    description: in case we want to download a specific podman desktop version. We can set up the url
+    default: "''"
+  - name: pd-path
+    description: in case we want to test an existing version on the target host we can set up the path here
+    default: "''"
+  - name: fork
+    description: Podman Desktop repo fork
+    default: 'podman-desktop'
+  - name: branch
+    description: Podman Desktop repository branch or tag to checkout
+    default: 'main'
+  - name: ext-repo
+    description: Podman Desktop Extension repo name
+    default: 'extension-bootc'
+  - name: ext-fork
+    description: Podman Desktop extension repo fork
+    default: 'podman-desktop'
+  - name: ext-branch
+    description: Podman Desktop repository branch or tag to checkout
+    default: 'main'
+  - name: ext-tests
+    description: Whether run the E2E tests from the extension
+    default: '0'
+  - name: npm-target
+    description: npm script task for tests execution
+    default: 'test:e2e'
+  - name: podman-url
+    description: in case we want to download a specific podman version. We can set up the url
+    default: "''"
+  - name: podman-path
+    description: Path to a podman binary
+    default: "''"
+  - name: podman-initialize
+    description: Podman initialization
+    default: '1'
+  - name: podman-start
+    description: Podman machine start param
+    default: '1'
+  - name: podman-rootful
+    description: Initialize rootful podman machine
+    default: '1'
+  - name: podman-user-networking
+    description: Set userModeNetworking flag
+    default: '0'
+  - name: env-vars
+    description: Environment variables to be passed into image
+    default: "'TEST_PODMAN_MACHINE=true,TEST=2'"
+  - name: secret-file
+    description: A path to the files with secrets
+    default: "''"
+  - name: podman-provider
+    description: A podman provider
+    default: "''"
+  - name: save-traces
+    description: Whether to save playwright trace files
+    default: '1'
+  - name: clean-machine
+    description: Whether to run podman machine reset
+    default: '1'
+  - name: script-paths
+    description: A path to the custom scripts present on image
+    default: "''"
+  # Results parameters
+  - name: workspace-qe-subpath
+    description: subpath relative to workspace path where results are stored
+    default: qe-results
+  - name: results-folder
+    description: directory for the junit file(s) holding the e2e results and other test artifacts
+    default: results
+  # Control params
+  - name: target-cleanup
+    description: 'this param controls if folder on target host will be removed. Defaults true'
+    default: 'true'
+
+  results:
+  - name: duration
+    description: total amount of time in seconds for the qe execution
+  - name: junit-name
+    description: name of the junit file
+  - name: junit-path
+    description: gettting path to the results folder into results
+  - name: podman-path
+    description: podman path to be passed into another task
+
+  steps:
+  - name: e2e
+    image: quay.io/odockal/pde2e-runner:v$(params.image-version)-$(params.os)
+    # We do not have a strict control on versions (as so they can be override)
+    # force here to pull everytime just in case it is overriden
+    imagePullPolicy: Always
+    script: |
+      #!/bin/bash
+
+      # This is kept the same as in other tasks
+      # Prepare ENVs
+      SECONDS=0
+      TARGET_HOST=$(params.host)
+      TARGET_HOST_USERNAME=$(params.username)
+      TARGET_HOST_KEY_PATH=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.key)
+      chmod 600 ${TARGET_HOST_KEY_PATH}
+      TARGET_FOLDER=pd-e2e
+      TARGET_RESULTS=$(params.results-folder)
+      TARGET_CLEANUP=$(params.target-cleanup)
+      OUTPUT_FOLDER=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
+      mkdir -p "${OUTPUT_FOLDER}"
+
+      # get the secret file into target host
+      if [ -n $(params.secret-file) ]; then
+        secretFile=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file)
+        echo "Copying secret file: $(params.secret-file) from $secretFile to assets folder of the image"
+        cp $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file) /opt/pde2e-runner/
+      else 
+        echo "No secret file provided, property is empty"
+      fi
+      
+      # Create command - command to substitute from GHA workflow using images
+      if [[ $(params.os) == "windows" ]]; then
+        cmd="${TARGET_FOLDER}/runner.ps1 "
+        cmd="$cmd -targetFolder ${TARGET_FOLDER} "
+        cmd="$cmd -resultsFolder ${TARGET_RESULTS} "
+        cmd="$cmd -pdPath $(params.pd-path) "
+        cmd="$cmd -pdUrl $(params.pd-url) "
+        cmd="$cmd -fork $(params.fork) "
+        cmd="$cmd -branch $(params.branch) "
+        cmd="$cmd -extTests $(params.ext-tests) "
+        cmd="$cmd -extRepo $(params.ext-repo) "
+        cmd="$cmd -extFork $(params.ext-fork) "
+        cmd="$cmd -extBranch $(params.ext-branch) "
+        cmd="$cmd -envVars $(params.env-vars) "
+        cmd="$cmd -secretFile $(params.secret-file) "
+        cmd="$cmd -npmTarget $(params.npm-target) "
+        cmd="$cmd -podmanUrl $(params.podman-url) "
+        cmd="$cmd -podmanPath $(params.podman-path) "
+        cmd="$cmd -initialize $(params.podman-initialize) "
+        cmd="$cmd -start $(params.podman-start) "
+        cmd="$cmd -rootful $(params.podman-rootful) "
+        cmd="$cmd -userNetworking $(params.podman-user-networking) "
+        cmd="$cmd -scriptPaths $(params.script-paths) "
+        if [[ -n "$(params.podman-provider)" ]]; then
+          cmd="$cmd -podmanProvider $(params.podman-provider) "
+        fi
+      fi
+      if [[ $(params.os) == "darwin" ]]; then
+        cmd="${TARGET_FOLDER}/runner.sh "
+        cmd="$cmd --targetFolder ${TARGET_FOLDER} "
+        cmd="$cmd --resultsFolder ${TARGET_RESULTS} "
+        cmd="$cmd --pdPath $(params.pd-path) "
+        cmd="$cmd --pdUrl $(params.pd-url) "
+        cmd="$cmd --extTests $(params.ext-tests) "
+        if [[ -n "$(params.ext-repo)" ]]; then
+          cmd="$cmd --extRepo $(params.ext-repo) "
+        fi
+        if [[ -n "$(params.ext-fork)" ]]; then
+          cmd="$cmd --extFork $(params.ext-fork) "
+        fi
+        if [[ -n "$(params.ext-branch)" ]]; then
+          cmd="$cmd --extBranch $(params.ext-branch) "
+        fi
+        cmd="$cmd --envVars '$(params.env-vars)' "
+        cmd="$cmd --secretFile $(params.secret-file) "
+        cmd="$cmd --fork $(params.fork) "
+        cmd="$cmd --branch $(params.branch) "
+        cmd="$cmd --npmTarget $(params.npm-target) "
+        cmd="$cmd --podmanUrl $(params.podman-url) "
+        if [[ -n "$(params.podman-path)" ]]; then
+          cmd="$cmd --podmanPath $(params.podman-path) "
+        fi
+        cmd="$cmd --initialize $(params.podman-initialize) "
+        cmd="$cmd --start $(params.podman-start) "
+        cmd="$cmd --rootful $(params.podman-rootful) "
+        if [[ -n "$(params.podman-provider)" ]]; then
+          cmd="$cmd --podmanProvider $(params.podman-provider) "
+        fi
+        cmd="$cmd --saveTraces $(params.save-traces) "
+        cmd="$cmd --cleanMachine $(params.clean-machine) "
+        if [[ -n "$(params.script-paths)" ]]; then
+          cmd="$cmd --scriptPaths $(params.script-paths) "
+        fi
+      fi
+      
+      echo "Composed Command to be executed: '${cmd}'"
+
+      # Exec
+      . entrypoint.sh "${cmd}"
+
+      # Results
+      echo -n "${SECONDS}" | tee $(results.duration.path)
+      
+      # Move all results to qe-path
+      mv ${OUTPUT_FOLDER}/${TARGET_RESULTS}/* ${OUTPUT_FOLDER}
+      rm -rf ${OUTPUT_FOLDER}/${TARGET_RESULTS}
+
+      ls -R ${OUTPUT_FOLDER}
+      echo -n "$(basename $(ls ${OUTPUT_FOLDER}/junit*.xml))" | tee $(results.junit-name.path)
+      echo -n "$(ls ${OUTPUT_FOLDER}/junit*.xml)" | tee $(results.junit-path.path)
+      
+    resources:      
+      requests:
+        memory: "50Mi"
+        cpu: "5m"
+      limits:
+        memory: "70Mi"
+        cpu: "10m"
+
+  sidecars:
+  - name: fake-rdp
+    image: quay.io/rhqp/frdp:v0.0.1
+    imagePullPolicy: Always
+    env:
+    - name: RDP_HOST
+      value: $(params.host)
+    - name: RDP_USER
+      value: $(params.username)
+    - name: RDP_PASSWORD
+      value: $(params.userpassword)
+    script: |
+      #!/bin/sh
+      
+      # Sidecar is used to create a fake RDP connection, this is only required for windows
+      if [[ $(params.os) == "windows" ]]; then
+        . entrypoint.sh
+      fi
+      
+    resources:      
+      requests:
+        memory: "30Mi"
+        cpu: "5m"
+      limits:
+        memory: "70Mi"
+        cpu: "10m"
