@@ -1,4 +1,4 @@
-name: Podman Desktop E2E UI Stress Test (Windows)
+name: PD UI Stress Tests (Windows)
 run-name: Podman Desktop E2E UI Stress Test (Windows)
 
 on:
