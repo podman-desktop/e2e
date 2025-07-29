@@ -7,11 +7,17 @@ on:
       - '*'
     paths-ignore:
       - '.github/workflows/**'
+      - '.fmf/**'
+      - 'plans/**'
+      - 'pde2e-image/**'
       - '!.github/workflows/build.yaml'
   pull_request:
     branches: [ main ]
     paths-ignore:
       - '.github/workflows/**'
+      - '.fmf/**'
+      - 'plans/**'
+      - 'pde2e-image/**'
       - '!.github/workflows/build.yaml'
 
 jobs:
