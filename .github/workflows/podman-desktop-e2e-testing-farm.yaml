@@ -32,11 +32,10 @@ on:
         description: 'Podman Desktop repo branch'
         type: string
         required: true
-        
-timeout-minutes: 90
 
 jobs:
   pd-e2e-testing-farm-ci: 
+    timeout-minutes: 90
     name: pd-e2e-testing-farm-ci
     runs-on: ubuntu-latest
     steps: 
