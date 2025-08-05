@@ -88,7 +88,7 @@ jobs:
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        DEFAULT_MAPT_PARAMS: 'IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS="${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}"'
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
         echo "FORK=${{ github.event.inputs.fork || env.DEFAULT_FORK }}" >> $GITHUB_ENV
         echo "BRANCH=${{ github.event.inputs.branch || env.DEFAULT_BRANCH }}" >> $GITHUB_ENV
