@@ -7,7 +7,7 @@ on:
     inputs:
       repo_branch:
         default: 'FORK=podman-desktop,BRANCH=main'
-        description: 'Podman Desktop repo fork and branch in format FORK=xxx,BRANCH=xxx'
+        description: 'Podman Desktop repo fork and branch'
         type: string
         required: true
       npm_target:
