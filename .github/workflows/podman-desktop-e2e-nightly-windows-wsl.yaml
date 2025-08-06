@@ -13,7 +13,11 @@ on:
       npm_target:
         default: 'test:e2e'
         description: 'npm target to run tests'
-        type: string
+        type: choice
+        options:
+          - 'test:e2e'
+          - 'test:e2e:smoke'
+          - 'test:e2e:extension'
         required: true
       env_vars:
         default: 'TEST_PODMAN_MACHINE="true",CLI_TOOLS="all"'
