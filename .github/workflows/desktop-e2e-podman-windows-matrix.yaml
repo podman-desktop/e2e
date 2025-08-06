@@ -87,15 +87,13 @@ jobs:
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
-        # Parse fork and branch from repo_branch parameter
-        REPO_BRANCH_INPUT="${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}"
-        echo "$REPO_BRANCH_INPUT" | awk -F ',' \
+        echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+        echo "${{ github.event.inputs.mapt_params }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         
 
