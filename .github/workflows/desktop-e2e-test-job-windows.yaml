@@ -1,5 +1,5 @@
 name: Test Workflow PD E2E with Podman
-run-name: Debugging Desktop E2E Tests with Podman
+run-name: Debugging Desktop E2E Tests with Podman ${{ contains(inputs.podman_options, 'WSL Provider') && 'wsl' || contains(inputs.podman_options, 'Hyper-V Provider') && 'hyperv' || '' }}
 
 on:
   workflow_dispatch:
