@@ -2,6 +2,23 @@ name: Podman E2E (Install & Run)
 
 on:
   workflow_dispatch:
+    inputs:
+      azure_vm_size:
+        default: ''
+        description: 'Azure VM size (Standard_E4as_v5 is cheapest, 4core AMD, 32GB RAM)'
+        type: choice
+        required: false
+        options:
+          - ''
+          - Standard_D8as_v5
+          - Standard_D8s_v4
+          - Standard_E8as_v5
+          - Standard_E4as_v5
+      mapt_params:
+        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.5,CPUS=8,MEMORY=16,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
+        required: true
+        type: string
   schedule:
     - cron:  '30 0 * * *'
 
@@ -52,29 +69,64 @@ jobs:
         echo "Podman Desktop testing prerelease url: ${url}"
         echo "DEFAULT_PD_URL=${url}" >> $GITHUB_ENV
 
+    - name: Set the default env. variables
+      env:
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '8' }},MEMORY=${{ vars.MAPT_MEMORY || '16' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
+      run: |
+        echo "MAPT_VM_SIZE=${{ github.event.inputs.azure_vm_size || '' }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+
     - name: Create instance
       run: |
-        # Create instance
-        podman run -d --name windows-create --rm \
-          -v ${PWD}:/workspace:z \
-          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
-          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
-          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
-          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
+        if [ -z "${{ env.MAPT_VM_SIZE }}" ]; then
+          echo "MAPT_VM_SIZE is not set, using resources approach"
+          podman run -d --name windows-create --rm \
+            -v ${PWD}:/workspace:z \
+            -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
+            -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
+            -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
+            -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+            --user 0 \
+            ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
             windows create \
             --project-name 'windows-desktop' \
             --backed-url 'file:///workspace' \
             --conn-details-output '/workspace' \
             --windows-version '${{ matrix.windows-version }}' \
             --windows-featurepack '${{ matrix.windows-featurepack }}' \
+            --cpus ${{ env.MAPT_CPUS }} \
+            --memory ${{ env.MAPT_MEMORY }} \
             --nested-virt \
-            --cpus 8 \
-            --memory 16 \
             --tags project=podman-desktop \
+            --spot-excluded-regions ${{ env.MAPT_EXCLUDED_REGIONS }} \
             --spot
-        # Check logs 
-        podman logs -f windows-create
+          # Check logs
+          podman logs -f windows-create
+        else
+          echo "MAPT_VM_SIZE is set to '${{ env.MAPT_VM_SIZE }}', using size approach"
+          # Create instance with VM size
+          podman run -d --name windows-create --rm \
+            -v ${PWD}:/workspace:z \
+            -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
+            -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
+            -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
+            -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+            --user 0 \
+            ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
+            windows create \
+            --project-name 'windows-desktop' \
+            --backed-url 'file:///workspace' \
+            --conn-details-output '/workspace' \
+            --windows-version '${{ matrix.windows-version }}' \
+            --windows-featurepack '${{ matrix.windows-featurepack }}' \
+            --vmsize '${{ env.MAPT_VM_SIZE }}' \
+            --tags project=podman-desktop \
+            --spot-excluded-regions ${{ env.MAPT_EXCLUDED_REGIONS }} \
+            --spot
+          # Check logs
+          podman logs -f windows-create
+        fi
 
     - name: Check instance system info
       run: |
@@ -151,7 +203,7 @@ jobs:
           -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
           -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
           -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
+          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
             windows destroy \
             --project-name 'windows-desktop' \
             --backed-url 'file:///workspace'
