@@ -86,7 +86,7 @@ jobs:
           report_paths: '**/playwright-junit-results.xml'
 
       - name: Download test artifacts from Testing Farm
-        if: steps.run-e2e-tf.outcome == 'failure'
+        if: failure()
         run: |
           mkdir -p results
 
@@ -115,7 +115,7 @@ jobs:
             "$TF_VIDEOS_URL"
 
       - name: Upload test artifacts
-        if: steps.run-e2e-tf.outcome == 'failure'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: testing-farm-artifacts
