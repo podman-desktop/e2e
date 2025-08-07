@@ -51,6 +51,7 @@ jobs:
         uses: sclorg/testing-farm-as-github-action@v4
         with:
           api_key: ${{ secrets.TF_TOKEN }}
+          create_github_summary: "false"
           compose: Fedora-42
           tmt_plan_filter: 'name:/plans/pd-e2e-plan/e2e'
           variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }}
