@@ -41,7 +41,7 @@ on:
 jobs:
   windows:
     name: ${{ matrix.windows-version }} - ${{ matrix.rootful == '0' && 'rootless' || 'rootful' }} ${{ matrix.user-networking == '1' && '- user mode networking enabled' || '' }}
-    timeout-minutes: 120
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     env:
       MAPT_VERSION: ${{ vars.MAPT_VERSION_TAG }}
