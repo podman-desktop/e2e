@@ -7,7 +7,7 @@ on:
 
 jobs:
   windows:
-    timeout-minutes: 120
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     env:
       MAPT_VERSION: ${{ vars.MAPT_VERSION_TAG }}
