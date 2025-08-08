@@ -26,14 +26,18 @@ prepare:
     script: |
       sudo dnf update -y
       sudo dnf install -y \
-        git nodejs npm podman xorg-x11-server-Xvfb \
+        git nodejs npm xorg-x11-server-Xvfb \
         nss nspr atk at-spi2-atk cups libXcomposite libXdamage libXfixes libXrandr cairo pango alsa-lib \
         gcc-c++ gtk3 passt jq
       sudo npm install -g pnpm
       echo "NodeJS version: $(node -v)"
       echo "npm version: $(npm -v)"
       echo "pnpm Version: $(pnpm --version)"
-      echo "podman version: $(podman -v)"
+  
+  - name: Install podman  
+    how: shell
+    script: | 
+      bash $TMT_TREE/plans/scripts/install-podman.sh
 
   - name: Enable and start Podman rootless service
     how: shell
