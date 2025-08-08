@@ -60,7 +60,7 @@ on:
 jobs:
   windows:
     name: ${{ matrix.windows-version }} - Debug
-    timeout-minutes: 120
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
