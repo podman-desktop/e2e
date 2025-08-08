@@ -48,6 +48,11 @@ on:
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
         type: 'string'
         required: true
+      mapt_params:
+        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.5,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
+        required: true
+        type: string
       images_version:
         default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         description: 'Testing images versions, no spaces'
@@ -84,6 +89,7 @@ jobs:
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
         DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
@@ -97,29 +103,33 @@ jobs:
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
       run: |
-        # Create instance
+        # Create instance using resources approach
         podman run -d --name windows-create --rm \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
           -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
           -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
           -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
-            windows create \
-            --project-name 'windows-desktop' \
-            --backed-url 'file:///workspace' \
-            --conn-details-output '/workspace' \
-            --windows-version '${{ matrix.windows-version }}' \
-            --windows-featurepack '${{ matrix.windows-featurepack }}' \
-            --nested-virt \
-            --cpus '${{ env.HOST_PARAMS_CPUS }}' \
-            --memory '${{ env.HOST_PARAMS_MEMORY }}' \
-            --tags project=podman-desktop \
-            --spot
-        # Check logs 
+          --user 0 \
+          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
+          windows create \
+          --project-name 'windows-desktop' \
+          --backed-url 'file:///workspace' \
+          --conn-details-output '/workspace' \
+          --windows-version '${{ matrix.windows-version }}' \
+          --windows-featurepack '${{ matrix.windows-featurepack }}' \
+          --cpus ${{ env.MAPT_CPUS }} \
+          --memory ${{ env.MAPT_MEMORY }} \
+          --nested-virt \
+          --tags project=podman-desktop \
+          --spot-excluded-regions ${{ env.MAPT_EXCLUDED_REGIONS }} \
+          --spot
+        # Check logs
         podman logs -f windows-create
 
     - name: Check instance system info
@@ -233,7 +243,7 @@ jobs:
           -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
           -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
           -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
+          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
             windows destroy \
             --project-name 'windows-desktop' \
             --backed-url 'file:///workspace'

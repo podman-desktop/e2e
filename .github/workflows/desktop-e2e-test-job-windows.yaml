@@ -1,5 +1,5 @@
 name: Test Workflow PD E2E with Podman
-run-name: Debugging Desktop E2E Tests with Podman ${{ inputs.podman_provider != '' && inputs.podman_provider || '' }}
+run-name: Debugging Desktop E2E Tests with Podman ${{ contains(inputs.podman_options, 'WSL Provider') && 'wsl' || contains(inputs.podman_options, 'Hyper-V Provider') && 'hyperv' || '' }}
 
 on:
   workflow_dispatch:
@@ -24,23 +24,14 @@ on:
         description: 'npm target to run tests'
         type: string
         required: true
-      podman_remote_url:
-        default: 'https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe'
-        description: 'podman latest version exe'
-        type: string
-        required: true
       podman_options:
-        default: 'INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
-        description: 'Podman machine configuration options, no spaces'
-        type: 'string'
-        required: true
-      podman_provider:
+        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+        description: 'Podman configuration options with provider choice'
         type: choice
-        description: 'Podman virtualization provider, default is wsl, alternative hyperv'
-        options:
-        - wsl
-        - hyperv
         required: true
+        options:
+          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=hyperv'
       env_vars:
         default: 'TEST_PODMAN_MACHINE=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
@@ -52,10 +43,10 @@ on:
         type: 'string'
         required: true
       mapt_params:
-        default: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="v0.8.2"'
-        description: 'Mapt image and version tag'
-        type: 'string'
+        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.5,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
         required: true
+        type: string
 
 jobs:
   windows:
@@ -71,19 +62,19 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_MAPT_PARAMS: 'IMAGE="quay.io/redhat-developer/mapt",VERSION="${{ vars.MAPT_VERSION_TAG }}"'
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
         DEFAULT_EXT_TESTS: '0'
         DEFAULT_NPM_TARGET: 'test:e2e'
-        DEFAULT_PODMAN_PROVIDER: 'wsl'
-        DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
+        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
         DEFAULT_EXT_REPO_OPTIONS: 'REPO=podman-desktop-redhat-account-ext,FORK=redhat-developer,BRANCH=main'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "EXT_TESTS=${{ github.event.inputs.ext_tests || env.DEFAULT_EXT_TESTS }}" >> $GITHUB_ENV
-        echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
+        # Extract podman options, removing the descriptive prefix
+        PODMAN_OPTS="${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}"
+        echo "${PODMAN_OPTS#*: }" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.ext_repo_options || env.DEFAULT_EXT_REPO_OPTIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "EXT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -91,29 +82,32 @@ jobs:
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-         echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+        echo "${{ github.event.inputs.mapt_params }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
       run: |
-        # Create instance
         podman run -d --name windows-create --rm \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
           -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
           -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
           -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
-            windows create \
-            --project-name 'windows-desktop' \
-            --backed-url 'file:///workspace' \
-            --conn-details-output '/workspace' \
-            --windows-version '${{ matrix.windows-version }}' \
-            --windows-featurepack '${{ matrix.windows-featurepack }}' \
-            --vmsize 'Standard_D8s_v4' \
-            --tags project=podman-desktop \
-            --spot
-        # Check logs 
+          --user 0 \
+          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
+          windows create \
+          --project-name 'windows-desktop' \
+          --backed-url 'file:///workspace' \
+          --conn-details-output '/workspace' \
+          --windows-version '${{ matrix.windows-version }}' \
+          --windows-featurepack '${{ matrix.windows-featurepack }}' \
+          --cpus ${{ env.MAPT_CPUS }} \
+          --memory ${{ env.MAPT_MEMORY }} \
+          --nested-virt \
+          --tags project=podman-desktop \
+          --spot-excluded-regions ${{ env.MAPT_EXCLUDED_REGIONS }} \
+          --spot
+        # Check logs
         podman logs -f windows-create
 
     - name: Check instance system info
@@ -173,7 +167,7 @@ jobs:
           -v $PWD:/data:z \
           quay.io/odockal/pde2e-podman:${{ env.PDE2E_PODMAN }}-windows \
             pd-e2e/podman.ps1 \
-              -downloadUrl "${{ github.event.inputs.podman_remote_url }}" \
+              -downloadUrl "${{ env.PODMAN_REMOTE_URL }}" \
               -targetFolder pd-e2e \
               -resultsFolder results \
               -initialize 0 \
@@ -230,7 +224,7 @@ jobs:
           -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
           -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
           -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION }} azure \
+          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
             windows destroy \
             --project-name 'windows-desktop' \
             --backed-url 'file:///workspace'
