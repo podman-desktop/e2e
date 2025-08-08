@@ -47,7 +47,7 @@ on:
 
 jobs:
   windows:
-    timeout-minutes: 120
+    timeout-minutes: 180
     runs-on: ubuntu-latest
     permissions:
       contents: read
