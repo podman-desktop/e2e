@@ -21,9 +21,10 @@ fi
 
 # Verify that the installed Podman version matches the expected version. 
 INSTALLED_PODMAN_VERSION="$(podman --version | cut -d ' ' -f 3)"
+NORMALIZED_PODMAN_VERSION="${PODMAN_VERSION//\~/-}"
 
-if [[ "$INSTALLED_PODMAN_VERSION" != "$PODMAN_VERSION" ]]; then
-    echo "Podman version mismatch: expected $PODMAN_VERSION but got $INSTALLED_PODMAN_VERSION"
+if [[ "$INSTALLED_PODMAN_VERSION" != "$NORMALIZED_PODMAN_VERSION" ]]; then
+    echo "Podman version mismatch: expected $NORMALIZED_PODMAN_VERSION but got $INSTALLED_PODMAN_VERSION"
     exit 1
 fi
 
