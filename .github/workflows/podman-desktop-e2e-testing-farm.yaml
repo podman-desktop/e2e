@@ -43,6 +43,9 @@ jobs:
     timeout-minutes: 90
     name: pd-e2e-testing-farm-ci
     runs-on: ubuntu-latest
+    strategy: 
+      matrix: 
+        fedora-version: ['Fedora-41', 'Fedora-42']
     steps: 
       - name: Set the default env. variables
         env:
@@ -62,7 +65,7 @@ jobs:
           create_github_summary: "false"
           compose: Fedora-42
           tmt_plan_filter: 'name:/plans/pd-e2e-plan/e2e'
-          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=Fedora-42;ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }}
+          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=${{ matrix.fedora-version }};ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }}
  
       - name: Extract Testing Farm work ID and base URL
         if: always()
