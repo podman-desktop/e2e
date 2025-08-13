@@ -43,7 +43,7 @@ on:
         type: 'string'
         required: true
       mapt_params:
-        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.5,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.6,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
         description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
         required: true
         type: string
@@ -62,7 +62,7 @@ jobs:
     steps:
     - name: Set the default env. variables
       env:
-        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.6' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
         DEFAULT_EXT_TESTS: '0'
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
