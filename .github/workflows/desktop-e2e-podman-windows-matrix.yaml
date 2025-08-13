@@ -19,14 +19,11 @@ on:
         description: 'podman latest version exe'
         type: string
         required: true
-      podman_init_start:
-        default: '1'
-        description: 'Initialize and Start Podman Machine'
-        type: choice
+      podman_machine_options:
+        default: 'INIT=1,START=1'
+        description: 'Podman Machine options (INIT=1,START=1)'
+        type: string
         required: true
-        options:
-        - '1'
-        - '0'
       podman_provider:
         default: 'wsl'
         description: 'Podman virtualization provider'
@@ -83,7 +80,7 @@ jobs:
         DEFAULT_REPO_BRANCH: 'FORK=podman-desktop,BRANCH=main'
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_REMOTE_URL: 'https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe'
-        DEFAULT_PODMAN_INIT_START: '1'
+        DEFAULT_PODMAN_MACHINE_OPTIONS: 'INIT=1,START=1'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.5' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
@@ -92,9 +89,8 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
         # Set podman configuration variables directly from separate inputs
         echo "PODMAN_REMOTE_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_PODMAN_REMOTE_URL }}" >> $GITHUB_ENV
-        PODMAN_INIT_START="${{ github.event.inputs.podman_init_start || env.DEFAULT_PODMAN_INIT_START }}"
-        echo "PODMAN_INIT=${PODMAN_INIT_START}" >> $GITHUB_ENV
-        echo "PODMAN_START=${PODMAN_INIT_START}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.podman_machine_options || env.DEFAULT_PODMAN_MACHINE_OPTIONS }}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
