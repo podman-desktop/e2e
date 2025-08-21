@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       mapt_params:
-        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.6,CPUS=8,MEMORY=16,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.7,CPUS=8,MEMORY=16,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
         description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
         required: true
         type: string
@@ -60,7 +60,7 @@ jobs:
 
     - name: Set the default env. variables
       env:
-        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.6' }},CPUS=${{ vars.MAPT_CPUS || '8' }},MEMORY=${{ vars.MAPT_MEMORY || '16' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }},CPUS=${{ vars.MAPT_CPUS || '8' }},MEMORY=${{ vars.MAPT_MEMORY || '16' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
         echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
