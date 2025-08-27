@@ -3,10 +3,12 @@ description: 'Creates a Windows instance using MAPT on Azure'
 inputs:
   mapt-image:
     description: 'MAPT container image'
-    required: true
+    required: false
+    default: 'quay.io/redhat-developer/mapt'
   mapt-version:
     description: 'MAPT container version tag'
-    required: true
+    required: false
+    default: 'v0.9.7'
   windows-version:
     description: 'Windows version to create'
     required: true
@@ -15,13 +17,16 @@ inputs:
     required: true
   cpus:
     description: 'Number of CPUs for the instance'
-    required: true
+    required: false
+    default: '4'
   memory:
     description: 'Memory in GB for the instance'
-    required: true
+    required: false
+    default: '32'
   excluded-regions:
     description: 'Spot instance excluded regions'
-    required: true
+    required: false
+    default: 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest'
   project-name:
     description: 'Project name for the instance'
     required: false

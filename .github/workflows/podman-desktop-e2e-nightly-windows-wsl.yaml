@@ -91,13 +91,13 @@ jobs:
     - name: Create instance
       uses: podman-desktop/e2e/.github/actions/create-instance@issue-13566
       with:
-        mapt-image: ${{ env.MAPT_IMAGE }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
         windows-version: ${{ matrix.windows-version }}
         windows-featurepack: ${{ matrix.windows-featurepack }}
-        cpus: ${{ env.MAPT_CPUS }}
-        memory: ${{ env.MAPT_MEMORY }}
-        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS }}
+        cpus: ${{ env.MAPT_CPUS || '' }}
+        memory: ${{ env.MAPT_MEMORY || '' }}
+        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
@@ -206,8 +206,8 @@ jobs:
       if: always()
       uses: podman-desktop/e2e/.github/actions/destroy-instance@issue-13566
       with:
-        mapt-image: ${{ env.MAPT_IMAGE }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
