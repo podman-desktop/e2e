@@ -54,8 +54,8 @@ runs:
     - name: Create instance
       shell: bash
       run: |
-        # Create instance using resources approach
-        podman run -d --name windows-create --rm \
+        # Create instance using resources approach and capture container ID
+        CONTAINER_ID=$(podman run -d --name windows-create --rm \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
           -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
@@ -74,16 +74,18 @@ runs:
           --nested-virt \
           --tags ${{ inputs.tags }} \
           --spot-excluded-regions ${{ inputs.excluded-regions }} \
-          --spot
+          --spot)
+        
+        echo "Started container with ID: $CONTAINER_ID"
         
         # Wait for container to complete and capture exit code
         echo "Waiting for instance creation to complete..."
-        podman wait windows-create
+        podman wait $CONTAINER_ID
         exit_code=$?
         
         # Show logs regardless of success or failure
         echo "Container logs:"
-        podman logs windows-create
+        podman logs $CONTAINER_ID 2>/dev/null || echo "Container logs not available (container may have been removed)"
         
         # Check if container completed successfully
         if [ $exit_code -ne 0 ]; then
