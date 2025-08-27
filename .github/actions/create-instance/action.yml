@@ -1,0 +1,86 @@
+name: 'Create MAPT Instance'
+description: 'Creates a Windows instance using MAPT on Azure'
+inputs:
+  mapt-image:
+    description: 'MAPT container image'
+    required: true
+  mapt-version:
+    description: 'MAPT container version tag'
+    required: true
+  windows-version:
+    description: 'Windows version to create'
+    required: true
+  windows-featurepack:
+    description: 'Windows feature pack'
+    required: true
+  cpus:
+    description: 'Number of CPUs for the instance'
+    required: true
+  memory:
+    description: 'Memory in GB for the instance'
+    required: true
+  excluded-regions:
+    description: 'Spot instance excluded regions'
+    required: true
+  project-name:
+    description: 'Project name for the instance'
+    required: false
+    default: 'windows-desktop'
+  tags:
+    description: 'Additional tags for the instance'
+    required: false
+    default: 'project=podman-desktop'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Create instance
+      shell: bash
+      run: |
+        # Create instance using resources approach
+        podman run -d --name windows-create --rm \
+          -v ${PWD}:/workspace:z \
+          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
+          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
+          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
+          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+          --user 0 \
+          ${{ inputs.mapt-image }}:${{ inputs.mapt-version }} azure \
+          windows create \
+          --project-name '${{ inputs.project-name }}' \
+          --backed-url 'file:///workspace' \
+          --conn-details-output '/workspace' \
+          --windows-version '${{ inputs.windows-version }}' \
+          --windows-featurepack '${{ inputs.windows-featurepack }}' \
+          --cpus ${{ inputs.cpus }} \
+          --memory ${{ inputs.memory }} \
+          --nested-virt \
+          --tags ${{ inputs.tags }} \
+          --spot-excluded-regions ${{ inputs.excluded-regions }} \
+          --spot
+        
+        # Wait for container to complete and capture exit code
+        echo "Waiting for instance creation to complete..."
+        podman wait windows-create
+        exit_code=$?
+        
+        # Show logs regardless of success or failure
+        echo "Container logs:"
+        podman logs windows-create
+        
+        # Check if container completed successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "Instance creation failed with exit code: $exit_code"
+          exit $exit_code
+        fi
+        
+        # Verify connection files were created
+        if [ ! -f "host" ] || [ ! -f "username" ] || [ ! -f "id_rsa" ]; then
+          echo "Error: Connection files not created. Instance creation may have failed."
+          ls -la
+          exit 1
+        fi
+        
+        echo "Instance creation completed successfully!"
+        echo "Host: $(cat host)"
+        echo "Username: $(cat username)"

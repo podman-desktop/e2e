@@ -1,0 +1,51 @@
+name: 'Destroy MAPT Instance'
+description: 'Destroys a Windows instance using MAPT on Azure'
+
+inputs:
+  mapt-image:
+    description: 'MAPT container image'
+    required: true
+  mapt-version:
+    description: 'MAPT container version tag'
+    required: true
+  project-name:
+    description: 'Project name for the instance'
+    required: false
+    default: 'windows-desktop'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Destroy instance
+      shell: bash
+      run: |
+        # Destroy instance using MAPT
+        podman run -d --name windows-destroy --rm \
+          -v ${PWD}:/workspace:z \
+          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
+          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
+          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
+          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+          --user 0 \
+          ${{ inputs.mapt-image }}:${{ inputs.mapt-version }} azure \
+          windows destroy \
+          --project-name '${{ inputs.project-name }}' \
+          --backed-url 'file:///workspace'
+        
+        # Wait for container to complete and capture exit code
+        echo "Waiting for instance destruction to complete..."
+        podman wait windows-destroy
+        exit_code=$?
+        
+        # Show logs regardless of success or failure
+        echo "Container logs:"
+        podman logs windows-destroy
+        
+        # Check if container completed successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "Instance destruction failed with exit code: $exit_code"
+          echo "This might be normal if the instance was already destroyed or doesn't exist."
+          # Don't fail the action for destroy operations - they should be idempotent
+        else
+          echo "Instance destruction completed successfully!"
+        fi
