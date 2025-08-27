@@ -129,13 +129,13 @@ jobs:
     - name: Create instance
       uses: ./.github/actions/create-instance
       with:
-        mapt-image: ${{ env.MAPT_IMAGE }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
         windows-version: ${{ matrix.windows-version }}
         windows-featurepack: ${{ matrix.windows-featurepack }}
-        cpus: ${{ env.MAPT_CPUS }}
-        memory: ${{ env.MAPT_MEMORY }}
-        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS }}
+        cpus: ${{ env.MAPT_CPUS || '' }}
+        memory: ${{ env.MAPT_MEMORY || '' }}
+        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
         tags: 'project=podman-desktop,source=github,org=${{github.repository_owner}},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
@@ -226,8 +226,8 @@ jobs:
       if: always()
       uses: ./.github/actions/destroy-instance
       with:
-        mapt-image: ${{ env.MAPT_IMAGE }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
