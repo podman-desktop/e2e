@@ -30,6 +30,18 @@ inputs:
     description: 'Additional tags for the instance'
     required: false
     default: 'project=podman-desktop'
+  arm-tenant-id:
+    description: 'Azure ARM Tenant ID'
+    required: true
+  arm-subscription-id:
+    description: 'Azure ARM Subscription ID'
+    required: true
+  arm-client-id:
+    description: 'Azure ARM Client ID'
+    required: true
+  arm-client-secret:
+    description: 'Azure ARM Client Secret'
+    required: true
 
 runs:
   using: 'composite'
@@ -40,10 +52,10 @@ runs:
         # Create instance using resources approach
         podman run -d --name windows-create --rm \
           -v ${PWD}:/workspace:z \
-          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
-          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
-          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
-          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+          -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
+          -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
+          -e ARM_CLIENT_ID=${{ inputs.arm-client-id }} \
+          -e ARM_CLIENT_SECRET='${{ inputs.arm-client-secret }}' \
           --user 0 \
           ${{ inputs.mapt-image }}:${{ inputs.mapt-version }} azure \
           windows create \

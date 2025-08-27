@@ -137,6 +137,10 @@ jobs:
         memory: ${{ env.MAPT_MEMORY }}
         excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS }}
         tags: 'project=podman-desktop,source=github,org=${{github.repository_owner}},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Check instance system info
       run: |
@@ -224,6 +228,10 @@ jobs:
       with:
         mapt-image: ${{ env.MAPT_IMAGE }}
         mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@v4

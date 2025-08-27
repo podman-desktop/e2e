@@ -12,6 +12,18 @@ inputs:
     description: 'Project name for the instance'
     required: false
     default: 'windows-desktop'
+  arm-tenant-id:
+    description: 'Azure ARM Tenant ID'
+    required: true
+  arm-subscription-id:
+    description: 'Azure ARM Subscription ID'
+    required: true
+  arm-client-id:
+    description: 'Azure ARM Client ID'
+    required: true
+  arm-client-secret:
+    description: 'Azure ARM Client Secret'
+    required: true
 
 runs:
   using: 'composite'
@@ -22,10 +34,10 @@ runs:
         # Destroy instance using MAPT
         podman run -d --name windows-destroy --rm \
           -v ${PWD}:/workspace:z \
-          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
-          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
-          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
-          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
+          -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
+          -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
+          -e ARM_CLIENT_ID=${{ inputs.arm-client-id }} \
+          -e ARM_CLIENT_SECRET='${{ inputs.arm-client-secret }}' \
           --user 0 \
           ${{ inputs.mapt-image }}:${{ inputs.mapt-version }} azure \
           windows destroy \

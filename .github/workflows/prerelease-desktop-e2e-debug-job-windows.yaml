@@ -101,6 +101,10 @@ jobs:
         cpus: ${{ env.MAPT_CPUS }}
         memory: ${{ env.MAPT_MEMORY }}
         excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS }}
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Setup Connection to Existing instance
       if: ${{ env.CREATE_MACHINE == 'false' }}
@@ -211,6 +215,10 @@ jobs:
       with:
         mapt-image: ${{ env.MAPT_IMAGE }}
         mapt-version: ${{ env.MAPT_VERSION_TAG }}
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@v5
