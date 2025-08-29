@@ -92,29 +92,19 @@ jobs:
 
     - name: Create instance
       if: ${{ env.CREATE_MACHINE == 'true' }}
-      run: |
-        podman run -d --name windows-create --rm \
-          -v ${PWD}:/workspace:z \
-          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
-          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
-          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
-          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          --user 0 \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
-          windows create \
-          --project-name 'windows-desktop' \
-          --backed-url 'file:///workspace' \
-          --conn-details-output '/workspace' \
-          --windows-version '${{ matrix.windows-version }}' \
-          --windows-featurepack '${{ matrix.windows-featurepack }}' \
-          --cpus ${{ env.MAPT_CPUS }} \
-          --memory ${{ env.MAPT_MEMORY }} \
-          --nested-virt \
-          --tags project=podman-desktop \
-          --spot-excluded-regions ${{ env.MAPT_EXCLUDED_REGIONS }} \
-          --spot
-        # Check logs
-        podman logs -f windows-create
+      uses: ./.github/actions/create-instance
+      with:
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
+        windows-version: ${{ matrix.windows-version }}
+        windows-featurepack: ${{ matrix.windows-featurepack }}
+        cpus: ${{ env.MAPT_CPUS || '' }}
+        memory: ${{ env.MAPT_MEMORY || '' }}
+        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Setup Connection to Existing instance
       if: ${{ env.CREATE_MACHINE == 'false' }}
@@ -221,20 +211,14 @@ jobs:
 
     - name: Destroy instance
       if: ${{ env.CREATE_MACHINE }}
-      run: |
-        # Destroy instance
-        podman run -d --name windows-destroy --rm \
-          -v ${PWD}:/workspace:z \
-          -e ARM_TENANT_ID=${{ secrets.ARM_TENANT_ID }} \
-          -e ARM_SUBSCRIPTION_ID=${{ secrets.ARM_SUBSCRIPTION_ID }} \
-          -e ARM_CLIENT_ID=${{ secrets.ARM_CLIENT_ID }} \
-          -e ARM_CLIENT_SECRET='${{ secrets.ARM_CLIENT_SECRET }}' \
-          ${{ env.MAPT_IMAGE }}:${{ env.MAPT_VERSION_TAG }} azure \
-            windows destroy \
-            --project-name 'windows-desktop' \
-            --backed-url 'file:///workspace'
-        # Check logs
-        podman logs -f windows-destroy
+      uses: ./.github/actions/destroy-instance
+      with:
+        mapt-image: ${{ env.MAPT_IMAGE || '' }}
+        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
+        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
+        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
+        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@v5
