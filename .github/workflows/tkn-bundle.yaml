@@ -6,7 +6,7 @@ on:
     tags:        
       - '*'
     paths-ignore:
-      - '.github/workflows/**'
+      - '.github/**'
       - '.fmf/**'
       - 'plans/**'
       - 'pde2e-image/**'
@@ -14,7 +14,7 @@ on:
   pull_request:
     branches: [ main ]
     paths-ignore:
-      - '.github/workflows/**'
+      - '.github/**'
       - '.fmf/**'
       - 'plans/**'
       - 'pde2e-image/**'
