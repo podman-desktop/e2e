@@ -19,19 +19,27 @@ description: 'Destroys a Windows instance using MAPT on Azure'
 
 inputs:
   mapt-image:
-    description: 'The MAPT container image to use for provisioning. Example: quay.io/redhat-developer/mapt'
+    description: |
+      The MAPT container image to use for provisioning.
+      Example: 'quay.io/redhat-developer/mapt'
     required: false
     default: 'quay.io/redhat-developer/mapt'
   mapt-version:
-    description: 'The version tag of the MAPT container image. Example: v0.9.7'
+    description: |
+      The version tag of the MAPT container image.
+      Example: 'v0.9.7'
     required: false
     default: 'v0.9.7'
   project-name:
-    description: 'The project name for grouping and identifying the instance. Example: windows-desktop'
+    description: |
+      The project name for grouping and identifying the instance.
+      Example: 'windows-desktop'
     required: false
     default: 'windows-desktop'
   backed-url:
-    description: 'The backed URL for instance destruction. Example: file:///workspace'
+    description: |
+      The backed URL for instance destruction.
+      Example: 'file:///workspace'
     required: false
     default: 'file:///workspace'
   arm-tenant-id:

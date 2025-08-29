@@ -18,41 +18,61 @@ name: 'Create MAPT Instance'
 description: 'Creates a Windows instance using MAPT on Azure'
 inputs:
   mapt-image:
-    description: 'The MAPT container image to use for provisioning. Example: quay.io/redhat-developer/mapt'
+    description: |
+      The MAPT container image to use for provisioning
+      Example: 'quay.io/redhat-developer/mapt'
     required: false
     default: 'quay.io/redhat-developer/mapt'
   mapt-version:
-    description: 'The version tag of the MAPT container image. Example: v0.9.7'
+    description: |
+      The version tag of the MAPT container image.
+      Example: 'v0.9.7'
     required: false
     default: 'v0.9.7'
   windows-version:
-    description: 'The target Windows version to create. Example: 10'
+    description: |
+      The target Windows version to create.
+      Example: '10'
     required: true
   windows-featurepack:
-    description: 'The Windows feature pack to install. Example: 23h2-ent'
+    description: |
+      The Windows feature pack to install.
+      Example: '23h2-ent'
     required: true
   cpus:
-    description: 'Number of virtual CPUs for the instance. Example: 4'
+    description: |
+      Number of virtual CPUs for the instance.
+      Example: '4'
     required: false
     default: '4'
   memory:
-    description: 'Memory in gigabytes (GB) for the instance. Example: 16'
+    description: |
+      Memory in gigabytes (GB) for the instance.
+      Example: '16'
     required: false
     default: '32'
   excluded-regions:
-    description: 'List of Azure regions to exclude for spot instances. Example: westeurope,northeurope'
+    description: |
+      List of Azure regions to exclude for spot instances.
+      Example: 'westeurope,northeurope'
     required: false
     default: 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest'
   project-name:
-    description: 'The project name for grouping and identifying the instance. Example: windows-desktop'
+    description: |
+      The project name for grouping and identifying the instance.
+      Example: 'windows-desktop'
     required: false
     default: 'windows-desktop'
   tags:
-    description: 'Additional tags for the instance in key=value,key2=value2 format. Example: project=podman-desktop'
+    description: |
+      Additional tags for the instance in key=value,key2=value2 format.
+      Example: 'project=podman-desktop'
     required: false
     default: 'project=podman-desktop'
   backed-url:
-    description: 'The backed URL for instance creation. Example: file:///workspace'
+    description: |
+      The backed URL for instance creation.
+      Example: 'file:///workspace'
     required: false
     default: 'file:///workspace'
   arm-tenant-id:
