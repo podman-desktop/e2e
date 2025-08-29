@@ -19,41 +19,45 @@ description: 'Destroys a Windows instance using MAPT on Azure'
 
 inputs:
   mapt-image:
-    description: |
-      The MAPT container image to use for provisioning.
-      Example: 'quay.io/redhat-developer/mapt'
+    description: 'The MAPT container image to use for provisioning'
     required: false
     default: 'quay.io/redhat-developer/mapt'
+    type: string
+    example: 'quay.io/redhat-developer/mapt'
   mapt-version:
-    description: |
-      The version tag of the MAPT container image.
-      Example: 'v0.9.7'
+    description: 'The version tag of the MAPT container image.'
     required: false
     default: 'v0.9.7'
+    type: string
+    example: 'v0.9.7'
   project-name:
-    description: |
-      The project name for grouping and identifying the instance.
-      Example: 'windows-desktop'
+    description: 'The project name for grouping and identifying the instance.'
     required: false
     default: 'windows-desktop'
+    type: string
+    example: 'windows-desktop'
   backed-url:
-    description: |
-      The backed URL for instance destruction.
-      Example: 'file:///workspace'
+    description: 'The backed URL for instance destruction.'
     required: false
     default: 'file:///workspace'
+    type: string
+    example: 'file:///workspace'
   arm-tenant-id:
     description: 'The Azure ARM Tenant ID for authentication'
     required: true
+    type: string
   arm-subscription-id:
     description: 'Azure ARM Subscription ID'
     required: true
+    type: string
   arm-client-id:
     description: 'Azure ARM Client ID (Service Principal)'
     required: true
+    type: string
   arm-client-secret:
     description: 'Azure ARM Client Secret (Service Principal)'
     required: true
+    type: string
 
 runs:
   using: 'composite'
