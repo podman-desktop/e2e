@@ -66,7 +66,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
-      uses: podman-desktop/e2e/.github/actions/create-instance@main
+      uses: podman-desktop/e2e/.github/actions/create-instance@11154f001a8679292b7711d4d7a72dc99b07731d
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
@@ -147,7 +147,7 @@ jobs:
 
     - name: Destroy instance
       if: always()
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@11154f001a8679292b7711d4d7a72dc99b07731d
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
