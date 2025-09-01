@@ -15,7 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: 'Emulate X Session'
-description: 'Reads connection files (host, username, userpassword) and starts a container to emulate an active RDP/X session.'
+description: 'Starts a container to emulate an active RDP/X session on the remote host.'
 
 runs:
   using: 'composite'
@@ -46,8 +46,18 @@ runs:
         # Wait until the x session has been created
         echo "Waiting for X session container to enter a running state..."
         podman wait --condition running x-session
-        
-        # Check logs for the x session
-        echo "X session container is running. Logs:"
-        podman logs x-session
+        exit_code=$?
+
+        # Show logs regardless of success or failure
+        echo "Container logs:"
+        podman logs x-session 2>/dev/null || echo "Container logs not available."
+
+        # Check if the container entered the running state successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "::error::The x-session container failed to start. It exited with code: $exit_code"
+          echo "This often means one of the RDP environment variables was incorrect or the container failed internally."
+          exit 1
+        fi
+
+        echo "X session container is running successfully."
       
