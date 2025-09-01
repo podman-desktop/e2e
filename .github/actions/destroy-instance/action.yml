@@ -1,0 +1,99 @@
+# Copyright (C) 2025 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Destroy MAPT Instance'
+description: 'Destroys a Windows instance using MAPT on Azure'
+
+inputs:
+  mapt-image:
+    description: 'The MAPT container image to use for provisioning'
+    required: false
+    default: 'quay.io/redhat-developer/mapt'
+    type: string
+    example: 'quay.io/redhat-developer/mapt'
+  mapt-version:
+    description: 'The version tag of the MAPT container image.'
+    required: false
+    default: 'v0.9.7'
+    type: string
+    example: 'v0.9.7'
+  project-name:
+    description: 'The project name for grouping and identifying the instance.'
+    required: false
+    default: 'windows-desktop'
+    type: string
+    example: 'windows-desktop'
+  backed-url:
+    description: 'The backed URL for instance destruction.'
+    required: false
+    default: 'file:///workspace'
+    type: string
+    example: 'file:///workspace'
+  arm-tenant-id:
+    description: 'The Azure ARM Tenant ID for authentication'
+    required: true
+    type: string
+  arm-subscription-id:
+    description: 'Azure ARM Subscription ID'
+    required: true
+    type: string
+  arm-client-id:
+    description: 'Azure ARM Client ID (Service Principal)'
+    required: true
+    type: string
+  arm-client-secret:
+    description: 'Azure ARM Client Secret (Service Principal)'
+    required: true
+    type: string
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Destroy instance
+      shell: bash
+      run: |
+        # Destroy instance using MAPT and capture container ID
+        CONTAINER_ID=$(podman run -d --name windows-destroy --rm \
+          -v ${PWD}:/workspace:z \
+          -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
+          -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
+          -e ARM_CLIENT_ID=${{ inputs.arm-client-id }} \
+          -e ARM_CLIENT_SECRET='${{ inputs.arm-client-secret }}' \
+          --user 0 \
+          ${{ inputs.mapt-image }}:${{ inputs.mapt-version }} azure \
+          windows destroy \
+          --project-name '${{ inputs.project-name }}' \
+            --backed-url '${{ inputs.backed-url }}')
+
+        echo "Started container with ID: $CONTAINER_ID"
+
+        # Wait for container to complete and capture exit code
+        echo "Waiting for instance destruction to complete..."
+        podman wait $CONTAINER_ID
+        exit_code=$?
+
+        # Show logs regardless of success or failure
+        echo "Container logs:"
+        podman logs $CONTAINER_ID 2>/dev/null || echo "Container logs not available (container may have been removed)"
+
+        # Check if container completed successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "Instance destruction failed with exit code: $exit_code"
+          echo "This might be normal if the instance was already destroyed or doesn't exist."
+          # Don't fail the action for destroy operations - they should be idempotent
+        else
+          echo "Instance destruction completed successfully!"
+        fi
