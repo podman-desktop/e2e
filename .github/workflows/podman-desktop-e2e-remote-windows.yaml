@@ -136,7 +136,6 @@ jobs:
         cpus: ${{ env.MAPT_CPUS || '' }}
         memory: ${{ env.MAPT_MEMORY || '' }}
         excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
-        tags: 'project=podman-desktop,workflow=${{ github.workflow }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}

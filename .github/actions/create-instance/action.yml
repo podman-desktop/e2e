@@ -64,9 +64,8 @@ inputs:
     type: string
     example: 'windows-desktop'
   tags:
-    description: 'Additional tags for the instance in key=value,key2=value2 format'
+    description: 'Tags to be used for the instance in key=value,key2=value2 format'
     required: false
-    default: 'project=podman-desktop'
     type: string
     example: 'project=podman-desktop'
   backed-url:
@@ -96,6 +95,13 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Set the default env. variables
+      shell: bash
+      env:
+        DEFAULT_TAGS: 'project=podman-desktop,workflow=${{ github.workflow }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
+      run: |
+        echo "TAGS=${{ inputs.tags || env.DEFAULT_TAGS }}" >> $GITHUB_ENV
+
     - name: Create instance
       shell: bash
       run: |
@@ -117,7 +123,7 @@ runs:
           --cpus ${{ inputs.cpus }} \
           --memory ${{ inputs.memory }} \
           --nested-virt \
-          --tags ${{ inputs.tags }} \
+          --tags ${{ env.TAGS }} \
           --spot-excluded-regions ${{ inputs.excluded-regions }} \
           --spot)
         

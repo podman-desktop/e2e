@@ -74,7 +74,6 @@ jobs:
         windows-featurepack: ${{ matrix.windows-featurepack }}
         cpus: ${{ env.MAPT_CPUS || '' }}
         memory: ${{ env.MAPT_MEMORY || '' }}
-        tags: 'project=podman-desktop,workflow=${{ github.workflow }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
         excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
