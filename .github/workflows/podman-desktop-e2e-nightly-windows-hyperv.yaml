@@ -25,7 +25,7 @@ on:
         type: 'string'
         required: true
       podman_remote_url:
-        default: 'https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe'
+        default: 'https://github.com/containers/podman/releases/download/v5.6.0/podman-5.6.0-setup.exe'
         description: 'podman latest version exe'
         type: string
         required: true
