@@ -51,8 +51,9 @@ runs:
           echo "::error::Failed to connect or execute command on the remote host."
           exit 1
         fi
-        
-        echo "Successfully retrieved system info."
+
+        echo "System Information:"
+        echo "$SYSTEM_INFO"
 
         # Set the action's output
         echo "system-info<<EOF" >> $GITHUB_OUTPUT
