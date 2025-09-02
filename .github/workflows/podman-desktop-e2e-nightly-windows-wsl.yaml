@@ -112,8 +112,8 @@ jobs:
     - name: Setup dependencies and build Podman Desktop locally
       uses: podman-desktop/e2e/.github/actions/build-podman-desktop@issue-435
       with:
-        fork: ${{ env.FORK || 'podman-desktop' }}
-        branch: ${{ env.BRANCH || 'main' }}
+        fork: ${{ env.FORK }}
+        branch: ${{ env.BRANCH }}
 
     - name: Download Podman nightly, do not initialize and start
       run: |
