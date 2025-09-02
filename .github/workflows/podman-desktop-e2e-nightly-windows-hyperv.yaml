@@ -40,8 +40,8 @@ on:
         type: 'string'
         required: true
       mapt_params:
-        default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.7,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
-        description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
+        default: 'IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.7;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
+        description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx'
         required: true
         type: string
 
@@ -52,9 +52,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-    env:
-      MAPT_VERSION: ${{ vars.MAPT_VERSION_TAG }}
-      MAPT_IMAGE: quay.io/redhat-developer/mapt
     strategy:
       fail-fast: false
       matrix:
@@ -82,7 +79,7 @@ jobs:
         DEFAULT_VERSION: "${{ env.PD_PODMAN_VERSION || '5.2.5' }}"
         DEFAULT_URL: 'https://github.com/containers/podman/releases/download/v$DEFAULT_VERSION/podman-$DEFAULT_VERSION-setup.exe'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }};VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }};CPUS=${{ vars.MAPT_CPUS || '4' }};MEMORY=${{ vars.MAPT_MEMORY || '32' }};EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -92,7 +89,7 @@ jobs:
         echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ',' \
+        echo "${{ github.event.inputs.mapt_params || env.DEFAULT_MAPT_PARAMS }}" | awk -F ';' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
