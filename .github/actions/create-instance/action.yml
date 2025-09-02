@@ -123,7 +123,7 @@ runs:
           --cpus ${{ inputs.cpus }} \
           --memory ${{ inputs.memory }} \
           --nested-virt \
-          --tags ${{ env.TAGS }} \
+          --tags '${{ env.TAGS }}' \
           --spot-excluded-regions ${{ inputs.excluded-regions }} \
           --spot)
         
