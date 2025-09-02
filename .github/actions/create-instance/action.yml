@@ -100,7 +100,7 @@ runs:
       env:
         DEFAULT_TAGS: 'project=podman-desktop,workflow=${{ github.workflow }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
       run: |
-        TAGS_TO_USE="${{ inputs.tags || env.DEFAULT_TAGS }}"
+        echo "TAGS=${{ inputs.tags || env.DEFAULT_TAGS }}" >> $GITHUB_ENV
 
     - name: Create instance
       shell: bash
@@ -123,7 +123,7 @@ runs:
           --cpus ${{ inputs.cpus }} \
           --memory ${{ inputs.memory }} \
           --nested-virt \
-          --tags "${TAGS_TO_USE}" \
+          --tags ${{ env.TAGS }} \
           --spot-excluded-regions ${{ inputs.excluded-regions }} \
           --spot)
         

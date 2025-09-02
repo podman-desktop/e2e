@@ -110,7 +110,7 @@ jobs:
       uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
     - name: Setup dependencies and build Podman Desktop locally
-      uses: podman-desktop/e2e/.github/actions/build-podman-desktop@issue-435
+      uses: podman-desktop/e2e/.github/actions/build-podman-desktop@main
       with:
         fork: ${{ env.FORK }}
         branch: ${{ env.BRANCH }}
