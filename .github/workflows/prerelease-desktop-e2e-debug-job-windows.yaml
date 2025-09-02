@@ -72,7 +72,7 @@ jobs:
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }},EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
+        DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }}"
       run: |
         echo "CREATE_MACHINE=${{ github.event.inputs.create_machine || env.DEFAULT_CREATE_MACHINE }}" >> $GITHUB_ENV  
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
@@ -100,7 +100,6 @@ jobs:
         windows-featurepack: ${{ matrix.windows-featurepack }}
         cpus: ${{ env.MAPT_CPUS || '' }}
         memory: ${{ env.MAPT_MEMORY || '' }}
-        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
         arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
         arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
