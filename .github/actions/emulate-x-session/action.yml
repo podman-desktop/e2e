@@ -1,0 +1,63 @@
+# Copyright (C) 2025 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Emulate X Session'
+description: 'Starts a container to emulate an active RDP/X session on the remote host.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Start fake RDP session container'
+      shell: bash
+      run: |
+        # Check if required files exist before proceeding
+        if [ ! -f "host" ] || [ ! -f "username" ] || [ ! -f "userpassword" ]; then
+          echo "::error::Connection files (host, username, userpassword) not found in the workspace."
+          exit 1
+        fi
+
+        # Read connection details from files
+        RDP_HOST=$(cat host)
+        RDP_USER=$(cat username)
+        RDP_PASSWORD=$(cat userpassword)
+
+        echo "Starting fake RDP container to emulate an active X session on ${RDP_HOST}..."
+        
+        # use fake rdp to emulate an active x session
+        podman run -d --name x-session \
+          -e RDP_HOST=${RDP_HOST} \
+          -e RDP_USER=${RDP_USER} \
+          -e RDP_PASSWORD=${RDP_PASSWORD} \
+          quay.io/rhqp/frdp:v0.0.1
+        
+        # Wait until the x session has been created
+        echo "Waiting for X session container to enter a running state..."
+        podman wait --condition running x-session
+        exit_code=$?
+
+        # Show logs regardless of success or failure
+        echo "Container logs:"
+        podman logs x-session 2>/dev/null || echo "Container logs not available."
+
+        # Check if the container entered the running state successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "::error::The x-session container failed to start. It exited with code: $exit_code"
+          echo "This often means one of the RDP environment variables was incorrect or the container failed internally."
+          exit 1
+        fi
+
+        echo "X session container is running successfully."
+      

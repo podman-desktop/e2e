@@ -143,26 +143,10 @@ jobs:
         arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Check instance system info
-      run: |
-        ssh -i id_rsa \
-          -o StrictHostKeyChecking=no \
-          -o UserKnownHostsFile=/dev/null \
-          -o ServerAliveInterval=30 \
-          -o ServerAliveCountMax=1200 \
-          $(cat username)@$(cat host) "systeminfo"
+      uses: podman-desktop/e2e/.github/actions/instance-system-info
 
-    - name: Emulate X session 
-      run: |
-        # use fake rdp to emulate an active x session
-        podman run -d --name x-session \
-          -e RDP_HOST=$(cat host) \
-          -e RDP_USER=$(cat username) \
-          -e RDP_PASSWORD=$(cat userpassword) \
-          quay.io/rhqp/frdp:v0.0.1
-        # Wait until the x session has been created
-        podman wait --condition running x-session
-        # Check logs for the x session
-        podman logs x-session
+    - name: Emulate X session
+      uses: podman-desktop/e2e/.github/actions/emulate-x-session
 
     - name: Download Podman nightly, do not initialize
       run: |
