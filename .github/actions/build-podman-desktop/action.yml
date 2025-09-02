@@ -63,6 +63,12 @@ inputs:
     required: false
     default: true
     type: boolean
+  env-vars:
+    description: 'Environment variables to set in the build container.'
+    required: false
+    default: ''
+    type: string
+    example: 'KEY1=value1,KEY2=value2'
 
 runs:
   using: 'composite'
@@ -74,6 +80,13 @@ runs:
         if [ ! -f "host" ] || [ ! -f "username" ] || [ ! -f "id_rsa" ]; then
           echo "::error::Connection files (host, username, id_rsa) not found in the workspace."
           exit 1
+        fi
+
+        # Conditionally prepare the -envVars parameter
+        ENV_VARS_PARAM=""
+        if [[ -n "${{ inputs.env-vars }}" ]]; then
+          # Note the extra quotes to handle potential spaces in the values
+          ENV_VARS_PARAM="-envVars \"${{ inputs.env-vars }}\""
         fi
 
         echo "Starting Podman Desktop build process on $(cat host)..."
@@ -93,8 +106,9 @@ runs:
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
                 -fork ${{ inputs.fork }} \
-                -branch ${{ inputs.branch }}
-
+                -branch ${{ inputs.branch }} \
+                ${ENV_VARS_PARAM}
+                
         echo "Build container started. Tailing logs..."
         
         podman logs -f pde2e-builder-run
