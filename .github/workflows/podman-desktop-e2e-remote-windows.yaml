@@ -143,10 +143,10 @@ jobs:
         arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
     - name: Check instance system info
-      uses: podman-desktop/e2e/.github/actions/instance-system-info
+      uses: podman-desktop/e2e/.github/actions/instance-system-info@main
 
     - name: Emulate X session
-      uses: podman-desktop/e2e/.github/actions/emulate-x-session
+      uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
     - name: Download Podman nightly, do not initialize
       run: |
