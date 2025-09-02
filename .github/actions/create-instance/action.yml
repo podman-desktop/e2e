@@ -98,7 +98,7 @@ runs:
     - name: Set the default env. variables
       shell: bash
       env:
-        DEFAULT_TAGS: 'project=podman-desktop,workflow=${{ github.workflow }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
+        DEFAULT_TAGS: 'project=podman-desktop,workflow="${{ github.workflow }}",run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github,org=${{ github.repository_owner }}'
       run: |
         echo "TAGS=${{ inputs.tags || env.DEFAULT_TAGS }}" >> $GITHUB_ENV
 
