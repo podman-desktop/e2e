@@ -47,12 +47,7 @@ on:
         default: 'IMAGE=quay.io/redhat-developer/mapt,VERSION_TAG=v0.9.7,CPUS=4,MEMORY=32,EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"'
         description: 'MAPT image, version tag, cpus and memory request, and excluded regions in format IMAGE=xxx,VERSION_TAG=xxx,CPUS=xxx,MEMORY=xxx,EXCLUDED_REGIONS=xxx'
         required: true
-        type: string
-      mapt_ref:
-        default: 'main'
-        description: 'Reference to a mapt create/destroy action'
-        required: false
-        type: string        
+        type: string     
 jobs:
   windows:
     name: ${{ matrix.windows-version }} - Debug
@@ -78,6 +73,7 @@ jobs:
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
         DEFAULT_MAPT_PARAMS: "IMAGE=${{ vars.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }},VERSION_TAG=${{ vars.MAPT_VERSION_TAG || 'v0.9.7' }},CPUS=${{ vars.MAPT_CPUS || '4' }},MEMORY=${{ vars.MAPT_MEMORY || '32' }}"
+        DEFAULT_MAPT_REF: 'main'
       run: |
         echo "CREATE_MACHINE=${{ github.event.inputs.create_machine || env.DEFAULT_CREATE_MACHINE }}" >> $GITHUB_ENV  
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
@@ -97,7 +93,7 @@ jobs:
 
     - name: Create instance
       if: ${{ env.CREATE_MACHINE == 'true' }}
-      uses: podman-desktop/e2e/.github/actions/create-instance@${{ github.event.inputs.mapt_ref || 'main' }}
+      uses: podman-desktop/e2e/.github/actions/create-instance@update-tags
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
@@ -130,10 +126,10 @@ jobs:
         EOF
 
     - name: Check instance system info
-      uses: podman-desktop/e2e/.github/actions/instance-system-info@${{ github.event.inputs.mapt_ref || 'main' }}
+      uses: podman-desktop/e2e/.github/actions/instance-system-info@main
 
     - name: Emulate X session
-      uses: podman-desktop/e2e/.github/actions/emulate-x-session@${{ github.event.inputs.mapt_ref || 'main' }}
+      uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
     - name: Download Podman nightly, do not initialize
       run: |
@@ -199,7 +195,7 @@ jobs:
 
     - name: Destroy instance
       if: ${{ env.CREATE_MACHINE }}
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@${{ github.event.inputs.mapt_ref || 'main' }}
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@11154f001a8679292b7711d4d7a72dc99b07731d
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
