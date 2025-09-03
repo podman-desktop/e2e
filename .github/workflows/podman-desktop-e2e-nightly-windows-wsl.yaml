@@ -110,25 +110,10 @@ jobs:
       uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
     - name: Setup dependencies and build Podman Desktop locally
-      run: |
-        podman run -d --name pde2e-builder-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_CLEANUP=false \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          quay.io/odockal/pde2e-builder:${{ env.PDE2E_BUILDER }}-windows  \
-              pd-e2e/builder.ps1 \
-                -targetFolder pd-e2e \
-                -resultsFolder results \
-                -fork ${{ env.FORK }} \
-                -branch ${{ env.BRANCH }}
-        # check logs
-        podman logs -f pde2e-builder-run
+      uses: podman-desktop/e2e/.github/actions/build-podman-desktop@main
+      with:
+        fork: ${{ env.FORK }}
+        branch: ${{ env.BRANCH }}
 
     - name: Download Podman nightly, do not initialize and start
       run: |

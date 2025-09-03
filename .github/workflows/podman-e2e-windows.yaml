@@ -1,4 +1,4 @@
-name: Podman E2E (Install & Run)
+name: Podman E2E Install & Run
 
 on:
   workflow_dispatch:
