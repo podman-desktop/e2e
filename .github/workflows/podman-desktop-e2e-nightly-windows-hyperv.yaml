@@ -123,14 +123,14 @@ jobs:
         branch: ${{ env.BRANCH }}
 
     - name: Download Podman latest, do not initialize and start
-      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@issue-442
+      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@main
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
         podman-provider: ${{ env.PODMAN_PROVIDER }} 
 
     - name: Run Podman Desktop Playwright E2E tests
-      uses: podman-desktop/e2e/.github/actions/run-playwright-test@issue-442
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
         pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
         fork-repo: ${{ env.FORK }}
