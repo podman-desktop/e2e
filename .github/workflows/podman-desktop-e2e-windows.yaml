@@ -146,40 +146,23 @@ jobs:
 
     - name: Run Podman Desktop Playwright E2E tests
       if: ${{ !github.event.inputs.debug || github.event.inputs.debug == 'false' }}
-      env:
-        PODMANDESKTOP_CI_BOT_TOKEN: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
-      run: |
-        echo "PODMANDESKTOP_CI_BOT_TOKEN=${PODMANDESKTOP_CI_BOT_TOKEN}" > secrets.txt
-        podman run -d --name pde2e-runner-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          -v $PWD/secrets.txt:/opt/pde2e-runner/secrets.txt:z \
-          quay.io/odockal/pde2e-runner:${{ env.PDE2E_RUNNER }}-windows  \
-              pd-e2e/runner.ps1 \
-                -targetFolder pd-e2e \
-                -resultsFolder results \
-                -fork ${{ env.FORK }} \
-                -branch ${{ env.BRANCH }} \
-                -npmTarget ${{ env.NPM_TARGET }} \
-                -initialize ${{ env.PODMAN_INIT }} \
-                -rootful ${{ env.PODMAN_ROOTFUL }} \
-                -start ${{ env.PODMAN_START }} \
-                -userNetworking ${{ env.PODMAN_NETWORKING }} \
-                -podmanProvider ${{ env.PODMAN_PROVIDER }} \
-                -envVars ${{ env.ENV_VARS }} \
-                -secretFile secrets.txt
-        # check logs
-        podman logs -f pde2e-runner-run
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
+      with:
+        pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        fork-repo: ${{ env.FORK }}
+        branch-name: ${{ env.BRANCH }}
+        npm-target: ${{ env.NPM_TARGET }}
+        podman-init: ${{ env.PODMAN_INIT }}
+        rootful: ${{ env.PODMAN_ROOTFUL }}
+        podman-start: ${{ env.PODMAN_START }}
+        user-networking: ${{ env.PODMAN_NETWORKING }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
+        env-vars: ${{ env.ENV_VARS }}
+        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
     - name: Destroy instance
       if: always()
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@11154f001a8679292b7711d4d7a72dc99b07731d
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}

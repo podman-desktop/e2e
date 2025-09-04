@@ -116,13 +116,13 @@ jobs:
         branch: ${{ env.BRANCH }}
 
     - name: Download Podman nightly, do not initialize and start
-      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@issue-442
+      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@main
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
-      uses: podman-desktop/e2e/.github/actions/run-playwright-test@issue-442
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
         pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
         fork-repo: ${{ env.FORK }}
@@ -134,7 +134,7 @@ jobs:
 
     - name: Destroy instance
       if: always()
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@11154f001a8679292b7711d4d7a72dc99b07731d
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}

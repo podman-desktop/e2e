@@ -42,13 +42,52 @@ inputs:
     description: 'The npm target script to run for the tests (e.g., test-e2e).'
     required: true
   podman-provider:
-    description: 'The Podman provider to use for the tests (e.g., podman-machine-default).'
+    description: 'The Podman provider to use for the tests (e.g., wsl).'
     required: true
   env-vars:
     description: 'Additional environment variables to pass to the tests.'
-    required: false
+    required: true
   ci-bot-token:
     description: 'The secret token for the CI bot to access the repository.'
+    required: true
+  podman-init:
+    description: 'Whether to initialize Podman.'
+    required: false
+    default: '1'
+  podman-start:
+    description: 'Whether to start Podman.'
+    required: false
+    default: '1'
+  rootful:
+    description: 'Whether to run the tests with a rootful user.'
+    required: false
+    default: '1'
+  user-networking:
+    description: 'Whether to enable user networking.'
+    required: false
+    default: ''
+  ext-repo:
+    description: 'External repository to clone for additional tests.'
+    required: false
+    default: ''
+  ext-fork:
+    description: 'External fork to use.'
+    required: false
+    default: ''
+  ext-branch:
+    description: 'Branch of the external fork to use.'
+    required: false
+    default: ''
+  ext-tests:
+    description: 'External tests to run.'
+    required: false
+    default: ''
+  podman-desktop-url:
+    description: 'URL to download Podman Desktop from.'
+    required: false
+    default: ''
+  script-path:
+    description: 'Path to a custom script'
     required: false
     default: ''
 
@@ -63,6 +102,41 @@ runs:
     - name: Run Podman Desktop Playwright E2E tests
       shell: bash
       run: |
+        USER_NETWORKING_PARAM=""
+        if [ -n "${{ inputs.user-networking }}" ]; then
+          USER_NETWORKING_PARAM="-userNetworking ${{ inputs.user-networking }}"
+        fi
+
+        EXT_REPO_PARAM=""
+        if [ -n "${{ inputs.ext-repo }}" ]; then
+          EXT_REPO_PARAM="-extRepo ${{ inputs.ext-repo }}"
+        fi
+
+        EXT_FORK_PARAM=""
+        if [ -n "${{ inputs.ext-fork }}" ]; then
+          EXT_FORK_PARAM="-extFork ${{ inputs.ext-fork }}"
+        fi
+
+        EXT_BRANCH_PARAM=""
+        if [ -n "${{ inputs.ext-branch }}" ]; then
+          EXT_BRANCH_PARAM="-extBranch ${{ inputs.ext-branch }}"
+        fi
+
+        EXT_TESTS_PARAM=""
+        if [ -n "${{ inputs.ext-tests }}" ]; then
+          EXT_TESTS_PARAM="-extTests ${{ inputs.ext-tests }}"
+        fi
+
+        PD_URL_PARAM=""
+        if [ -n "${{ inputs.podman-desktop-url }}" ]; then
+          PD_URL_PARAM="-podmanDesktopUrl ${{ inputs.podman-desktop-url }}"
+        fi
+
+        SCRIPT_PATH_PARAM=""
+        if [ -n "${{ inputs.script-path }}" ]; then
+          SCRIPT_PATH_PARAM="-scriptPath ${{ inputs.script-path }}"
+        fi
+
         podman run -d --name pde2e-runner-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
@@ -78,14 +152,22 @@ runs:
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
                 -podmanPath $(cat results/podman-location.log) \
+                $PD_URL_PARAM \
                 -fork ${{ inputs.fork-repo }} \
                 -branch ${{ inputs.branch-name }} \
+                ${{ env.EXT_REPO_PARAM }} \
+                ${{ env.EXT_FORK_PARAM }} \
+                ${{ env.EXT_BRANCH_PARAM }} \
+                ${{ env.EXT_TESTS_PARAM }} \
                 -npmTarget ${{ inputs.npm-target }} \
-                -initialize 1 \
-                -start 1 \
-                -rootful 1 \
+                -initialize ${{ inputs.podman-init }} \
+                -start ${{ inputs.podman-start }} \
+                -rootful ${{ inputs.rootful }} \
+                ${{ env.USER_NETWORKING_PARAM }} \
                 -podmanProvider ${{ inputs.podman-provider }} \
                 -envVars ${{ inputs.env-vars }} \
                 -secretFile secrets.txt
+                ${{ env.SCRIPT_PATH_PARAM }}
+                
         # check logs
         podman logs -f pde2e-runner-run

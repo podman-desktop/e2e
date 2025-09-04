@@ -43,6 +43,10 @@ inputs:
   podman-download-url:
     description: 'The URL to download the Podman nightly build from.'
     required: true
+  podman-provider:
+    description: 'The Podman provider to be used.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -50,7 +54,7 @@ runs:
     - name: 'Download Podman nightly, do not initialize'
       shell: bash
       run: |
-        podman run --rm -d --name pde2e-podman-run \
+        CMD="podman run --rm -d --name pde2e-podman-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
           -e TARGET_HOST_KEY_PATH=/data/id_rsa \
@@ -67,7 +71,18 @@ runs:
               -resultsFolder ${{ inputs.results-folder }} \
               -initialize 0 \
               -rootful 0 \
-              -start 0 \
-              -installWSL 0
-        # check logs
+              -start 0"
+
+        # Add the provider or the default WSL install parameter
+        if [[ -n "${{ inputs.podman-provider }}" ]]; then
+          CMD+=" -podmanProvider ${{ inputs.podman-provider }}"
+        else
+          CMD+=" -installWSL 0"
+        fi
+
+        # Execute the final command
+        echo "$CMD"
+        eval "$CMD"
+
+        # Check logs
         podman logs -f pde2e-podman-run

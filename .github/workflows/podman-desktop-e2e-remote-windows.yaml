@@ -148,66 +148,31 @@ jobs:
       uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
     - name: Download Podman nightly, do not initialize
-      run: |
-        podman run --rm -d --name pde2e-podman-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_CLEANUP=false \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          quay.io/odockal/pde2e-podman:${{ env.PDE2E_PODMAN }}-windows \
-            pd-e2e/podman.ps1 \
-              -downloadUrl ${{ env.PODMAN_URL }} \
-              -targetFolder pd-e2e \
-              -resultsFolder results \
-              -initialize 0 \
-              -rootful 0 \
-              -start 0 \
-              -installWSL 0
-        # check logs
-        podman logs -f pde2e-podman-run
+      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@main
+      with:
+        podman-image-tag: ${{ env.PDE2E_PODMAN }}
+        podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
-      env:
-        PODMANDESKTOP_CI_BOT_TOKEN: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
-      run: |
-        echo "PODMANDESKTOP_CI_BOT_TOKEN=${PODMANDESKTOP_CI_BOT_TOKEN}" > secrets.txt
-        podman run -d --name pde2e-runner-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          -v $PWD/secrets.txt:/opt/pde2e-runner/secrets.txt:z \
-          quay.io/odockal/pde2e-runner:${{ env.PDE2E_RUNNER }}-windows \
-              pd-e2e/runner.ps1 \
-                -targetFolder pd-e2e \
-                -resultsFolder results \
-                -podmanPath $(cat results/podman-location.log) \
-                -pdUrl ${{ env.PD_URL }} \
-                -fork ${{ env.PD_FORK }} \
-                -branch ${{ env.PD_BRANCH }} \
-                -npmTarget ${{ env.NPM_TARGET }} \
-                -initialize ${{ env.PODMAN_INIT }} \
-                -rootful ${{ env.PODMAN_ROOTFUL }} \
-                -start ${{ env.PODMAN_START }} \
-                -userNetworking ${{ env.PODMAN_NETWORKING }} \
-                -podmanProvider ${{ env.PODMAN_PROVIDER }} \
-                -envVars ${{ env.ENV_VARS }} \
-                -scriptPaths 'remote_machine.ps1' 
-        # check logs
-        podman logs -f pde2e-runner-run
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
+      with:
+        pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        podman-desktop-url: ${{ env.PD_URL }}
+        fork-repo: ${{ env.PD_FORK }}
+        branch-name: ${{ env.PD_BRANCH }}
+        npm-target: ${{ env.NPM_TARGET }}
+        podman-init: ${{ env.PODMAN_INIT }}
+        rootful: ${{ env.PODMAN_ROOTFUL }}
+        podman-start: ${{ env.PODMAN_START }}
+        user-networking: ${{ env.PODMAN_NETWORKING }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
+        env-vars: ${{ env.ENV_VARS }}
+        script-path: 'remote_machine.ps1'
+        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
     - name: Destroy instance
       if: always()
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@11154f001a8679292b7711d4d7a72dc99b07731d
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
