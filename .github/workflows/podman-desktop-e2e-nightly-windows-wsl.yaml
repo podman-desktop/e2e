@@ -116,7 +116,7 @@ jobs:
         branch: ${{ env.BRANCH }}
 
     - name: Download Podman nightly, do not initialize and start
-      uses: podman-desktop/e2e/.github/actions/download-podman@issue-442
+      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@issue-442
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
