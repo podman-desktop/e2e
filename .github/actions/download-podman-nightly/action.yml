@@ -1,0 +1,73 @@
+# Copyright (C) 2025 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Download Podman Nightly'
+description: 'Download Podman nightly, do not initialize and start'
+inputs:
+  builder-image:
+    description: 'The base name for the pde2e-builder container image.'
+    required: false
+    default: 'quay.io/odockal/pde2e-podman'
+  target-folder:
+    description: 'The target folder on the remote host where the build will occur.'
+    required: false
+    default: 'pd-e2e'
+  results-folder:
+    description: 'The folder for storing build results on the remote host.'
+    required: false
+    default: 'results'
+  target-cleanup:
+    description: 'Whether to clean up the target folder after the build.'
+    required: false
+    default: false
+  debug-mode:
+    description: 'Enable debug mode for more verbose logging in the container.'
+    required: false
+    default: true
+  podman-image-tag:
+    description: 'The tag for the builder-image to be used for downloading Podman.'
+    required: true
+  podman-download-url:
+    description: 'The URL to download the Podman nightly build from.'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Download Podman nightly, do not initialize'
+      shell: bash
+      run: |
+        podman run --rm -d --name pde2e-podman-run \
+          -e TARGET_HOST=$(cat host) \
+          -e TARGET_HOST_USERNAME=$(cat username) \
+          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
+          -e TARGET_FOLDER=${{ inputs.target-folder }} \
+          -e TARGET_CLEANUP=${{ inputs.target-cleanup }} \
+          -e TARGET_RESULTS=${{ inputs.results-folder }} \
+          -e OUTPUT_FOLDER=/data \
+          -e DEBUG=${{ inputs.debug-mode }} \
+          -v $PWD:/data:z \
+          ${{ inputs.builder-image }}:${{ inputs.podman-image-tag }}-windows \
+            pd-e2e/podman.ps1 \
+              -downloadUrl ${{ inputs.podman-download-url }} \
+              -targetFolder ${{ inputs.target-folder }} \
+              -resultsFolder ${{ inputs.results-folder }} \
+              -initialize 0 \
+              -rootful 0 \
+              -start 0 \
+              -installWSL 0
+        # check logs
+        podman logs -f pde2e-podman-run

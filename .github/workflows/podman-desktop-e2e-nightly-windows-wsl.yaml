@@ -116,28 +116,10 @@ jobs:
         branch: ${{ env.BRANCH }}
 
     - name: Download Podman nightly, do not initialize and start
-      run: |
-        podman run --rm -d --name pde2e-podman-run \
-          -e TARGET_HOST=$(cat host) \
-          -e TARGET_HOST_USERNAME=$(cat username) \
-          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
-          -e TARGET_FOLDER=pd-e2e \
-          -e TARGET_CLEANUP=false \
-          -e TARGET_RESULTS=results \
-          -e OUTPUT_FOLDER=/data \
-          -e DEBUG=true \
-          -v $PWD:/data:z \
-          quay.io/odockal/pde2e-podman:${{ env.PDE2E_PODMAN }}-windows  \
-            pd-e2e/podman.ps1 \
-              -downloadUrl ${{ env.PODMAN_URL }} \
-              -targetFolder pd-e2e \
-              -resultsFolder results \
-              -initialize 0 \
-              -rootful 0 \
-              -start 0 \
-              -installWSL 0
-        # check logs
-        podman logs -f pde2e-podman-run
+      uses: podman-desktop/e2e/.github/actions/download-podman@issue-442
+      with:
+        podman-image-tag: ${{ env.PDE2E_PODMAN }}
+        podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
       env:
