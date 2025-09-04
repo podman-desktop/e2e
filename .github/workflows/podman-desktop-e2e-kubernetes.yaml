@@ -129,7 +129,7 @@ jobs:
         npm-target: ${{ env.NPM_TARGET }}
         podman-provider: ${{ env.PODMAN_PROVIDER }}
         env-vars: ${{ env.ENV_VARS }}
-        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN
+        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
     - name: Destroy instance
       if: always()

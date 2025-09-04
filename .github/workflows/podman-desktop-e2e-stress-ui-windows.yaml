@@ -154,7 +154,7 @@ jobs:
         podman-provider: ${{ env.PODMAN_PROVIDER }}
         env-vars: ${{ env.ENV_VARS }}
         script-path: 'stress_test_ui.ps1'
-        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN
+        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
     - name: Destroy instance
       if: always()
