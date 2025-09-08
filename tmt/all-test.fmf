@@ -1,15 +1,14 @@
-summary: Execute all Playwright end-to-end test, excluding those related to Kubernetes.
+summary: Execute all Playwright E2E tests.
 tag:
-  - e2e
+  - all
 duration: 2h
 result: custom
 framework: shell
 test: |
   set +e
-  export SKIP_COMPOSE_ONBOARDING_TEST=true
   git clone -b $BRANCH https://github.com/$FORK/podman-desktop.git /$TMT_TREE/podman-desktop
   cd $TMT_TREE/podman-desktop
   pnpm install
-  pnpm test:e2e
+  pnpm test:e2e:all
   EXIT_CODE=$?
   bash "$TMT_TREE/tmt/create-results.sh" "$EXIT_CODE" "e2e"
