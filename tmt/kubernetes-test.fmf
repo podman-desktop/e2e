@@ -11,4 +11,4 @@ test: |
   pnpm install
   pnpm test:e2e:k8s
   EXIT_CODE=$?
-  bash "$TMT_TREE/tmt/create-results.sh" "$EXIT_CODE" "e2e"
+  bash "$TMT_TREE/tmt/create-results.sh" "$EXIT_CODE" "k8s"
