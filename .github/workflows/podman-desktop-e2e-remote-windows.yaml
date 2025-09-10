@@ -151,7 +151,7 @@ jobs:
         podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
-      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@issue-448
       with:
         pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
         podman-desktop-url: ${{ env.PD_URL }}
