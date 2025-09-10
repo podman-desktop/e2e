@@ -129,12 +129,12 @@ runs:
 
         PD_URL_PARAM=""
         if [ -n "${{ inputs.podman-desktop-url }}" ]; then
-          PD_URL_PARAM="-podmanDesktopUrl ${{ inputs.podman-desktop-url }}"
+          PD_URL_PARAM="-pdUrl ${{ inputs.podman-desktop-url }}"
         fi
 
         SCRIPT_PATH_PARAM=""
         if [ -n "${{ inputs.script-path }}" ]; then
-          SCRIPT_PATH_PARAM="-scriptPath ${{ inputs.script-path }}"
+          SCRIPT_PATH_PARAM="-scriptPaths ${{ inputs.script-path }}"
         fi
 
         podman run -d --name pde2e-runner-run \
