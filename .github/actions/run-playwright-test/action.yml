@@ -91,7 +91,7 @@ inputs:
     required: false
     default: ''
   podman-desktop-path:
-    description: 'Set to true to use the Podman Desktop binary path from the results file.'
+    description: 'Whether to include Podman Desktop path parameter.'
     required: false
     default: 'false'
 
@@ -142,7 +142,7 @@ runs:
         fi
 
         PD_PATH=""
-        if [[ "${{ inputs.podman-desktop-path }}" == "true" ]]; then
+        if [ "${{ inputs.podman-desktop-path }}" == "true" ]; then
           PD_PATH="-pdPath \"$(cat results/pde2e-binary-path.log | tr '\n' ' ')\""
         fi
 
@@ -161,7 +161,8 @@ runs:
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
                 -podmanPath $(cat results/podman-location.log) \
-                $PD_URL_PARAM \
+                ${PD_URL_PARAM} \
+                ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \
                 -branch ${{ inputs.branch-name }} \
                 ${{ env.EXT_REPO_PARAM }} \
@@ -177,7 +178,6 @@ runs:
                 -envVars ${{ inputs.env-vars }} \
                 -secretFile secrets.txt
                 ${{ env.SCRIPT_PATH_PARAM }}
-                ${{ env.PD_PATH }}
 
         # check logs
         podman logs -f pde2e-runner-run
