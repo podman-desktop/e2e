@@ -161,6 +161,7 @@ runs:
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
                 -podmanPath $(cat results/podman-location.log) \
+                ${PD_URL_PARAM} \
                 ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \
                 -branch ${{ inputs.branch-name }} \
