@@ -90,6 +90,10 @@ inputs:
     description: 'Path to a custom script'
     required: false
     default: ''
+  podman-desktop-path:
+    description: 'Set to true to use the Podman Desktop binary path from the results file.'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -137,6 +141,11 @@ runs:
           SCRIPT_PATH_PARAM="-scriptPaths ${{ inputs.script-path }}"
         fi
 
+        PD_PATH=""
+        if [[ "${{ inputs.podman-desktop-path }}" == "true" ]]; then
+          PD_PATH="-pdPath \"$(cat results/pde2e-binary-path.log | tr '\n' ' ')\""
+        fi
+
         podman run -d --name pde2e-runner-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
@@ -168,6 +177,7 @@ runs:
                 -envVars ${{ inputs.env-vars }} \
                 -secretFile secrets.txt
                 ${{ env.SCRIPT_PATH_PARAM }}
-                
+                ${{ env.PD_PATH }}
+
         # check logs
         podman logs -f pde2e-runner-run
