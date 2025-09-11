@@ -66,7 +66,7 @@ runs:
       shell: bash
       run: |
         # Destroy instance using MAPT and capture container ID
-        CONTAINER_ID=$(podman run -d --name windows-destroy --rm \
+        CONTAINER_ID=$(podman run -d --name windows-destroy \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
           -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
@@ -81,19 +81,15 @@ runs:
         echo "Started container with ID: $CONTAINER_ID"
 
         # Wait for container to complete and capture exit code
-        echo "Waiting for instance destruction to complete..."
-        podman wait $CONTAINER_ID
-        exit_code=$?
+        echo "Waiting for instance creation to complete..."
+        exit_code=$(podman wait $CONTAINER_ID)
 
-        # Show logs regardless of success or failure
+        # Show logs and status regardless of success or failure
         echo "Container logs:"
         podman logs $CONTAINER_ID 2>/dev/null || echo "Container logs not available (container may have been removed)"
+        status=$(podman container ps -a -f "id=$CONTAINER_ID" --format "{{.Status}} {{.ExitCode}}")
+        echo "Container exit status is: ${status}"
 
-        # Check if container completed successfully
-        if [ $exit_code -ne 0 ]; then
-          echo "Instance destruction failed with exit code: $exit_code"
-          echo "This might be normal if the instance was already destroyed or doesn't exist."
-          # Don't fail the action for destroy operations - they should be idempotent
-        else
-          echo "Instance destruction completed successfully!"
-        fi
+        # Remove container
+        echo "Remove the container..."
+        podman rm $CONTAINER_ID

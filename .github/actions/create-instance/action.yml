@@ -106,7 +106,7 @@ runs:
       shell: bash
       run: |
         # Create instance using resources approach and capture container ID
-        CONTAINER_ID=$(podman run -d --name windows-create --rm \
+        CONTAINER_ID=$(podman run -d --name windows-create \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
           -e ARM_SUBSCRIPTION_ID=${{ inputs.arm-subscription-id }} \
@@ -131,17 +131,22 @@ runs:
 
         # Wait for container to complete and capture exit code
         echo "Waiting for instance creation to complete..."
-        podman wait $CONTAINER_ID
-        exit_code=$?
+        exit_code=$(podman wait $CONTAINER_ID)
 
-        # Show logs regardless of success or failure
+        # Show logs and status regardless of success or failure
         echo "Container logs:"
         podman logs $CONTAINER_ID 2>/dev/null || echo "Container logs not available (container may have been removed)"
+        status=$(podman container ps -a -f "id=$CONTAINER_ID" --format "{{.Status}} {{.ExitCode}}")
+        echo "Container exit status is: ${status}"
 
-        # Check if container completed successfully
-        if [ $exit_code -ne 0 ]; then
-          echo "Instance creation failed with exit code: $exit_code"
-          exit $exit_code
+        # Remove container
+        echo "Remove the container..."
+        podman rm $CONTAINER_ID
+
+        # Check if container completed successfully, -1 means it is not in stopped or exited state
+        # Fail the steps if necessary
+        if [ $exit_code -eq -1 ]; then
+          exit 1
         fi
 
         # Verify connection files were created
