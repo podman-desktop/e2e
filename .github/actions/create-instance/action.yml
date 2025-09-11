@@ -157,5 +157,3 @@ runs:
         fi
 
         echo "Instance creation completed successfully!"
-        echo "Host: $(cat host)"
-        echo "Username: $(cat username)"
