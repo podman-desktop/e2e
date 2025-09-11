@@ -165,19 +165,19 @@ runs:
                 ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \
                 -branch ${{ inputs.branch-name }} \
-                ${{ env.EXT_REPO_PARAM }} \
-                ${{ env.EXT_FORK_PARAM }} \
-                ${{ env.EXT_BRANCH_PARAM }} \
-                ${{ env.EXT_TESTS_PARAM }} \
+                ${EXT_REPO_PARAM} \
+                ${EXT_FORK_PARAM} \
+                ${EXT_BRANCH_PARAM} \
+                ${EXT_TESTS_PARAM} \
                 -npmTarget ${{ inputs.npm-target }} \
                 -initialize ${{ inputs.podman-init }} \
                 -start ${{ inputs.podman-start }} \
                 -rootful ${{ inputs.rootful }} \
-                ${{ env.USER_NETWORKING_PARAM }} \
+                ${USER_NETWORKING_PARAM} \
                 -podmanProvider ${{ inputs.podman-provider }} \
                 -envVars ${{ inputs.env-vars }} \
                 -secretFile secrets.txt
-                ${{ env.SCRIPT_PATH_PARAM }}
+                ${SCRIPT_PATH_PARAM}
 
         # check logs
         podman logs -f pde2e-runner-run
