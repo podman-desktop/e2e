@@ -89,7 +89,7 @@ jobs:
 
     - name: Create instance
       if: ${{ env.CREATE_MACHINE == 'true' }}
-      uses: podman-desktop/e2e/.github/actions/create-instance@issue-454
+      uses: podman-desktop/e2e/.github/actions/create-instance@main
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
@@ -155,7 +155,7 @@ jobs:
 
     - name: Destroy instance
       if: ${{ env.CREATE_MACHINE }}
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@issue-454
+      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
       with:
         mapt-image: ${{ env.MAPT_IMAGE || '' }}
         mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
