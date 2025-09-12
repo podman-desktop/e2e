@@ -17,8 +17,9 @@ provision:
     disk:
       - size: ">= 20 GB"
 
-environment: 
-   TEST_PODMAN_MACHINE: true
+environment:
+  SKIP_COMPOSE_ONBOARDING_TEST: true
+
 
 prepare:
   - name: Install required packages
@@ -46,10 +47,46 @@ prepare:
       systemctl --user start podman.socket
 
 /e2e: 
-  summary: Execute all Playwright end-to-end test, excluding those related to Kubernetes.
+  summary: Execute all Playwright E2E tests, excluding those related to Kubernetes.
   prepare+:
-    - name: Install docker compose CLI
+    - name: Install Docker Compose CLI
       how: shell
       script: bash $TMT_TREE/plans/scripts/install-docker-compose.sh
   discover+: 
     filter: 'tag:e2e'
+
+/smoke: 
+  summary: Execute smoke Playwright E2E tests.
+  prepare+:
+    - name: Install Docker Compose CLI
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-docker-compose.sh
+  discover+: 
+    filter: 'tag:smoke'
+
+/kubernetes:
+  summary: Execute Kubernetes Playwright E2E tests.
+  prepare+:
+    - name: Install Kind CLI 
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-kind.sh
+    - name: Install Kubectl
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-kubectl.sh
+  discover+: 
+    filter: 'tag:kubernetes'
+
+/all: 
+  summary: Execute all Playwright E2E tests.
+  prepare+:
+    - name: Install Docker Compose CLI
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-docker-compose.sh
+    - name: Install Kind CLI 
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-kind.sh
+    - name: Install Kubectl
+      how: shell
+      script: bash $TMT_TREE/plans/scripts/install-kubectl.sh
+  discover+: 
+    filter: 'tag:all'
