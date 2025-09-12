@@ -176,7 +176,7 @@ runs:
                 ${USER_NETWORKING_PARAM} \
                 -podmanProvider ${{ inputs.podman-provider }} \
                 -envVars ${{ inputs.env-vars }} \
-                -secretFile secrets.txt
+                -secretFile secrets.txt \
                 ${SCRIPT_PATH_PARAM}
 
         # check logs
