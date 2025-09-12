@@ -101,7 +101,7 @@ runs:
     - name: Set secrets file
       shell: bash
       run: |
-        echo "PODMANDESKTOP_CI_BOT_TOKEN=${{ inputs.ci-bot-token }}" > secrets.txt
+        echo "PODMANDESKTOP_CI_BOT_TOKEN=${{ inputs.ci-bot-token }}" >> secrets.txt
 
     - name: Run Podman Desktop Playwright E2E tests
       shell: bash
