@@ -57,6 +57,12 @@ runs:
         echo "Architecture: $ARCHITECTURE"
         echo "File type: $FILE_TYPE"
         
+        # Input validation
+        if [ -z "$INPUT_VERSION" ]; then
+          echo "Error: Version input cannot be empty"
+          exit 1
+        fi
+        
         if [ "$INPUT_VERSION" = "latest" ]; then
           echo "Fetching latest Podman release..."
           
@@ -70,6 +76,13 @@ runs:
           API_RESPONSE=$(curl -s https://api.github.com/repos/containers/podman/releases/latest)
           if [ $? -ne 0 ]; then
             echo "Error: Failed to fetch data from GitHub API"
+            exit 1
+          fi
+          
+          # Check for API errors (rate limiting, etc.)
+          if echo "$API_RESPONSE" | jq -e '.message' >/dev/null 2>&1; then
+            ERROR_MESSAGE=$(echo "$API_RESPONSE" | jq -r '.message')
+            echo "Error: GitHub API returned an error: $ERROR_MESSAGE"
             exit 1
           fi
           
@@ -99,6 +112,14 @@ runs:
         else
           # Specific version provided
           echo "Specific version provided: $INPUT_VERSION"
+          
+          # Validate version format (should be semver-like: v5.6.1, 5.6.1, v5.6.1-rc1, etc.)
+          if [[ ! "$INPUT_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+([.-](rc|alpha|beta)[0-9]*)?$ ]]; then
+            echo "Error: Invalid version format: $INPUT_VERSION"
+            echo "Expected formats: v5.6.1, 5.6.1, v5.6.1-rc1, 5.6.1-rc1, etc."
+            exit 1
+          fi
+          
           if [[ "$INPUT_VERSION" =~ ^v ]]; then
             LATEST_VERSION="$INPUT_VERSION"
           else
@@ -128,4 +149,16 @@ runs:
         esac
         
         echo "Download URL: $DOWNLOAD_URL"
+        
+        # Validate that the download URL actually exists
+        echo "Validating download URL..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "$DOWNLOAD_URL")
+        if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "302" ]; then
+          echo "Error: Download file not found (HTTP $HTTP_CODE)"
+          echo "URL: $DOWNLOAD_URL"
+          echo "This may indicate the version doesn't exist or the file type isn't available for this version"
+          exit 1
+        fi
+        
+        echo "Download URL validated successfully"
         echo "download_url=$DOWNLOAD_URL" >> $GITHUB_OUTPUT
