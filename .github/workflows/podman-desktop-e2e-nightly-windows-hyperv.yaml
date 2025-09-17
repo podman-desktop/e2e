@@ -72,7 +72,7 @@ jobs:
 
     - name: Fetch latest Podman version
       id: fetch-podman
-      uses: podman-desktop/e2e/.github/actions/fetch-latest-podman-version@update-podman-version
+      uses: podman-desktop/e2e/.github/actions/fetch-latest-podman-version@main
       with:
         version_input: ${{ github.event.inputs.podman_version }}
         file_type: 'setup.exe'
