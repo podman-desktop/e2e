@@ -74,7 +74,7 @@ jobs:
       id: fetch-podman
       uses: podman-desktop/e2e/.github/actions/fetch-latest-podman-version@main
       with:
-        version_input: ${{ github.event.inputs.podman_version }}
+        version_input: ${{ github.event.inputs.podman_version || 'latest' }}
         file_type: 'setup.exe'
 
     - name: Set the default env. variables
