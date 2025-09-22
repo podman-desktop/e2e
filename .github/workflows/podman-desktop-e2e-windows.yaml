@@ -143,9 +143,10 @@ jobs:
 
     - name: Run Podman Desktop Playwright E2E tests
       if: ${{ !github.event.inputs.debug || github.event.inputs.debug == 'false' }}
-      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
+      uses: podman-desktop/e2e/.github/actions/run-playwright-test@update-workflow
       with:
         pde2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        podman-path: false
         fork-repo: ${{ env.FORK }}
         branch-name: ${{ env.BRANCH }}
         npm-target: ${{ env.NPM_TARGET }}

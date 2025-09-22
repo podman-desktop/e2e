@@ -94,6 +94,10 @@ inputs:
     description: 'Whether to include Podman Desktop path parameter.'
     required: false
     default: 'false'
+  podman-path:
+    description: 'Whether to include podman path parameter.'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
@@ -146,6 +150,11 @@ runs:
           PD_PATH="-pdPath \"$(cat results/pde2e-binary-path.log | tr '\n' ' ')\""
         fi
 
+        PODMAN_PATH=""
+        if [ "${{ inputs.podman-path }}" != "false" ]; then
+          PODMAN_PATH="-podmanPath $(cat results/podman-location.log)"
+        fi
+
         podman run -d --name pde2e-runner-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
@@ -160,7 +169,7 @@ runs:
               pd-e2e/runner.ps1 \
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
-                -podmanPath $(cat results/podman-location.log) \
+                ${PODMAN_PATH} \
                 ${PD_URL_PARAM} \
                 ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \
