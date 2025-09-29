@@ -41,6 +41,7 @@ on:
         required: true
       mapt_params:
         description: |
+          Create MAPT instance(leave empty to use repo secrets/variables).
           **Format:** IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx
 
           **Example:** 
