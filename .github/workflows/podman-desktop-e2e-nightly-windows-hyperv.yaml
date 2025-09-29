@@ -103,7 +103,7 @@ jobs:
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
           mapt_params="${{ github.event.inputs.mapt_params }}"
         else
-          mapt_params="IMAGE=${{ secrets.MAPT_IMAGE || vars.MAPT_IMAGE }};VERSION_TAG=${{ secrets.MAPT_VERSION_TAG || vars.MAPT_VERSION_TAG }};CPUS=${{ secrets.MAPT_CPUS || vars.MAPT_CPUS }};MEMORY=${{ secrets.MAPT_MEMORY || vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ secrets.MAPT_EXCLUDED_REGIONS || vars.MAPT_EXCLUDED_REGIONS }}\""
+          mapt_params="IMAGE=${{ vars.MAPT_IMAGE }};VERSION_TAG=${{ vars.MAPT_VERSION_TAG }};CPUS=${{ vars.MAPT_CPUS }};MEMORY=${{ vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS }}\""
         fi
         echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
