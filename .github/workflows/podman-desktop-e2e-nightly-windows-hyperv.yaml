@@ -97,19 +97,13 @@ jobs:
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
     
-        echo "MAPT_IMAGE=${{ secrets.MAPT_IMAGE || vars.MAPT_IMAGE }}" >> $GITHUB_ENV
-        echo "MAPT_VERSION_TAG=${{ secrets.MAPT_VERSION_TAG || vars.MAPT_VERSION_TAG }}" >> $GITHUB_ENV
-        echo "MAPT_CPUS=${{ secrets.MAPT_CPUS || vars.MAPT_CPUS }}" >> $GITHUB_ENV
-        echo "MAPT_MEMORY=${{ secrets.MAPT_MEMORY || vars.MAPT_MEMORY }}" >> $GITHUB_ENV
-        echo "MAPT_EXCLUDED_REGIONS=${{ secrets.MAPT_EXCLUDED_REGIONS || vars.MAPT_EXCLUDED_REGIONS }}" >> $GITHUB_ENV
-
-          # For mapt_params, use repo variables/secrets directly if input is empty
-          if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
-            mapt_params="${{ github.event.inputs.mapt_params }}"
-          else
-            mapt_params="IMAGE=${MAPT_IMAGE};VERSION_TAG=${MAPT_VERSION_TAG};CPUS=${MAPT_CPUS};MEMORY=${MAPT_MEMORY};EXCLUDED_REGIONS=\"${MAPT_EXCLUDED_REGIONS}\""
-          fi
-          echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        # For mapt_params, use repo variables/secrets directly if input is empty
+        if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
+          mapt_params="${{ github.event.inputs.mapt_params }}"
+        else
+          mapt_params="IMAGE=${{ secrets.MAPT_IMAGE || vars.MAPT_IMAGE }};VERSION_TAG=${{ secrets.MAPT_VERSION_TAG || vars.MAPT_VERSION_TAG }};CPUS=${{ secrets.MAPT_CPUS || vars.MAPT_CPUS }};MEMORY=${{ secrets.MAPT_MEMORY || vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ secrets.MAPT_EXCLUDED_REGIONS || vars.MAPT_EXCLUDED_REGIONS }}\""
+        fi
+        echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Create instance
       uses: podman-desktop/e2e/.github/actions/create-instance@main
