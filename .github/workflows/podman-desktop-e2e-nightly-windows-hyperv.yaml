@@ -42,8 +42,8 @@ on:
       mapt_params:
         description: |
           Use this to override the default values from repository secrets/variables. Leave empty to use repo secrets/variables.
-          Format: IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx
-          Example:
+          **Format:** IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx
+          **Example:**
             IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.8;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"
         required: false
         type: string
@@ -87,7 +87,6 @@ jobs:
         DEFAULT_PODMAN_PROVIDER: 'hyperv'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        DEFAULT_MAPT_PARAMS: "IMAGE=${{ secrets.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }};VERSION_TAG=${{ secrets.MAPT_VERSION_TAG || 'v0.9.7' }};CPUS=${{ secrets.MAPT_CPUS || '4' }};MEMORY=${{ secrets.MAPT_MEMORY || '32' }};EXCLUDED_REGIONS=\"${{ secrets.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}\""
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -97,11 +96,10 @@ jobs:
         echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        # For mapt_params, use repo variable/secret unless user provides an override
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
           mapt_params="${{ github.event.inputs.mapt_params }}"
         else
-          mapt_params="${{ env.DEFAULT_MAPT_PARAMS }}"
+         mapt_params="IMAGE=${MAPT_IMAGE};VERSION_TAG=${MAPT_VERSION_TAG};CPUS=${MAPT_CPUS};MEMORY=${MAPT_MEMORY};EXCLUDED_REGIONS=\"${MAPT_EXCLUDED_REGIONS}\""
         fi
         echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
