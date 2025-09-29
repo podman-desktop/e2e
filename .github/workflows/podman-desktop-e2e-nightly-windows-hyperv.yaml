@@ -41,10 +41,10 @@ on:
         required: true
       mapt_params:
         description: |
-          Use this to override the default values from repository secrets. Leave empty to use repo secrets/variables.
+          Use this to override the default values from repository secrets/variables. Leave empty to use repo secrets/variables.
           Format: IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx
           Example:
-            IMAGE=${{ secrets.MAPT_IMAGE || 'quay.io/redhat-developer/mapt' }};VERSION_TAG=${{ secrets.MAPT_VERSION_TAG || 'v0.9.8' }};CPUS=${{ secrets.MAPT_CPUS || '4' }};MEMORY=${{ secrets.MAPT_MEMORY || '32' }};EXCLUDED_REGIONS="${{ secrets.MAPT_EXCLUDED_REGIONS || 'westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest' }}"
+            IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.8;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"
         required: false
         type: string
 
