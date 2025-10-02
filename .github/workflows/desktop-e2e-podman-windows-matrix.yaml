@@ -85,13 +85,6 @@ jobs:
         DEFAULT_PODMAN_MACHINE_OPTIONS: 'INIT=1,START=1'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
-        # For mapt_params, use repo variables directly if input is empty
-        if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
-          mapt_params="${{ github.event.inputs.mapt_params }}"
-        else
-          mapt_params="IMAGE=${{ vars.MAPT_IMAGE }};VERSION_TAG=${{ vars.MAPT_VERSION_TAG }};CPUS=${{ vars.MAPT_CPUS }};MEMORY=${{ vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS }}\""
-        fi
-        echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -103,8 +96,14 @@ jobs:
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.mapt_params }}" | awk -F ';' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        
+        # For mapt_params, use repo variables directly if input is empty
+        if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
+          mapt_params="${{ github.event.inputs.mapt_params }}"
+        else
+          mapt_params="IMAGE=${{ vars.MAPT_IMAGE }};VERSION_TAG=${{ vars.MAPT_VERSION_TAG }};CPUS=${{ vars.MAPT_CPUS }};MEMORY=${{ vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS }}\""
+        fi
+        echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         
 
     - name: Create instance
