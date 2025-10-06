@@ -1,5 +1,5 @@
 name: PD E2E Install & Run
-run-name: Podman Desktop E2E with Podman installation ${{ inputs.podman_provider != '' && inputs.podman_provider || 'WSL' }} ${{ inputs.debug == 'true' && '- Debug' || '' }}
+run-name: PD E2E with Podman installation ${{ inputs.podman_provider != '' && inputs.podman_provider || 'WSL' }} ${{ inputs.debug == 'true' && '- Debug' || '' }}
 
 on:
   schedule:
@@ -193,7 +193,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: results-e2e-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
+        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*
           pd-e2e-results/*

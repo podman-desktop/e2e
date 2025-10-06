@@ -1,4 +1,5 @@
 name: PD k8s E2E with Podman Latest
+run-name: PD E2E Podman Latest Kubernetes
 
 on:
   schedule:
@@ -163,6 +164,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: results-k8s-e2e-${{ matrix.windows-version }}-${{ matrix.windows-featurepack }}-${{ matrix.podman-provider }}
+        name: ${{ matrix.podman-provider }}-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*

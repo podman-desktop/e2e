@@ -15,6 +15,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 name: PD E2E Testing Farm
+run-name: PD E2E Podman Nightly Testing Farm
 
 on:
   schedule:
@@ -140,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: testing-farm-artifacts-${{ matrix.fedora-version }}
+          name: ${{ matrix.fedora-version }}
           path: |
             results/*
             **/junit-playwright-results.xml
