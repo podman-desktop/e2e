@@ -1,5 +1,5 @@
 name: PD Podman-Remote E2E Nightly
-run-name: Podman Desktop Remote-Podman E2E Tests in Production mode
+run-name: PD E2E Podman Remote Production mode
 
 on:
   schedule:
@@ -203,6 +203,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: results-e2e-${{ matrix.windows-version }}-debug
+        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*

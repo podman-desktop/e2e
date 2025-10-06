@@ -1,4 +1,5 @@
 name: PD E2E with Podman Latest HyperV
+run-name: PD E2E Podamn Latest HyperV
 
 on:
   schedule:
@@ -177,6 +178,6 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: results-e2e-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
+        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*
