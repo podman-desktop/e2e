@@ -1,5 +1,5 @@
 name: PD UI Stress Tests (Linux)
-run-name: PD E2E UI Stress Test
+run-name: PD E2E UI Stress Test (Linux) with Native Podman
 
 on:
   schedule:

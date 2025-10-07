@@ -1,5 +1,5 @@
 name: Test Workflow PD E2E with Podman
-run-name: Debugging Desktop E2E Tests with Podman ${{ contains(inputs.podman_options, 'WSL Provider') && 'wsl' || contains(inputs.podman_options, 'Hyper-V Provider') && 'hyperv' || '' }}
+run-name: Debugging PD E2E Tests with Podman ${{ contains(inputs.podman_options, 'PROVIDER=wsl') && 'WSL' || contains(inputs.podman_options, 'PROVIDER=hyperv') && 'HyperV' || '(undefined provider)' }}
 
 on:
   workflow_dispatch:
@@ -25,13 +25,10 @@ on:
         type: string
         required: true
       podman_options:
-        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
-        description: 'Podman configuration options with provider choice'
-        type: choice
+        default: 'PODMAN_VERSION=latest,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+        description: 'Podman configuration options with provider choice. For PODMAN_VERSION use "latest" or a version like "v5.6.2"; for PROVIDER use "wsl" or "hyperv" options.'
+        type: string
         required: true
-        options:
-          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
-          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=hyperv'
       env_vars:
         default: 'TEST_PODMAN_MACHINE=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
@@ -65,26 +62,36 @@ jobs:
         windows-featurepack: ['22h2-ent']
 
     steps:
-    - name: Set the default env. variables
-      env:
-        DEFAULT_EXT_TESTS: '0'
-        DEFAULT_NPM_TARGET: 'test:e2e'
-        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
-        DEFAULT_EXT_REPO_OPTIONS: 'REPO=podman-desktop-redhat-account-ext,FORK=redhat-developer,BRANCH=main'
-        DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
+    - name: Extract Podman version from options
+      id: extract-version
       run: |
-        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "EXT_TESTS=${{ github.event.inputs.ext_tests || env.DEFAULT_EXT_TESTS }}" >> $GITHUB_ENV
-        # Extract podman options, removing the descriptive prefix
-        PODMAN_OPTS="${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}"
-        echo "${PODMAN_OPTS#*: }" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.ext_repo_options || env.DEFAULT_EXT_REPO_OPTIONS }}" | awk -F ',' \
+        # Extract PODMAN_VERSION from the options string
+        PODMAN_OPTS="${{ github.event.inputs.podman_options }}"
+        PODMAN_VERSION=$(echo "${PODMAN_OPTS}" | grep -o 'PODMAN_VERSION=[^,]*' | cut -d'=' -f2)
+        echo "podman_version=${PODMAN_VERSION}" >> $GITHUB_OUTPUT
+        echo "Extracted Podman version: ${PODMAN_VERSION}"
+
+    - name: Fetch Podman version
+      id: fetch-podman
+      uses: podman-desktop/e2e/.github/actions/fetch-latest-podman-version@main
+      with:
+        version_input: ${{ steps.extract-version.outputs.podman_version }}
+        file_type: 'setup.exe'
+
+    - name: Set the environment variables
+      run: |
+        echo "NPM_TARGET=${{ github.event.inputs.npm_target }}" >> $GITHUB_ENV
+        echo "EXT_TESTS=${{ github.event.inputs.ext_tests }}" >> $GITHUB_ENV
+        # Extract podman options and set PODMAN_REMOTE_URL from fetch action
+        PODMAN_OPTS="${{ github.event.inputs.podman_options }}"
+        echo "${PODMAN_OPTS}" | awk -F ',' \
+         '{for (i=1; i<=NF; i++) {split($i, kv, "="); if(kv[1] != "PODMAN_VERSION") print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "PODMAN_REMOTE_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.ext_repo_options }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "EXT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
+        echo "${{ github.event.inputs.pd_repo_options }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
+        echo "${{ github.event.inputs.images_version }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         
         # For mapt_params, use repo variables directly if input is empty
@@ -144,7 +151,7 @@ jobs:
         rootful: ${{ env.PODMAN_ROOTFUL }}
         user-networking: ${{ env.PODMAN_NETWORKING }}
         podman-provider: ${{ env.PODMAN_PROVIDER }}
-        env-vars: ${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}
+        env-vars: ${{ github.event.inputs.env_vars }}
 
     - name: Destroy instance
       if: always()
