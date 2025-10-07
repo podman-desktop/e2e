@@ -25,13 +25,13 @@ on:
         type: string
         required: true
       podman_options:
-        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
         description: 'Podman configuration options with provider choice'
         type: choice
         required: true
         options:
-          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
-          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=hyperv'
+          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=hyperv'
       env_vars:
         default: 'TEST_PODMAN_MACHINE=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
@@ -69,7 +69,7 @@ jobs:
       env:
         DEFAULT_EXT_TESTS: '0'
         DEFAULT_NPM_TARGET: 'test:e2e'
-        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
+        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
         DEFAULT_EXT_REPO_OPTIONS: 'REPO=podman-desktop-redhat-account-ext,FORK=redhat-developer,BRANCH=main'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'

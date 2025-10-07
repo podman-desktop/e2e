@@ -26,13 +26,13 @@ on:
         type: string
         required: true
       podman_options:
-        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.3.1/podman-5.3.1-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
+        default: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
         description: 'Podman configuration options with provider choice'
         type: choice
         required: true
         options:
-          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.3.1/podman-5.3.1-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
-          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.3.1/podman-5.3.1-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=hyperv,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
+          - 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
+          - 'Hyper-V Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=hyperv,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
       env_vars:
         default: 'TEST_PODMAN_MACHINE=true'
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
@@ -69,7 +69,7 @@ jobs:
       env:
         DEFAULT_CREATE_MACHINE: true
         DEFAULT_NPM_TARGET: 'test:e2e'
-        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.3.1/podman-5.3.1-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
+        DEFAULT_PODMAN_OPTIONS: 'WSL Provider: REMOTE_URL=https://github.com/containers/podman/releases/download/v5.6.2/podman-5.6.2-setup.exe,DESKTOP_URL=https://github.com/podman-desktop/testing-prereleases/releases/download/v1.16.0-202501090247-57bf7774e68/podman-desktop-1.16.0-202501090247-57bf7774e68-x64.exe,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
         DEFAULT_EXT_REPO_OPTIONS: 'REPO=podman-desktop-extension-ai-lab,FORK=containers,BRANCH=main,TESTS=0'
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
@@ -141,7 +141,7 @@ jobs:
       uses: podman-desktop/e2e/.github/actions/download-podman-nightly@main
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
-        podman-download-url: ${{ env.PODMAN_REMOTE_URL }}
+        podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
