@@ -1,5 +1,5 @@
 name: PD E2E with Podman Latest HyperV
-run-name: PD E2E Podamn Latest HyperV
+run-name: PD E2E Podman Latest HyperV
 
 on:
   schedule:
