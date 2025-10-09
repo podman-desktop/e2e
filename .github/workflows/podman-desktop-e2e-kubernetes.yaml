@@ -1,5 +1,5 @@
 name: PD k8s E2E with Podman Latest
-run-name: PD E2E Podman Latest Kubernetes
+run-name: PD E2E Podman ${{ inputs.podman_version || '(undefined version)' }} ${{ inputs.podman_provider == 'wsl' && 'WSL' || inputs.podman_provider == 'hyperv' && 'HyperV' || '(undefined provider)' }} Kubernetes
 
 on:
   schedule:
