@@ -70,13 +70,7 @@ jobs:
           windows-featurepack: '22h2-ent'
 
     steps:
-    - name: Get Podman version used by Desktop
-      run: |
-        version=$(curl https://raw.githubusercontent.com/podman-desktop/podman-desktop/main/extensions/podman/packages/extension/src/podman5.json | jq -r '.version')
-        echo "Default Podman Version from Podman Desktop: ${version}"
-        echo "PD_PODMAN_VERSION=${version}" >> $GITHUB_ENV
-
-    - name: Fetch latest Podman version
+    - name: Fetch Podman version
       id: fetch-podman
       uses: podman-desktop/e2e/.github/actions/fetch-latest-podman-version@main
       with:
