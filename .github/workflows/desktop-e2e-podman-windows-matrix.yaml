@@ -64,7 +64,7 @@ jobs:
         windows-version: ['10','11']
         windows-featurepack: ['22h2-ent', '23h2-ent']
         rootful: [0, 1]
-        user-networking: [0, 1]
+        user-networking: ${{ inputs.podman_provider == 'hyperv' && fromJSON('[0]') || fromJSON('[0, 1]') }}
         exclude:
         - windows-version: '10'
           windows-featurepack: '23h2-ent'
@@ -72,9 +72,6 @@ jobs:
           windows-featurepack: '22h2-ent'
         - rootful: 0
           user-networking: 1
-        - rootful: 1
-          user-networking: 1
-
 
     steps:
     - name: Set the default env. variables
