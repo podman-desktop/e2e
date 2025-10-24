@@ -1,5 +1,5 @@
 name: PD E2E with Podman set
-run-name: PD E2E Tests with Podman ${{ inputs.podman_version || '(undefined version)' }} ${{ inputs.podman_provider == 'wsl' && 'WSL' || inputs.podman_provider == 'hyperv' && 'HyperV' || '(undefined provider)' }}
+run-name: PD E2E Tests with Podman ${{ inputs.podman_version || 'latest' }} ${{ inputs.podman_provider == 'hyperv' && 'HyperV' || 'WSL' }}
 
 on:
   workflow_dispatch:

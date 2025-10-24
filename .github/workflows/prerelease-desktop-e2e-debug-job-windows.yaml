@@ -1,5 +1,5 @@
 name: Debug E2E Testing Pre-Releases
-run-name: Debugging Nightly PD E2E Tests with Podman ${{ contains(inputs.podman_options, 'PROVIDER=wsl') && 'WSL' || contains(inputs.podman_options, 'PROVIDER=hyperv') && 'HyperV' || '(undefined provider)' }}
+run-name: Debugging Nightly PD E2E Tests with Podman ${{ contains(inputs.podman_options, 'PROVIDER=hyperv') && 'HyperV' || 'WSL' }}
 
 on:
   workflow_dispatch:

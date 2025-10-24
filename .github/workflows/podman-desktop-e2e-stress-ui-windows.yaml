@@ -1,5 +1,5 @@
 name: PD UI Stress Tests Windows
-run-name: PD E2E UI Stress Test (Windows) with Podman ${{ inputs.podman_provider == 'wsl' && 'WSL' || inputs.podman_provider == 'hyperv' && 'HyperV' || '(undefined provider)' }}
+run-name: PD E2E UI Stress Test (Windows) with Podman ${{ inputs.podman_provider == 'hyperv' && 'HyperV' || 'WSL' }}
 
 on:
   schedule:
