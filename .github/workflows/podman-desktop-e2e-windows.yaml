@@ -1,5 +1,5 @@
 name: PD E2E Install & Run
-run-name: PD E2E with Podman installation ${{ inputs.podman_provider == 'wsl' && 'WSL' || inputs.podman_provider == 'hyperv' && 'HyperV' || '(undefined provider)' }} ${{ inputs.debug == 'true' && '- Debug' || '' }}
+run-name: PD E2E with Podman installation ${{ inputs.podman_provider == 'hyperv' && 'HyperV' || 'WSL' }} ${{ inputs.debug == 'true' && '- Debug' || '' }}
 
 on:
   schedule:

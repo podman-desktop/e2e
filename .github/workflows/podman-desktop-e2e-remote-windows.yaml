@@ -1,5 +1,5 @@
 name: PD Podman-Remote E2E Nightly
-run-name: PD E2E Podman Remote ${{ inputs.podman_version || '(undefined version)' }} ${{ inputs.podman_provider == 'wsl' && 'WSL' || inputs.podman_provider == 'hyperv' && 'HyperV' || '(undefined provider)' }} Production mode
+run-name: PD E2E Podman Remote ${{ inputs.podman_version || 'latest' }} ${{ inputs.podman_provider == 'hyperv' && 'HyperV' || 'WSL' }} Production mode
 
 on:
   schedule:
