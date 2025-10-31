@@ -147,6 +147,7 @@ jobs:
         echo "PODMAN_VERSION=$version" >> $env:GITHUB_ENV
 
     - name: Create json file with workflow run attributes
+      if: always()
       uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
       with: 
         name: "workflow-run-attributes.json"
