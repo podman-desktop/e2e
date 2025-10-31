@@ -70,12 +70,6 @@ jobs:
         windows-featurepack: ['24h2-ent']
 
     steps:
-    - name: Get Podman version used by Desktop
-      run: |
-        version=$(curl https://raw.githubusercontent.com/podman-desktop/podman-desktop/main/extensions/podman/packages/extension/src/podman5.json | jq -r '.version')
-        echo "Default Podman Version from Podman Desktop: ${version}"
-        echo "PD_PODMAN_VERSION=${version}" >> $GITHUB_ENV
-
     - name: Get Latest Podman Desktop testing prerelease
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -182,6 +176,21 @@ jobs:
         script-path: 'remote_machine.ps1'
         ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
+    - name: Create json file with workflow run attributes
+      uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
+      with: 
+        name: "workflow-run-attributes.json"
+        json: |
+          {
+            "podman-provider": "${{ env.PODMAN_PROVIDER }}",
+            "podman-version": "${{ steps.fetch-podman.outputs.version }}",
+            "os": "windows",
+            "os-version": "${{ matrix.windows-version }}",
+            "architecture": "x86_64",
+            "platform": "windows-nt",
+            "repository": "podman-desktop"
+          }
+
     - name: Destroy instance
       if: always()
       uses: podman-desktop/e2e/.github/actions/destroy-instance@main
@@ -211,3 +220,4 @@ jobs:
         name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*
+          **/workflow-run-attributes.json

@@ -55,14 +55,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        fedora-version: ['Fedora-41', 'Fedora-42']
+        fedora-version: ['41', '42']
     steps:
       - name: Set the default env. variables
         env:
           DEFAULT_NPM_TARGET: 'e2e'
           DEFAULT_FORK: 'podman-desktop'
           DEFAULT_BRANCH: 'main'
-          DEFAULT_PODMAN_VERSION: 'nightly'
+          DEFAULT_PODMAN_VERSION: 'latest'
         run: |
           echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
           echo "FORK=${{ github.event.inputs.fork || env.DEFAULT_FORK }}" >> $GITHUB_ENV
@@ -75,9 +75,9 @@ jobs:
         with:
           api_key: ${{ secrets.TF_TOKEN }}
           create_github_summary: "false"
-          compose: ${{ matrix.fedora-version }}
+          compose: Fedora-${{ matrix.fedora-version }}
           tmt_plan_filter: 'name:/plans/pd-e2e-plan/${{ env.NPM_TARGET }}'
-          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=${{ matrix.fedora-version }};ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }}
+          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=Fedora-${{ matrix.fedora-version }};ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }}
 
       - name: Extract Testing Farm work ID and base URL
         if: always()
@@ -136,12 +136,27 @@ jobs:
             --reject "index.html*" \
             --directory-prefix=results \
             "$TF_VIDEOS_URL"
+          
+      - name: Create json file with workflow run attributes
+        uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
+        with: 
+          name: "workflow-run-attributes.json"
+          json: |
+            {
+              "podman-version": "${{ env.PODMAN_VERSION }}",
+              "os": "fedora",
+              "os-version": "${{ matrix.fedora-version }}",
+              "architecture": "x86_64",
+              "platform": "Linux",
+              "repository": "podman-desktop"
+            }
 
       - name: Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.fedora-version }}
+          name: fedora-${{ matrix.fedora-version }}
           path: |
             results/*
             **/junit-playwright-results.xml
+            **/workflow-run-attributes.json
