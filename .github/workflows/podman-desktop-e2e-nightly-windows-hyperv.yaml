@@ -154,6 +154,7 @@ jobs:
         ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
 
     - name: Create json file with workflow run attributes
+      if: always()
       uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
       with: 
         name: "workflow-run-attributes.json"
