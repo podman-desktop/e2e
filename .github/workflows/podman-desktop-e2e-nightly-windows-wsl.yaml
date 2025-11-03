@@ -143,8 +143,8 @@ jobs:
     - name: Get Podman version
       id: podman_version
       run: |
-        $version = podman version --format '{{.Version}}'
-        echo "PODMAN_VERSION=$version" >> $env:GITHUB_ENV
+        version=$(podman version --format '{{.Version}}')
+        echo "PODMAN_VERSION=$version" >> $GITHUB_ENV
 
     - name: Create json file with workflow run attributes
       if: always()
