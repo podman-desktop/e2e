@@ -140,12 +140,6 @@ jobs:
         env-vars: ${{ env.ENV_VARS }}
         ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
     
-    - name: Get Podman version
-      id: podman_version
-      run: |
-        $version = podman version --format '{{.Version}}'
-        echo "PODMAN_VERSION=$version" >> $env:GITHUB_ENV
-
     - name: Create json file with workflow run attributes
       if: always()
       uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
@@ -154,7 +148,7 @@ jobs:
         json: |
           {
             "podman-provider": "${{ env.PODMAN_PROVIDER }}",
-            "podman-version": "${{ env.PODMAN_VERSION }}",
+            "podman-version": "nightly",
             "os": "windows",
             "os-version": "${{ matrix.windows-version }}",
             "architecture": "x86_64",
