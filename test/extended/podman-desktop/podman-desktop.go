@@ -7,6 +7,8 @@ import (
 	"github.com/adrianriobo/goax/pkg/util/delay"
 	"github.com/adrianriobo/goax/pkg/util/logging"
 	"github.com/adrianriobo/goax/pkg/util/screenshot"
+	. "github.com/onsi/gomega"
+
 	"github.com/containers/podman-desktop-e2e/test/context"
 	podmanExtension "github.com/containers/podman-desktop-e2e/test/extended/podman-desktop/extension/podman"
 	"github.com/containers/podman-desktop-e2e/test/extended/podman-desktop/util/ax"
@@ -49,13 +51,13 @@ func Open(execPath string) (*PDApp, error) {
 // On Welcome page we should have telemetry as enable by default
 // we change to disable and go to podman
 func (p *PDApp) WelcomePageDisableTelemetry() error {
-	exists, err := p.ExistsWithType(welcomePageEnableTelemetry, "checkbox")
-	if err != nil || !exists {
-		return fmt.Errorf("error disabling telemetry, check for existence :%v", err)
-	}
-	if err := p.ClickWithType(welcomePageEnableTelemetry, "checkbox", delay.LONG); err != nil {
-		return fmt.Errorf("error disabling telemetry, clicking checkbox: %v", err)
-	}
+	
+	Eventually(func() error {
+		// If it fails (element not found, etc.), it returns an error,
+		// and Eventually will try again.
+		return p.ClickWithType(welcomePageEnableTelemetry, "checkbox", delay.LONG)
+	}, "30s", "500ms").Should(Succeed(), "Failed to click the telemetry checkbox")
+	
 	return nil
 }
 
