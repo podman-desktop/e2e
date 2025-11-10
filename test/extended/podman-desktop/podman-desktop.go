@@ -51,14 +51,14 @@ func Open(execPath string) (*PDApp, error) {
 // On Welcome page we should have telemetry as enable by default
 // we change to disable and go to podman
 func (p *PDApp) WelcomePageDisableTelemetry() error {
-    
-    Eventually(func() error {
-        // If it fails (element not found, etc.), it returns an error,
-        // and Eventually will try again.
-        return p.ClickWithType(welcomePageEnableTelemetry, "checkbox", delay.LONG)
-    }, "30s", "500ms").Should(Succeed(), "Failed to click the telemetry checkbox")
-    
-    return nil
+	
+	Eventually(func() error {
+		// If it fails (element not found, etc.), it returns an error,
+		// and Eventually will try again.
+		return p.ClickWithType(welcomePageEnableTelemetry, "checkbox", delay.LONG)
+	}, "30s", "500ms").Should(Succeed(), "Failed to click the telemetry checkbox")
+	
+	return nil
 }
 
 func (p *PDApp) WelcomePageGoToPodman() error {
