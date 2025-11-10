@@ -12,6 +12,12 @@ import (
 	"github.com/containers/podman-desktop-e2e/test/extended/podman-desktop/util/ax"
 )
 
+import (
+    . "github.com/onsi/ginkgo/v2"
+    . "github.com/onsi/gomega"
+    "time"
+)
+
 type PDApp struct {
 	*ax.AXApp
 }
@@ -48,17 +54,6 @@ func Open(execPath string) (*PDApp, error) {
 
 // On Welcome page we should have telemetry as enable by default
 // we change to disable and go to podman
-/*func (p *PDApp) WelcomePageDisableTelemetry() error {
-	exists, err := p.ExistsWithType(welcomePageEnableTelemetry, "checkbox")
-	if err != nil || !exists {
-		return fmt.Errorf("error disabling telemetry, check for existence :%v", err)
-	}
-	if err := p.ClickWithType(welcomePageEnableTelemetry, "checkbox", delay.LONG); err != nil {
-		return fmt.Errorf("error disabling telemetry, clicking checkbox: %v", err)
-	}
-	return nil
-}*/
-
 func (p *PDApp) WelcomePageDisableTelemetry() error {
     
     Eventually(func() error {
