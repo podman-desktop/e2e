@@ -7,15 +7,11 @@ import (
 	"github.com/adrianriobo/goax/pkg/util/delay"
 	"github.com/adrianriobo/goax/pkg/util/logging"
 	"github.com/adrianriobo/goax/pkg/util/screenshot"
+	. "github.com/onsi/gomega"
+
 	"github.com/containers/podman-desktop-e2e/test/context"
 	podmanExtension "github.com/containers/podman-desktop-e2e/test/extended/podman-desktop/extension/podman"
 	"github.com/containers/podman-desktop-e2e/test/extended/podman-desktop/util/ax"
-)
-
-import (
-    . "github.com/onsi/ginkgo/v2"
-    . "github.com/onsi/gomega"
-    "time"
 )
 
 type PDApp struct {
