@@ -25,9 +25,9 @@ on:
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
         type: 'string'
         required: true
-      podman_remote_url:
-        default: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
-        description: 'podman remote zip'
+      podman_version:
+        default: 'latest'
+        description: 'Podman version (use "latest" to auto-fetch latest release, or specify version like "v5.6.1")'
         type: string
         required: true
       images_version:
@@ -70,13 +70,19 @@ jobs:
             windows-featurepack: '22h2-ent'
 
     steps:
+    - name: Fetch latest Podman version
+      id: fetch-podman
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@e4b1fa48c45110617d0ae3a995b81428f4234d96
+      with:
+        version_input: ${{ github.event.inputs.podman_version || 'latest' }}
+        file_type: 'setup.exe'
+
     - name: Set the default env. variables
       env:
         DEFAULT_REPO_BRANCH: 'FORK=podman-desktop,BRANCH=main'
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
-        DEFAULT_URL: 'https://api.cirrus-ci.com/v1/artifact/github/containers/podman/Artifacts/binary/podman-remote-release-windows_amd64.zip'
         DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.0.3"'
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
@@ -84,7 +90,7 @@ jobs:
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
-        echo "PODMAN_URL=${{ github.event.inputs.podman_remote_url || env.DEFAULT_URL }}" >> $GITHUB_ENV
+        echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
@@ -148,7 +154,7 @@ jobs:
         json: |
           {
             "podman-provider": "${{ env.PODMAN_PROVIDER }}",
-            "podman-version": "nightly",
+            "podman-version": "${{ steps.fetch-podman.outputs.version }}",
             "os": "windows",
             "os-version": "${{ matrix.windows-version }}",
             "architecture": "x86_64",
