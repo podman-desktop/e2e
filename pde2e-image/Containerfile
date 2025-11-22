@@ -1,0 +1,12 @@
+FROM quay.io/rhqp/deliverest:v0.0.7
+
+LABEL org.opencontainers.image.authors="Ondrej Dockal<odockal@redhat.com>"
+
+# Expects one of windows or darwin as builds args
+ARG OS
+
+ENV ASSETS_FOLDER=/opt/pde2e-test \
+    OS=${OS}
+
+COPY /common/${OS}/* ${ASSETS_FOLDER}/
+COPY /lib/${OS}/* ${ASSETS_FOLDER}/
