@@ -73,10 +73,11 @@ jobs:
 
     - name: Fetch Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@e4b1fa48c45110617d0ae3a995b81428f4234d96
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b757b792b67ec663765a4f2ca36226e12b2f4cd
       with:
         version_input: ${{ steps.extract-version.outputs.podman_version }}
         file_type: 'setup.exe'
+        github_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Extract Podman Desktop version from options and set it
       id: extract-podman-desktop-url
