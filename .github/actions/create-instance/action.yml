@@ -100,12 +100,27 @@ runs:
       env:
         DEFAULT_TAGS: 'project=podman-desktop,orgrepo=${{ github.repository }},run=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }},source=github'
       run: |
+        echo "::debug::Tags: ${{ inputs.tags || env.DEFAULT_TAGS }}"
         echo "TAGS=${{ inputs.tags || env.DEFAULT_TAGS }}" >> $GITHUB_ENV
 
     - name: Create instance
       shell: bash
       run: |
+        # Debug: Show key parameters
+        echo "::debug::MAPT Image: ${{ inputs.mapt-image }}:${{ inputs.mapt-version }}"
+        echo "::debug::Windows: ${{ inputs.windows-version }}-${{ inputs.windows-featurepack }}"
+        echo "::debug::Backed URL: ${{ inputs.backed-url }}"
+        echo "::debug::Project Name: ${{ inputs.project-name }}"
+        echo "::debug::Working dir: $(pwd)"
+        echo "::debug::ARM Tenant ID set: ${{ inputs.arm-tenant-id != '' }}"
+        echo "::debug::ARM Subscription ID set: ${{ inputs.arm-subscription-id != '' }}"
+        echo "::debug::ARM Client ID set: ${{ inputs.arm-client-id != '' }}"
+        echo "::debug::ARM Client Secret set: ${{ inputs.arm-client-secret != '' }}"
+        ls -la
+
         # Create instance using resources approach and capture container ID
+        echo "Starting MAPT container..."
+        set -x  # Show exact command being executed
         CONTAINER_ID=$(podman run -d --name windows-create \
           -v ${PWD}:/workspace:z \
           -e ARM_TENANT_ID=${{ inputs.arm-tenant-id }} \
@@ -126,34 +141,62 @@ runs:
           --tags ${{ env.TAGS }} \
           --spot-excluded-regions ${{ inputs.excluded-regions }} \
           --spot)
+        set +x  # Disable command tracing
         
-        echo "Started container with ID: $CONTAINER_ID"
+        if [ -z "$CONTAINER_ID" ]; then
+          echo "::error::Failed to start container"
+          exit 1
+        fi
+        
+        echo "::debug::Container ID: $CONTAINER_ID"
+        
+        # Check if container started successfully
+        if ! podman ps -a --format "{{.Names}}" | grep -q "windows-create"; then
+          echo "::error::Container 'windows-create' not found in container list"
+          podman ps -a
+          exit 1
+        fi
 
         # Wait for container to complete and capture exit code
-        echo "Waiting for instance creation to complete..."
+        echo "Waiting for instance creation..."
         exit_code=$(podman wait $CONTAINER_ID)
+        echo "::debug::Exit code: $exit_code"
 
-        # Show logs and status regardless of success or failure
-        echo "Container logs:"
-        podman logs $CONTAINER_ID 2>/dev/null || echo "Container logs not available (container may have been removed)"
-        status=$(podman container ps -a -f "id=$CONTAINER_ID" --format "{{.Status}} {{.ExitCode}}")
-        echo "Container exit status is: ${status}"
-
+        # Show logs and status - this will show MAPT tool output and any Azure/upstream errors
+        echo "::debug::=== MAPT Container Logs START ==="
+        if podman logs $CONTAINER_ID; then
+          echo "::debug::=== MAPT Container Logs END ==="
+        else
+          echo "::warning::No container logs available"
+          echo "::debug::Container status check:"
+          podman container inspect $CONTAINER_ID --format "{{.State.Status}}: {{.State.Error}}" || echo "Cannot inspect container"
+        fi
+        
         # Remove container
-        echo "Remove the container..."
-        podman rm $CONTAINER_ID
+        podman rm $CONTAINER_ID || true
 
-        # Check if container completed successfully, -1 means it is not in stopped or exited state
-        # Fail the steps if necessary
-        if [ $exit_code -eq -1 ]; then
+        # Check if container completed successfully
+        if [ $exit_code -ne 0 ]; then
+          echo "::error::MAPT container failed with exit code: $exit_code"
+          echo "::error::This typically indicates:"
+          echo "::error::  - Azure authentication failure (check ARM_* secrets)"
+          echo "::error::  - Network connectivity issues"
+          echo "::error::  - Azure API errors (quota, permissions, etc.)"
+          echo "::error::  - Invalid MAPT parameters"
+          echo "::error::Check the container logs above for specific error details"
           exit 1
         fi
 
         # Verify connection files were created
-        if [ ! -f "host" ] || [ ! -f "username" ] || [ ! -f "id_rsa" ]; then
-          echo "Error: Connection files not created. Instance creation may have failed."
-          ls -la
-          exit 1
-        fi
+        echo "::debug::Files after creation:"
+        ls -la
+        
+        for file in host username id_rsa; do
+          if [ ! -f "$file" ]; then
+            echo "::error::Missing file: $file"
+            exit 1
+          fi
+          echo "::debug::$file: $(wc -c < $file) bytes"
+        done
 
         echo "Instance creation completed successfully!"
