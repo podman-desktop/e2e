@@ -26,17 +26,16 @@ prepare:
     how: shell
     script: |
       sudo dnf update -y
-      
-      # Add NodeSource repository for Node.js 24
-      curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
-      
-      # Install packages using dnf (including Node.js 24 from NodeSource repo)
       sudo dnf install -y \
-        git nodejs npm curl xorg-x11-server-Xvfb \
+        git curl xorg-x11-server-Xvfb \
         nss nspr atk at-spi2-atk cups libXcomposite libXdamage libXfixes libXrandr cairo pango alsa-lib \
         gcc-c++ gtk3 passt jq
       
-      sudo npm install -g pnpm
+      # Install Node.js 24 directly from official binary
+      curl -fsSL https://nodejs.org/dist/v24.6.0/node-v24.6.0-linux-x64.tar.xz -o node.tar.xz
+      sudo tar -C /usr/local --strip-components=1 -xf node.tar.xz
+      
+      npm install -g pnpm
       echo "NodeJS version: $(node -v)"
       echo "npm version: $(npm -v)"
       echo "pnpm Version: $(pnpm --version)"
