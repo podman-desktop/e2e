@@ -77,7 +77,7 @@ jobs:
           create_github_summary: "false"
           compose: Fedora-${{ matrix.fedora-version }}
           tmt_plan_filter: 'name:/plans/pd-e2e-plan/${{ env.NPM_TARGET }}'
-          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=Fedora-${{ matrix.fedora-version }};ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }}
+          variables: FORK=${{ env.FORK }};BRANCH=${{ env.BRANCH }};COMPOSE=Fedora-${{ matrix.fedora-version }};ARCH=x86_64;PODMAN_VERSION=${{ env.PODMAN_VERSION }};NODE_VERSION=${{ vars.NODE_VERSION }}
 
       - name: Extract Testing Farm work ID and base URL
         if: always()
