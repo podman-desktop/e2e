@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Red Hat, Inc.
+# Copyright (C) 2026 Red Hat, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ description: 'Creates a fallback JUnit XML if no test results are found after a 
 inputs:
   infra_path:
     description: 'Path where the infra JUnit file should be saved'
-    required: falsee
+    required: false
     default: 'infra-failure-results.xml'
   report_search_pattern:
     description: 'Glob pattern to search for existing test reports'
