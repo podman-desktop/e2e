@@ -166,6 +166,10 @@ jobs:
         arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
         arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
 
+    - name: Generate Infrastructure Bug Report
+      if: failure()
+      uses: podman-desktop/e2e/.github/actions/generate-infra-report@main
+
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@v4
       if: always() # always run even if the previous step fails
@@ -184,3 +188,4 @@ jobs:
         path: |
           results/*
           **/workflow-run-attributes.json
+          **/junit-infra-failure-report.xml
