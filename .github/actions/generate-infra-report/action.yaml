@@ -20,7 +20,7 @@ inputs:
   infra_path:
     description: 'Path where the infra JUnit file should be saved'
     required: false
-    default: 'infra-failure-results.xml'
+    default: 'junit-infra-failure-report.xml'
   report_search_pattern:
     description: 'Glob pattern to search for existing test reports'
     required: false
