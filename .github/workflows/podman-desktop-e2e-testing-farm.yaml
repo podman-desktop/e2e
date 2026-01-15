@@ -97,6 +97,10 @@ jobs:
           TF_PLAYWRIGHT_JUNIT_URL="${{ env.TF_ARTIFACTS_URL }}/${{ env.TF_WORK_ID }}/plans/pd-e2e-plan/${{ env.NPM_TARGET }}/execute/data/guest/default-0/tmt/${{ env.NPM_TARGET }}-test-1/data/junit-results.xml"
           curl -o junit-playwright-results.xml "$TF_PLAYWRIGHT_JUNIT_URL"
 
+      - name: Generate Infrastructure Bug Report
+        if: failure()
+        uses: podman-desktop/e2e/.github/actions/generate-infra-report@main
+
       - name: Publish test report to PR
         if: always()
         uses: mikepenz/action-junit-report@3585e9575db828022551b4231f165eb59a0e74e3
@@ -106,7 +110,7 @@ jobs:
           detailed_summary: true
           annotate_only: true
           require_tests: true
-          report_paths: '**/junit-playwright-results.xml'
+          report_paths: '**/*results.xml'
 
       - name: Download test artifacts from Testing Farm
         if: failure()
@@ -161,3 +165,4 @@ jobs:
             results/*
             **/junit-playwright-results.xml
             **/workflow-run-attributes.json
+            **/infra-failure-results.xml
