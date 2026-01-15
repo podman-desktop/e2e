@@ -165,4 +165,4 @@ jobs:
             results/*
             **/junit-playwright-results.xml
             **/workflow-run-attributes.json
-            **/infra-failure-results.xml
+            **/junit-infra-failure-report.xml

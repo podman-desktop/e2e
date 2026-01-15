@@ -191,4 +191,4 @@ jobs:
         name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}-${{ matrix.rootful == '0' && 'rootless' || 'rootful' }}${{ matrix.user-networking == '1' && '-userNetworking' || '' }}
         path: |
           results/*
-          **/infra-failure-results.xml
+          **/junit-infra-failure-report.xml

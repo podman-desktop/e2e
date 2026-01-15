@@ -203,4 +203,4 @@ jobs:
         path: |
           results/*
           **/workflow-run-attributes.json
-          **/infra-failure-results.xml
+          **/junit-infra-failure-report.xml
