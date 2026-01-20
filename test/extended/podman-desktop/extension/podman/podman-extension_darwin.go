@@ -11,10 +11,11 @@ const (
 	installerBundleID    = "com.apple.installer"
 	installerPodmanTitle = "Install Podman"
 
-	installerContinue = "Continue"
-	installerAgree    = "Agree"
-	installerInstall  = "Install"
-	installerClose    = "Close"
+	installerContinue  = "Continue"
+	installerAgree     = "Agree"
+	installerAllow     = "Allow"
+	installerInstall   = "Install"
+	installerClose     = "Close"
 
 	installerSelectLocationTitle = "Select a Destination"
 )
@@ -49,6 +50,13 @@ func runInstaller(userPassword string) error {
 	if err := i.Click(installerAgree, delay.SMALL); err != nil {
 		return installerError(err)
 	}
+	// get foreground App (Just a system dialog, contains buttons Allow and Don't Allow)
+	y, err := ax.GetForefront()
+	if err := y.Click(installerAllow, delay.SMALL); err != nil {
+		return installerError(err)
+	}
+	// reinitilize installer app
+	// i, err := ax.GetAppByTypeAndTitle(installerBundleID, installerPodmanTitle) - compilation error
 	if selectLocationExists, err := i.ExistsWithType(installerSelectLocationTitle, "text"); selectLocationExists {
 		if err != nil {
 			return installerError(err)
