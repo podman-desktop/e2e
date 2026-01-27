@@ -138,6 +138,11 @@ jobs:
 
         podman pull $testImage
         
+        # Capture baseline image count before creating test objects
+        BASELINE_IMAGE_COUNT=$(podman images --format json | jq '. | length')
+        echo "BASELINE_IMAGE_COUNT=$BASELINE_IMAGE_COUNT" >> $GITHUB_ENV
+        echo "BASELINE_IMAGE_COUNT: $BASELINE_IMAGE_COUNT"
+        
         echo "OBJECT_NUM: $OBJECT_NUM"
 
         for imgNum in $(seq 1 $OBJECT_NUM);
