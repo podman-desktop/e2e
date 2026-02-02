@@ -60,11 +60,11 @@ jobs:
       fail-fast: false
       matrix:
         windows-version: ['10','11']
-        windows-featurepack: ['22h2-ent', '24h2-ent']
+        windows-featurepack: ['22h2-ent', '25h2-ent']
         podman-provider: ['wsl', 'hyperv']
         exclude:
         - windows-version: '10'
-          windows-featurepack: '24h2-ent'
+          windows-featurepack: '25h2-ent'
         - windows-version: '11'
           windows-featurepack: '22h2-ent'
 
