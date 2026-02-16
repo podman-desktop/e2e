@@ -72,10 +72,10 @@ jobs:
     steps:
     - name: Fetch latest Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b757b792b67ec663765a4f2ca36226e12b2f4cd
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@edf9cd67e118e45e295f27c6e3ef5f73ad6505d3
       with:
         version_input: ${{ github.event.inputs.podman_version || 'latest' }}
-        file_type: 'setup.exe'
+        file_type: 'msi'
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set the default env. variables
