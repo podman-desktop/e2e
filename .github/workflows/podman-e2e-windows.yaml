@@ -14,8 +14,6 @@ on:
             IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.8;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"
         required: false
         type: string
-  schedule:
-    - cron:  '30 0 * * *'
 
 jobs:
   windows:
