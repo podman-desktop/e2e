@@ -61,7 +61,7 @@ spec:
   # Control params
   - name: target-cleanup
     description: 'this param controls if folder on target host will be removed. Defaults true'
-    deafult: 'true'
+    default: 'true'
 
   results:
   - name: duration
