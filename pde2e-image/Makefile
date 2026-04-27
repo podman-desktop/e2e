@@ -1,10 +1,10 @@
 VERSION ?= 0.0.1
 CONTAINER_MANAGER ?= podman
-IMG ?= quay.io/odockal/pde2e-test:v${VERSION} # temporary image location
-# TKN_IMG ?= quay.io/odockal/pde2e-test-tkn:v${VERSION}
+IMG ?= quay.io/odockal/pde2e-image:v${VERSION}
+TKN_IMG ?= quay.io/odockal/pde2e-image-tkn:v${VERSION}
 
-# TOOLS_DIR := tools
-# include tools/tools.mk
+TOOLS_DIR := tools
+include tools/tools.mk
 
 # Build the container image
 .PHONY: oci-build
@@ -19,7 +19,7 @@ oci-push:
 	${CONTAINER_MANAGER} push ${IMG}-${OS}
 
 # Create tekton task bundle
-# .PHONY: tkn-push
-# tkn-push: install-out-of-tree-tools
-# 	$(info    Pushing the tekton task image: $(TKN_IMG))
-# 	$(TOOLS_BINDIR)/tkn bundle push $(TKN_IMG) -f tkn/task.yaml
+.PHONY: tkn-push
+tkn-push: install-out-of-tree-tools
+	$(info    Pushing the tekton task image: $(TKN_IMG))
+	$(TOOLS_BINDIR)/tkn bundle push $(TKN_IMG) -f tkn/task.yaml
