@@ -5,8 +5,9 @@ Unified Podman Desktop E2E test execution image with integrated Podman installat
 ## Purpose
 
 This image provides a unified workflow for Podman Desktop E2E testing:
-- **Automated Podman Installation**: Downloads and installs Podman on target Windows/macOS hosts if not already present
+- **Automated Podman Installation**: Downloads and installs Podman on target Windows/macOS/RHEL hosts if not already present
 - **E2E Test Execution**: Runs Podman Desktop Playwright E2E tests on remote target machines
+- **Multi-platform Support**: Supports macOS (darwin), Windows, and Linux (RHEL) platforms
 
 The runner scripts automatically handle Podman installation as an integrated step, simplifying the testing pipeline into a single entry point per platform.
 
@@ -16,26 +17,33 @@ The runner scripts automatically handle Podman installation as an integrated ste
 pde2e-image/
 ├── lib/
 │   ├── darwin/
-│   │   ├── runner.sh              # Main test runner with integrated Podman installation
-│   │   └── scripts/               # Utility scripts (docker-compose, kind, kubectl, minikube)
+│   │   └── runner.sh              # macOS test runner with integrated Podman installation
 │   ├── windows/
-│   │   ├── runner.ps1             # Main test runner with integrated Podman installation
-│   │   └── scripts/               # Utility scripts (remote_machine, stress_test_ui, wsl_dns_update)
-│   └── linux/
-│       └── runner.sh              # Placeholder for future Linux support
+│   │   ├── runner.ps1             # Windows test runner with integrated Podman installation
+│   │   └── scripts/               # Windows-specific utility scripts
+│   ├── rhel/
+│   │   ├── runner.sh              # RHEL test runner with integrated Podman installation
+│   │   └── setup_display.sh       # Headless display setup for RHEL
+│   └── unix/
+│       └── scripts/                # Cross-platform utility scripts (darwin, rhel, linux)
+│           ├── install_docker_compose.sh
+│           ├── install_kind.sh
+│           ├── install_kubectl.sh
+│           └── install_minikube.sh
 ├── common/
 │   ├── unix/
-│   │   └── common.sh           # Shared bash utilities for macOS
+│   │   └── common.sh               # Shared bash utilities (darwin, rhel, linux)
 │   └── windows/
-│       └── common.ps1          # Shared PowerShell utilities for Windows
+│       └── common.ps1              # Shared PowerShell utilities
 ├── tools/
 │   ├── bin/                        # Downloaded tools (gitignored)
 │   └── tools.mk                    # Makefile for Tekton CLI
 ├── tkn/
-│   └── task.yaml                   # Unified Tekton task definition
-├── Containerfile                   # Multi-platform build configuration
+│   ├── task.yaml                   # Unified Tekton task (all platforms)
+│   └── task-rhel-display.yaml      # RHEL display setup task
+├── Containerfile                   # Multi-stage build configuration
 ├── Makefile                        # Build and push targets
-├── builder.sh                      # Convenience script for building all platforms
+├── builder.sh                      # Build script for all platforms
 ├── README.md                       # This file
 └── LICENSE
 ```
@@ -55,7 +63,7 @@ The runner scripts (`runner.sh` / `runner.ps1`) now automatically handle Podman 
 
 - **macOS (darwin)**: Supports ZIP and PKG installers, libkrun/applehv providers
 - **Windows**: Supports ZIP, EXE, and MSI installers, WSL2/HyperV providers
-- **Linux**: Placeholder for future support
+- **Linux (RHEL)**: Supports dnf-based installation and ZIP archives, rootful/rootless modes
 
 ## Building and Pushing
 
@@ -71,13 +79,15 @@ The runner scripts (`runner.sh` / `runner.ps1`) now automatically handle Podman 
 # Build for specific platform
 OS=darwin make oci-build
 OS=windows make oci-build
+OS=rhel make oci-build
 
 # Build for all platforms
-OS=darwin make oci-build && OS=windows make oci-build
+OS=darwin make oci-build && OS=windows make oci-build && OS=rhel make oci-build
 
 # Push to registry
 OS=darwin make oci-push
 OS=windows make oci-push
+OS=rhel make oci-push
 
 # Build and push Tekton task bundle
 make tkn-push
@@ -101,7 +111,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.0.1-darwin \
+  quay.io/odockal/pde2e-image:v0.0.4-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
@@ -129,7 +139,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.0.1-windows \
+  quay.io/odockal/pde2e-image:v0.0.4-windows \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
@@ -156,7 +166,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.0.1-darwin \
+  quay.io/odockal/pde2e-image:v0.0.4-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \

@@ -1,0 +1,95 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: pde2e-image-rhel-display
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, rhel
+    tekton.dev/displayName: "RHEL Headless GNOME Display Setup"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    This task sets up a headless GNOME session on a RHEL target host using
+    gnome-remote-desktop-headless.service. It must run before the
+    pde2e-runner-rhel task so that a Wayland compositor is ready when
+    the runner's setup_display() function searches for the mutter auth file.
+
+  workspaces:
+  - name: pipelines-data
+
+  params:
+  # Target host parameters
+  - name: host
+    description: host to connect to the provisioned RHEL machine
+  - name: username
+    description: username to connect to the provisioned machine
+  - name: key
+    description: key file name to connect to the provisioned machine within the workspace resources path
+  - name: workspace-resources-path
+    description: path on workspace to find resources to connect to the target machine
+  # Task parameters
+  - name: image-version
+    description: pde2e-runner image version
+    default: '0.0.4'
+  - name: results-folder
+    description: directory for setup logs and artifacts
+    default: results
+  - name: workspace-qe-subpath
+    description: subpath relative to workspace path where results are stored
+    default: qe-results
+  - name: target-cleanup
+    description: 'this param controls if folder on target host will be removed after setup. Defaults false'
+    default: 'false'
+
+  results:
+  - name: duration
+    description: total amount of time in seconds for the display setup
+
+  steps:
+  - name: display-setup
+    image: quay.io/odockal/pde2e-image:v$(params.image-version)-rhel
+    imagePullPolicy: Always
+    script: |
+      #!/bin/bash
+
+      SECONDS=0
+      TARGET_HOST=$(params.host)
+      TARGET_HOST_USERNAME=$(params.username)
+      TARGET_HOST_KEY_PATH=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.key)
+      chmod 600 ${TARGET_HOST_KEY_PATH}
+      TARGET_FOLDER=/opt/pd-e2e
+      TARGET_RESULTS=$(params.results-folder)
+      TARGET_CLEANUP=$(params.target-cleanup)
+      OUTPUT_FOLDER=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
+      mkdir -p "${OUTPUT_FOLDER}"
+
+      cmd="${TARGET_FOLDER}/setup_display.sh "
+      cmd="$cmd --username $(params.username) "
+
+      echo "Composed Command to be executed: '${cmd}'"
+
+      # /opt is not writable by the SSH user without sudo; pre-create with correct ownership
+      ssh -i ${TARGET_HOST_KEY_PATH} \
+        -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+        ${TARGET_HOST_USERNAME}@${TARGET_HOST} \
+        "sudo mkdir -p ${TARGET_FOLDER} && sudo chown ${TARGET_HOST_USERNAME}:${TARGET_HOST_USERNAME} ${TARGET_FOLDER}"
+
+      # Exec via deliverest entrypoint (SCP assets + SSH execute)
+      . entrypoint.sh "${cmd}"
+
+      echo "Storing duration result..."
+      echo -n "${SECONDS}" | tee $(results.duration.path)
+
+    resources:
+      requests:
+        memory: "50Mi"
+        cpu: "5m"
+      limits:
+        memory: "70Mi"
+        cpu: "10m"

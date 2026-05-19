@@ -1,4 +1,4 @@
-VERSION ?= 0.0.1
+VERSION ?= 0.0.4
 CONTAINER_MANAGER ?= podman
 IMG ?= quay.io/odockal/pde2e-image:v${VERSION}
 TKN_IMG ?= quay.io/odockal/pde2e-image-tkn:v${VERSION}
@@ -14,7 +14,7 @@ oci-build:
 
 # Build the container image # requires user to be logged into a registry
 .PHONY: oci-push
-oci-push: 
+oci-push:
 	$(info    Pushing the image: $(IMG)-$(OS))
 	${CONTAINER_MANAGER} push ${IMG}-${OS}
 
