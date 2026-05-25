@@ -5,7 +5,7 @@
 ###################################
 
 # Versions variables
-nodeVersion="v24.12.0"
+nodeVersion="v24.15.0"
 gitVersion="2.42.0"
 pnpmVersion="10"
 

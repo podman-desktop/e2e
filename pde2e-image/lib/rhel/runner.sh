@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Versions variables
-nodeVersion="v24.12.0"
+nodeVersion="v24.15.0"
 pnpmVersion="10"
 
 declare -a script_env_vars
