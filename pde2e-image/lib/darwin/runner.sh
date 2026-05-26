@@ -13,7 +13,7 @@ declare -a script_env_vars
 
 # Source common functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common/unix/common.sh"
+source "$SCRIPT_DIR/unix/common/common.sh"
 
 pdUrl=""
 pdPath=""
@@ -249,8 +249,10 @@ if ! command -v podman &> /dev/null; then
         echo "Podman is not installed, please install it first"
         exit 1
     fi
+    echo "Check podman version..."
+    podman -v
 else
-    echo "Warning: Podman nor Podman Path is specified!"
+    echo "Warning: Podman is already"
     # exit 1;
 fi
 
