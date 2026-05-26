@@ -8,7 +8,7 @@ declare -a script_env_vars
 
 # Source common functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../common/unix/common.sh"
+source "$SCRIPT_DIR/../unix/common/common.sh"
 
 pdUrl=""
 pdPath=""

@@ -8,12 +8,12 @@ ENV ASSETS_FOLDER=/opt/pde2e-image
 FROM base AS darwin
 COPY /lib/darwin/ ${ASSETS_FOLDER}/
 COPY /lib/unix/ ${ASSETS_FOLDER}/unix/
-COPY /common/unix/ ${ASSETS_FOLDER}/common/
+COPY /common/unix/ ${ASSETS_FOLDER}/unix/common/
 ENV OS=darwin
 
 FROM base AS windows
 COPY /lib/windows/ ${ASSETS_FOLDER}/
-COPY /common/windows/ ${ASSETS_FOLDER}/common/
+COPY /common/windows/ ${ASSETS_FOLDER}/windows/common/
 ENV OS=windows
 
 # Linux distributions
@@ -23,6 +23,6 @@ ENV OS=linux
 FROM linux AS rhel
 COPY /lib/rhel/ ${ASSETS_FOLDER}/
 COPY /lib/unix/ ${ASSETS_FOLDER}/unix/
-COPY /common/unix/ ${ASSETS_FOLDER}/common/
+COPY /common/unix/ ${ASSETS_FOLDER}/unix/common/
 
 FROM ${OS}
