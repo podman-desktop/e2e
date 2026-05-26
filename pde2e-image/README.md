@@ -102,9 +102,9 @@ make tkn-push
 
 ```sh
 podman run --rm -d --name pde2e-image-run \
-  -e TARGET_HOST=$(cat host) \
-  -e TARGET_HOST_USERNAME=$(cat username) \
-  -e TARGET_HOST_KEY_PATH=/data/id_rsa \
+  -e TARGET_HOST=$(cat host-mac) \
+  -e TARGET_HOST_USERNAME=$(cat username-mac) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-mac \
   -e TARGET_FOLDER=pd-e2e \
   -e TARGET_RESULTS=results \
   -e OUTPUT_FOLDER=/data \
@@ -117,22 +117,50 @@ podman run --rm -d --name pde2e-image-run \
     --resultsFolder results \
     --fork podman-desktop \
     --branch main \
-    --podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.2.5/podman-remote-release-darwin_arm64.zip" \
-    --podmanVersion "5.2.5" \
+    --podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
     --initialize 1 \
     --rootful 1 \
     --start 1 \
-    --npmTarget "test:e2e:smoke" \
+    --npmTarget "test:e2e:smoke:run" \
     --podmanProvider "libkrun"
+```
+
+### macOS Example without Podman, with remote Podman Desktop, using CDP
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-mac) \
+  -e TARGET_HOST_USERNAME=$(cat username-mac) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-mac \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.0.4-darwin \
+    pd-e2e/runner.sh \
+    --targetFolder pd-e2e \
+    --resultsFolder results \
+    --fork odockal \
+    --branch dashboard-test \
+    --pdUrl https://github.com/podman-desktop/podman-desktop/releases/download/v1.27.2/podman-desktop-1.27.2-arm64.dmg \
+    --envVars DEBUGGING_PORT=9222 \
+    --podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
+    --initialize 1 \
+    --rootful 1 \
+    --start 1 \
+    --npmTarget "test:e2e:smoke:run" \
+    --podmanProvider "libkrun"
+  podman logs -f pde2e-image-run
 ```
 
 ### Windows Example with Podman Installation
 
 ```sh
 podman run --rm -d --name pde2e-image-run \
-  -e TARGET_HOST=$(cat host) \
-  -e TARGET_HOST_USERNAME=$(cat username) \
-  -e TARGET_HOST_KEY_PATH=/data/id_rsa \
+  -e TARGET_HOST=$(cat host-win) \
+  -e TARGET_HOST_USERNAME=$(cat username-win) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-win \
   -e TARGET_FOLDER=pd-e2e \
   -e TARGET_RESULTS=results \
   -e OUTPUT_FOLDER=/data \
@@ -143,15 +171,43 @@ podman run --rm -d --name pde2e-image-run \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
-    -fork containers \
-    -branch main \
-    -podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.2.5/podman-5.2.5-setup.exe" \
+    -fork odockal \
+    -branch dashboard-test \
+    -pdUrl https://github.com/podman-desktop/podman-desktop/releases/download/v1.27.2/podman-desktop-1.27.2-setup-x64.exe \
+    -podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-installer-windows-amd64.msi" \
     -initialize 1 \
     -rootful 1 \
     -start 1 \
-    -npmTarget "test:e2e:smoke" \
+    -npmTarget "test:e2e:smoke:run" \
     -installWSL 0 \
+    -envVars DEBUGGING_PORT=9222 \
     -podmanProvider "wsl"
+```
+
+### Windows Example without Podman Installation
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-win) \
+  -e TARGET_HOST_USERNAME=$(cat username-win) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-win \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.0.4-windows \
+    pd-e2e/runner.ps1 \
+    -targetFolder pd-e2e \
+    -resultsFolder results \
+    -fork odockal \
+    -branch dashboard-test \
+    -pdUrl https://github.com/podman-desktop/podman-desktop/releases/download/v1.27.2/podman-desktop-1.27.2-setup-x64.exe \
+    -npmTarget "test:e2e:smoke:run" \
+    -installWSL 0 \
+    -envVars DEBUGGING_PORT=9222 \
+    -podmanProvider "wsl"
+  podman logs -f pde2e-image-run
 ```
 
 ### Extension Testing Example (without Podman installation)
@@ -197,7 +253,6 @@ podman run --rm -d --name pde2e-image-run \
 | `--pdPath` | Existing PD binary path | - | `/Applications/Podman Desktop.app` |
 | `--podmanPath` | Existing Podman binary path | - | `/opt/podman/bin` |
 | `--podmanDownloadUrl` | Podman installer URL | - | `https://...zip` |
-| `--podmanVersion` | Expected Podman version | - | `5.2.5` |
 | `--initialize` | Initialize podman machine | `0` | `1` |
 | `--start` | Start podman machine | `0` | `1` |
 | `--rootful` | Rootful podman machine | `0` | `1` |
@@ -268,7 +323,7 @@ podman logs -f pde2e-image-run
 ### From pde2e-runner
 
 - Image name changed: `quay.io/odockal/pde2e-runner` → `quay.io/odockal/pde2e-image`
-- New parameters: `--podmanDownloadUrl`, `--podmanVersion`
+- New parameters: `--podmanDownloadUrl`
 - Podman installation now automatic when download URL provided
 - Tekton task name changed: `pde2e-runner` → `pde2e-image`
 
