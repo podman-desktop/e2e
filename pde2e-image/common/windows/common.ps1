@@ -386,3 +386,15 @@ try {
         Write-Output "No standard error..."
     }
 }
+
+# Check if something in on PATH
+function Is-In-Path($directory, $scope) {
+    $currentPath = [Environment]::GetEnvironmentVariable('Path', $scope)
+    if (-not $currentPath.Contains($directory)) {
+        Write-Host "Directory $directory is not on a PATH with scope: $scope"
+        return False
+    } else {
+        Write-Host "Directory $directory already on PATH, scope: $scope"
+        return True
+    }
+}

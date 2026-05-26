@@ -61,7 +61,7 @@ $global:envVarDefs = @()
 
 # Source common functions
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-. "$scriptDir\common\windows\common.ps1"
+. "$scriptDir\windows\common\common.ps1"
 
 # Execution beginning
 Write-Host "Podman desktop E2E runner script is being run..."
@@ -89,6 +89,9 @@ New-Item -ErrorAction Ignore -ItemType directory -Path $targetLocationTmpScp
 # Specify the user profile directory
 $userProfile = $env:USERPROFILE
 
+# Output file for built podman desktop binary
+$outputFile = "podman-location.log"
+
 # Specify the shared tools directory
 $toolsInstallDir = Join-Path $userProfile 'tools'
 if (-not(Test-Path -Path $toolsInstallDir)) {
@@ -104,9 +107,11 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
     if (-not [string]::IsNullOrWhiteSpace($pdUrl)) {
         # set binary path
         if ($pdUrl.Contains('setup')) {
+            # TODO: parametrization, in cases where product is not podman-desktop
             Download-PD('pd-setup.exe')
             write-host "Installing Podman Desktop from setup.exe file..."
             # run the installer
+            # TODO: add logic to install pd either under user or for the machine scope (PROGRAM FILES)
             Start-Process -Wait -FilePath "$workingDir\pd-setup.exe" -ArgumentList "/S" -PassThru
             # podman desktop should be under $env:LOCALAPPDATA\Programs\podman-desktop
             # newly, it can be on $env:LOCALAPPDATA\Programs\Podman Desktop\
@@ -167,6 +172,9 @@ if (-not (Test-Path -Path "$toolsInstallDir\vc_redist.x64.exe" -PathType Contain
 }
 
 # Install or put the tool on the path, path is regenerated 
+# TODO: this is not ideal for bare metal machines, as it always add new entry into PATH
+# for ephemeral machines this is ok.
+# TODO: add check for node version as it might break the install/compile commands
 if (-not (Command-Exists "node -v")) {
     # Download and install the latest version of Node.js
     write-host "Installing node"
@@ -176,12 +184,15 @@ if (-not (Command-Exists "node -v")) {
         Expand-Archive -Path "$toolsInstallDir\nodejs.zip" -DestinationPath $toolsInstallDir
     }
     # we need to set node for local access in actually running script
-    $env:Path += ";$toolsInstallDir\node-$nodejsLatestVersion-win-x64\"
+    $nodePath = "$toolsInstallDir\node-$nodejsLatestVersion-win-x64\"
+    $env:Path += ";$nodePath"
     # Setting node to be available for the machine scope
     # requires admin access
-    $command="[Environment]::SetEnvironmentVariable('Path', (`$Env:Path + ';$toolsInstallDir\node-$nodejsLatestVersion-win-x64\'), 'MACHINE')"
-    Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
-    write-host "$([Environment]::GetEnvironmentVariable('Path', 'MACHINE'))"
+    if (-not (Is-In-Path($podmanPath, 'MACHINE'))) {
+        $command="[Environment]::SetEnvironmentVariable('Path', (`$Env:Path + ';$nodePath'), 'MACHINE')"
+        Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
+        write-host "$([Environment]::GetEnvironmentVariable('Path', 'MACHINE'))"
+    }
 }
 # verify node, npm, pnpm installation
 node -v
@@ -203,133 +214,137 @@ if (-not (Command-Exists "git version")) {
     $env:Path += ";$toolsInstallDir\git\cmd"
 }
 
-# Podman Installation (if needed)
-if ([string]::IsNullOrWhiteSpace($podmanPath)) {
-    if (-not (Command-Exists "podman")) {
-        if (-not [string]::IsNullOrWhiteSpace($podmanDownloadUrl)) {
-            Write-Host "Podman not found, installing from $podmanDownloadUrl..."
-
-            # Install WSL if requested
-            if ($installWSL -eq "1") {
-                Write-Host "Checking WSL installation..."
-                wsl -l -v
-                $installed = $?
-                if (!$installed) {
-                    Write-Host "Installing WSL2..."
-                    wsl --set-default-version 2
-                    wsl --install --no-distribution
-                    $distroMissing = $?
-                    if ($distroMissing) {
-                        Write-Host "WSL enabled, but distro is missing. Installing default distro..."
-                        wsl --install --no-launch
-                    }
-                }
-            }
-
-            # Install Podman
-            $extension = [IO.Path]::GetExtension($podmanDownloadUrl)
-            $podmanProgramFiles = "$env:ProgramFiles\RedHat\Podman\"
-            $useUserScope = $false
-
-            if ($extension -eq '.zip') {
-                # ZIP installation
-                Write-Host "Installing from ZIP archive..."
-                if (-not (Test-Path -Path "$toolsInstallDir\podman" -PathType Container)) {
-                    Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.zip"
-                    mkdir -p "$toolsInstallDir\podman" | Out-Null
-                    Expand-Archive -Path "$toolsInstallDir\podman.zip" -DestinationPath "$toolsInstallDir\podman" -Force
-                }
-                $podmanFolderName = Get-ChildItem "$toolsInstallDir\podman" -Name | Select-Object -First 1
-                Write-Host "Extracted Podman folder: $podmanFolderName"
-                $podmanPath = "$toolsInstallDir\podman\$podmanFolderName\usr\bin"
-                $useUserScope = $true
-
-                # For HyperV, copy binaries to Program Files
-                if (-not [string]::IsNullOrWhiteSpace($podmanProvider) -and $podmanProvider -eq "hyperv") {
-                    if (-not (Test-Path -Path $podmanProgramFiles)) {
-                        Write-Host "Copying Podman helper binaries for HyperV..."
-                        $command = "New-Item -ItemType Directory -Path '$podmanProgramFiles'"
-                        Invoke-Admin-Command -Command $command -WorkingDirectory $(pwd) -Privileged "1" -TargetFolder $targetLocationTmpScp
-                        $commandCopy = "Copy-Item -Path '$podmanPath\*' -Destination '$podmanProgramFiles'"
-                        Invoke-Admin-Command -Command $commandCopy -WorkingDirectory $(pwd) -Privileged "1" -TargetFolder $targetLocationTmpScp
-                    }
-                }
-
-            } elseif ($extension -eq '.exe') {
-                # EXE installation
-                Write-Host "Installing from EXE installer..."
-                Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.exe"
-                Write-Host "Running Podman EXE installer silently..."
-                $process = Start-Process -FilePath "$toolsInstallDir\podman.exe" -ArgumentList "/S" -PassThru -Wait
-                Write-Host "Install process exit code: $($process.ExitCode)"
-                if ($process.ExitCode -eq 1618) {
-                    Write-Host "Another installation in progress. Retrying in 60 seconds..."
-                    Start-Sleep -Seconds 60
-                    $process = Start-Process -FilePath "$toolsInstallDir\podman.exe" -ArgumentList "/S" -PassThru -Wait
-                    Write-Host "Second install attempt exit code: $($process.ExitCode)"
-                }
-                $podmanPath = $podmanProgramFiles
-                $useUserScope = $false
-
-            } elseif ($extension -eq '.msi') {
-                # MSI installation
-                Write-Host "Installing from MSI installer..."
-                Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.msi"
-                Write-Host "Running Podman MSI installer silently..."
-                $msiLogFile = "$targetLocation\podman-msi.log"
-                $msiArgs = @("/package", "$toolsInstallDir\podman.msi", "/quiet", "/l*v", $msiLogFile)
-                $process = Start-Process msiexec.exe -ArgumentList $msiArgs -PassThru -Wait
-                Write-Host "Install process exit code: $($process.ExitCode)"
-                if ($process.ExitCode -ne 0) {
-                    if (Test-Path $msiLogFile) {
-                        Write-Host "MSI Installation Log:"
-                        Get-Content $msiLogFile | ForEach-Object { Write-Host $_ }
-                    }
-                    throw "Podman MSI installation failed with exit code: $($process.ExitCode)"
-                }
-                $podmanPath = "$env:LOCALAPPDATA\Programs\Podman\"
-                $useUserScope = $true
-
-            } else {
-                throw "Unsupported file extension '$extension'. Expected .zip, .exe, or .msi"
-            }
-
-            # Verify and store installation path
-            if (Test-Path -Path $podmanPath) {
-                Write-Host "Podman installed at: $podmanPath"
-                # Store installation path
-                cd "$workingDir\$resultsFolder"
-                "'$podmanPath'" | Out-File -FilePath "podman-location.log" -NoNewline
-                cd $workingDir
-            } else {
-                throw "Expected Podman path does not exist: $podmanPath"
-            }
-        } else {
-            Write-Host "Podman not found and no download URL provided"
+# Install WSL if requested
+if ($installWSL -eq "1") {
+    Write-Host "Checking WSL installation..."
+    wsl -l -v
+    $installed = $?
+    if (!$installed) {
+        Write-Host "Installing WSL2..."
+        wsl --set-default-version 2
+        wsl --install --no-distribution
+        $distroMissing = $?
+        if ($distroMissing) {
+            Write-Host "WSL enabled, but distro is missing. Installing default distro..."
+            wsl --install --no-launch
         }
-    } else {
-        Write-Host "Podman already available on system"
     }
 }
 
 if (-not (Command-Exists "podman")) {
-    if (Test-Path -Path "$podmanPath") {
-        write-host "Adding Podman location: '$podmanPath', on the User PATH"
-        #[System.Environment]::SetEnvironmentVariable('PATH', ([System.Environment]::GetEnvironmentVariable('PATH', 'User') + $podmanPath) -join ';', 'User')
-        $env:Path += ";$podmanPath"
-        # Make the podman available for the every scope (by using Machine scope)
-        # write-host "Settings $podmanPath on PATH with Machine scope"
-        # $command="[Environment]::SetEnvironmentVariable('Path', (`$Env:Path + ';$podmanPath'), 'MACHINE')"
-        # Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
-        # write-host "$([Environment]::GetEnvironmentVariable('Path', 'MACHINE'))"
-    } else {
-        Write-Host "The path '$podmanPath' does not exist, verify downloadUrl and version"
-        Throw "Expected Podman Path: '$podmanPath' does not exist"
-    }
-}
+    write-host "Podman is not installed, installing..."
+    # Download and install the (nightly) podman for windows
+    if (-not [string]::IsNullOrWhiteSpace($podmanDownloadUrl)) {
 
-# Test podman version installed
-podman -v
+        # Installation of the zip podman achive
+        $extension = [IO.Path]::GetExtension($podmanDownloadUrl)
+        $podmanProgramFiles="$env:ProgramFiles\RedHat\Podman\"
+        $podmanPath=""
+        $useUserScope=$false  # Track whether to use User or Machine scope for PATH
+        if ($extension -eq '.zip') {
+            $podmanFolder="podman-remote-release-windows_amd64"
+            write-host "Downloading podman archive from $podmanDownloadUrl"
+            if (-not (Test-Path -Path "$toolsInstallDir\podman" -PathType Container)) {
+                Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.zip"
+                mkdir -p "$toolsInstallDir\podman"
+                Expand-Archive -Path "$toolsInstallDir\podman.zip" -DestinationPath "$toolsInstallDir\podman" -Force
+            }
+            # we need to find out the folder name extracted from archive, could be podman-5.1.0 or podman-5.2.0-dev
+            $podmanFolderName=ls "$toolsInstallDir\podman" -Name
+            write-host "Extracted Podman Installation folder found: $podmanFolderName"
+            $podmanPath="$toolsInstallDir\podman\$podmanFolderName\usr\bin"
+            $useUserScope=$true  # ZIP installs to user directory
+            # To use gvproxy from achived installation, Path solution does not exist
+            # See , set the helper_binaries_dir key in the `[engine]` section of containers.conf
+            # We need to either use podman_helper_dir or place binaries at "C:\Program Files\RedHat\Podman\"
+            # For now only for hyperv
+            if (-not [string]::IsNullOrWhiteSpace($podmanProvider) -and $podmanProvider -eq "hyperv") {
+                if (-not (Test-Path -Path $podmanProgramFiles)) {
+                    write-host "Copying podman binary helper files into program files..."
+                    $command="New-Item -ItemType Directory -Path '$podmanProgramFiles'"
+                    #Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
+                    Invoke-Admin-Command -Command $command -WorkingDirectory $(pwd) -Privileged "1" -TargetFolder $targetLocationTmpScp
+                    $commandCopy="Copy-Item -Path '$podmanPath\*' -Destination '$podmanProgramFiles'"
+                    #Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $commandCopy" -Verb RunAs -Wait
+                    Invoke-Admin-Command -Command $commandCopy -WorkingDirectory $(pwd) -Privileged "1" -TargetFolder $targetLocationTmpScp
+                }
+            }
+        } elseif ($extension -eq '.exe') {
+            write-host "Downloading podman setup.exe from $podmanDownloadUrl"
+            Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.exe"
+            # Install the setup.exe
+            write-host "Install Podman from setup.exe silently.."
+            $process = Start-Process -FilePath "$toolsInstallDir\podman.exe" -ArgumentList "/S" -PassThru -Wait
+            write-host "Install process exit code: " $process.ExitCode
+            if ($process.ExitCode -eq 1618) {
+                write-host "Re-trying Podman installation later, another installation is in progress"
+                Start-Sleep -Seconds 60
+                $process = Start-Process -FilePath "$toolsInstallDir\podman.exe" -ArgumentList "/S" -PassThru -Wait
+                write-host "Second install process exit code: " $process.ExitCode
+            }
+            # It seems that we need to put installed podman path on the system PATH in order for podman to be accessible in the session
+            $podmanPath=$podmanProgramFiles
+            $useUserScope=$false  # EXE installs to Program Files (system-wide)
+        } elseif ($extension -eq '.msi') {
+            write-host "Downloading podman MSI installer from $podmanDownloadUrl"
+            Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.msi"
+            # Install MSI using user-scope installation (default, no admin required)
+            write-host "Installing Podman MSI silently..."
+            $msiLogFile = "$targetLocation\podman-msi.log"
+            $msiArgs = @("/package", "$toolsInstallDir\podman.msi", "/quiet", "/l*v", $msiLogFile)
+            $process = Start-Process msiexec.exe -ArgumentList $msiArgs -PassThru -Wait
+            write-host "Install process exit code: " $process.ExitCode
+            if ($process.ExitCode -ne 0) {
+                if (Test-Path $msiLogFile) {
+                    write-host "MSI Installation Log:"
+                    Get-Content $msiLogFile | ForEach-Object { write-host $_ }
+                }
+                Throw "Podman MSI installation failed with exit code: $($process.ExitCode). Check log above for details."
+            }
+            # MSI user-scope installation path
+            $podmanPath="$env:LOCALAPPDATA\Programs\Podman\"
+            $useUserScope=$true  # MSI installs to user directory (no admin required)
+        }
+
+        if (Test-Path -Path $podmanPath) {
+            # Add to current session PATH unless it is there already
+            $env:Path += ";$podmanPath"
+            
+            # Set PATH persistently based on installation type
+            if ($useUserScope) {
+                # User-scope installation (ZIP, MSI) - no admin required
+                write-host "Adding Podman location: $podmanPath, on the User PATH"
+                write-host "Setting $podmanPath on PATH with User scope"
+                $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+                if (-not $currentUserPath.Contains($podmanPath)) {
+                    [Environment]::SetEnvironmentVariable('Path', ($currentUserPath + ';' + $podmanPath), 'User')
+                }
+                write-host "User PATH updated: $([Environment]::GetEnvironmentVariable('Path', 'User'))"
+            } else {
+                # System-wide installation (EXE) - requires admin
+                write-host "Adding Podman location: $podmanPath, on the System PATH"
+                write-host "Setting $podmanPath on PATH with Machine scope"
+                $command="[Environment]::SetEnvironmentVariable('Path', (`$Env:Path + ';$podmanPath'), 'MACHINE')"
+                Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
+                write-host "$([Environment]::GetEnvironmentVariable('Path', 'MACHINE'))"
+            }
+
+            # store the podman installation
+            cd "$workingDir\$resultsFolder"
+            write-host "Podman installation path will be stored in $outputFile"
+            "'$podmanPath'" | Out-File -FilePath $outputFile -NoNewline
+            podman -v
+        } else {
+            Write-Host "The path $podmanPath does not exist, verify downloadUrl and version"
+            Throw "Expected Podman Path: $podmanPath does not exist"
+        }
+    } else {
+        Write-Host "Podman not found and no download URL provided"
+    }
+} else {
+    write-host "Podman is already installed on the system"
+    podman -v
+}
 
 # If the provider is hyperv, we need to allow podman in defender's firewall
 if (-not [string]::IsNullOrWhiteSpace($podmanProvider) -and $podmanProvider -eq "hyperv") {
