@@ -111,7 +111,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.0.4-darwin \
+  quay.io/odockal/pde2e-image:v0.1.0-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
@@ -137,7 +137,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.0.4-darwin \
+  quay.io/odockal/pde2e-image:v0.1.0-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
@@ -167,7 +167,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.0.4-windows \
+  quay.io/odockal/pde2e-image:v0.1.0-windows \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
@@ -196,7 +196,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.0.4-windows \
+  quay.io/odockal/pde2e-image:v0.1.0-windows \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
@@ -222,7 +222,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.0.4-darwin \
+  quay.io/odockal/pde2e-image:v0.1.0-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \

@@ -36,7 +36,7 @@ spec:
   # Task parameters
   - name: image-version
     description: pde2e-runner image version
-    default: '0.0.4'
+    default: '0.1.0'
   - name: results-folder
     description: directory for setup logs and artifacts
     default: results

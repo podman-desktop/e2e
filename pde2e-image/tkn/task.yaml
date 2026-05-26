@@ -42,7 +42,7 @@ spec:
   # Image Configuration
   - name: image-version
     description: pde2e-image version
-    default: '0.0.1'
+    default: '0.1.0'
 
   # Podman Configuration
   - name: podman-download-url
