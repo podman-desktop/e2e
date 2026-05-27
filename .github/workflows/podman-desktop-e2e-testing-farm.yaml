@@ -63,7 +63,7 @@ jobs:
           DEFAULT_FORK: 'podman-desktop'
           DEFAULT_BRANCH: 'main'
           DEFAULT_PODMAN_VERSION: 'latest'
-          DEFAULT_NODE_VERSION: 'v24.11.1'
+          DEFAULT_NODE_VERSION: 'v24.15.0'
         run: |
           echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
           echo "FORK=${{ github.event.inputs.fork || env.DEFAULT_FORK }}" >> $GITHUB_ENV
