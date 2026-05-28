@@ -188,7 +188,7 @@ if (-not (Command-Exists "node -v")) {
     $env:Path += ";$nodePath"
     # Setting node to be available for the machine scope
     # requires admin access
-    if (-not (Is-In-Path $podmanPath 'MACHINE' )) {
+    if (-not (Is-In-Path $nodePath 'MACHINE' )) {
         $command="[Environment]::SetEnvironmentVariable('Path', (`$Env:Path + ';$nodePath'), 'MACHINE')"
         Start-Process powershell.exe -ArgumentList "-NoProfile", "-ExecutionPolicy Bypass", "-Command $command" -Verb RunAs -Wait
         write-host "$([Environment]::GetEnvironmentVariable('Path', 'MACHINE'))"
