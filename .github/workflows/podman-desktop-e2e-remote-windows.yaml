@@ -98,7 +98,7 @@ jobs:
 
     - name: Fetch latest Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@edf9cd67e118e45e295f27c6e3ef5f73ad6505d3
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@aea6ff44f2a4a82da13d22061ce73443a125925d
       with:
         version_input: ${{ github.event.inputs.podman_version || 'latest' }}
         file_type: 'msi'
