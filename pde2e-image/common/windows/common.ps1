@@ -392,9 +392,9 @@ function Is-In-Path($directory, $scope) {
     $currentPath = [Environment]::GetEnvironmentVariable('Path', $scope)
     if (-not $currentPath.Contains($directory)) {
         Write-Host "Directory $directory is not on a PATH with scope: $scope"
-        return False
+        return $false
     } else {
         Write-Host "Directory $directory already on PATH, scope: $scope"
-        return True
+        return $true
     }
 }

@@ -27,9 +27,8 @@ podmanVersion=""
 rootful=0
 envVars=""
 secretFile=""
-podmanProvider=""
 saveTraces=1
-cleanMachine=1
+cleanMachine=0
 scriptPaths=""
 
 while [[ $# -gt 0 ]]; do
@@ -48,10 +47,8 @@ while [[ $# -gt 0 ]]; do
         --podmanPath) podmanPath="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
         --podmanVersion) podmanVersion="$2"; shift ;;
-        --rootful) rootful="$2"; shift ;;
         --envVars) envVars="$2"; shift ;;
         --secretFile) secretFile="$2"; shift ;;
-        --podmanProvider) podmanProvider="$2"; shift ;;
         --saveTraces) saveTraces="$2"; shift ;;
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
@@ -62,194 +59,11 @@ done
 
 # Functions
 download_pd() {
-    echo "Downloading Podman Desktop from $pdUrl"
+    echo "Downloading Podman Desktop App from $pdUrl"
     curl -L -O "$pdUrl"
 }
 
 echo "Reading envVars in script: '$envVars'"
-
-# Create a env. vars from a string: VAR=VAL,VAR2=VAL
-function load_variables() {
-    echo "Loading Variables passed into image"
-    echo "Env. Vars String: '$envVars'"
-    # Check if the input string is not null or empty
-    if [ -n "$envVars" ]; then
-        # use input field separator
-        IFS=',' read -ra VARIABLES <<< "$envVars"
-
-        for var in "${VARIABLES[@]}"; do
-            echo "Processing $var"
-            # Split each variable definition
-            IFS='=' read -r name value <<< "$var"
-
-            # Check if the variable assignment is in VAR=Value format
-            if [ -n "$value" ]; then
-                # Set the environment variable
-                export "$name"="$value"
-                newValue="${!name}"
-                script_env_vars+=("$name")
-            else
-                echo "Invalid variable assignment: $var"
-            fi
-        done
-    else
-        echo "Input string is empty."
-    fi
-}
-
-function execute_scripts() {
-    echo "Loading Paths passed into image"
-    echo "ScriptPaths String: '$scriptPaths'"
-
-    # Check if the input string is not null or empty
-    if [[ -n "$scriptPaths" ]]; then
-        scripts_folder="$resourcesPath/scripts"
-
-        # Split the input using comma separator
-        IFS=',' read -r -a paths <<< "$scriptPaths"
-
-        for path in "${paths[@]}"; do
-            path=$(echo "$path" | xargs) # Trim whitespace
-            echo "Processing $path"
-            script_path="$scripts_folder/$path"
-
-            if [[ -f "$script_path" ]]; then
-                echo "Executing $script_path"
-                bash "$script_path"
-            else
-                echo "$script_path does not exist"
-            fi
-        done
-    fi
-}
-
-# Loading a secrets into env. vars from the file
-function load_secrets() {
-    if [ -n "$secretFile" ]; then
-        secretFilePath="$resourcesPath/$secretFile"
-        if [ -f $secretFilePath ]; then
-            echo "Loading Secrets from file: $secretFilePath"
-            if [ -f "$secretFilePath" ]; then
-                while IFS='=' read -r key value || [ -n "$key" ]; do
-                    # Ignore comments and empty lines
-                    if [[ ! $key =~ ^\s*# && -n $key ]]; then
-                        # Trim leading and trailing whitespaces
-                        key=$(echo "$key" | sed 's/^[ \t]*//;s/[ \t]*$//')
-                        value=$(echo "$value" | sed 's/^[ \t]*//;s/[ \t]*$//')
-                        # Set the environment variable
-                        export "$key"="$value"
-                        script_env_vars+=("$key")
-                    fi
-                done < "$secretFilePath"
-                echo "Secrets loaded from '$secretFilePath' and set as environment variables."
-            else
-                echo "File '$secretFilePath' not found."
-            fi
-        else
-            echo "Secret File path $secretFilePath does not exist"
-        fi
-    else
-        echo "Secret file Parameter not set"
-    fi
-}
-
-function clone_checkout() {
-    local_repo=$1
-    local_fork=$2
-    local_branch=$3
-    echo "Working Dir: $workingDir"
-    cd $workingDir
-    echo "Cloning $local_repo"
-    if [ -d $local_repo ]; then
-        echo "$local_repo github repo exists"
-    else
-        repositoryURL="https://github.com/$local_fork/$local_repo.git"
-        echo "Checking out $repositoryURL"
-        git clone $repositoryURL
-    fi
-
-    cd $local_repo || exit
-    echo "Fetching all branches and tags"
-    git fetch --all
-    echo "Checking out branch: $local_branch"
-    git checkout $local_branch
-}
-
-function copy_exists() {
-    local source=$1
-    local target=$2
-    if [ -e $source ]; then
-        echo "Copying files from $source to $target"
-        cp -r $source $target
-    else
-        echo "Path $source does not exist"
-    fi
-}
-
-function collect_logs() {
-    local folder="$1"
-    mkdir -p "$workingDir/$resultsFolder/$folder"
-    local source="$workingDir/$folder"
-    local target="$workingDir/$resultsFolder/$folder"
-    echo "Collecting the results from: $source, to: " $target
-
-    local junits=()
-    while IFS= read -r file; do
-        # Only add to array if the file string is not empty
-        [ -n "$file" ] && junits+=("$file")
-    done < <(find "$source" -type f -name "junit*.xml" 2>/dev/null)
-
-    local count=${#junits[@]}
-
-    if [ "$count" -eq 0 ]; then
-        echo "WARNING: No JUnit file found anywhere in $source"
-    else
-        if [ "$count" -gt 1 ]; then
-            echo "WARNING: Expected exactly one JUnit file, but found $count! Proceeding with the first one."
-        fi
-
-        local junit="${junits[0]}"
-        local target_path="$workingDir/$resultsFolder/junit-$folder.xml"
-
-        echo "Found Junit file: $junit"
-        echo "Copying $junit to $target_path"
-        cp "$junit" "$target_path"
-    fi
-
-    if (( extTests == 1 )); then
-        echo "Removing possible models from working directories"
-        ls $source/**/output/**/*.gguf
-        rm -rf $source/**/output/**/*.gguf
-        echo "Removing possible VM files from **/images/*"
-        ls $source/**/output/**/images/
-        rm -rf $source/**/output/**/images/*
-    fi
-
-    ls $source/**/output/**/plugins/*
-    rm -rf $source/**/output/**/plugins/*
-
-    copy_exists "$source/output.log" $target
-    copy_exists "$source/tests/output/" $target
-    copy_exists "$source/tests/playwright/output/" $target
-    copy_exists "$source/tests/playwright/tests/output/" $target
-    # reduce the size of the artifacts
-    # remove resources
-    echo "Removing resources artifacts"
-    rm -rf $target/resources
-    rm -rf $target/*/resources
-    rm -rf $target/**/resources
-    echo "Removing plugins from pd home dir - contains node_modules"
-    rm -rf $target/**/plugins/*
-    # remove raw traces
-    if [ -d "$target/traces" ]; then
-        echo "Removing raw playwright trace files: ./**/traces/raw"
-        rm -r "$target/traces/raw"
-        if (( saveTraces == 0)); then
-            echo "Removing all traces from test artifacts, mainly due capacity reasons"
-            rm -rf "$target/traces"
-        fi
-    fi
-}
 
 # Adopt display variables from the GNOME session
 # created by the separate display-setup task

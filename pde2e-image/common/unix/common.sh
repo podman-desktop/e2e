@@ -36,10 +36,10 @@ load_variables() {
         # use input field separator
         IFS=',' read -ra VARIABLES <<< "$envVars"
 
-        for var in "${VARIABLES[@]}"; do
-            echo "Processing $var"
+        for variable in "${VARIABLES[@]}"; do
+            echo "Processing $variable"
             # Split each variable definition
-            IFS='=' read -r name value <<< "$var"
+            IFS='=' read -r name value <<< "$variable"
 
             # Check if the variable assignment is in VAR=Value format
             if [ -n "$value" ]; then
@@ -55,6 +55,7 @@ load_variables() {
         echo "Input string is empty."
     fi
     # check if we have explicit podman provider env. var. added
+    # Darwin only for now
     if [ -n "$podmanProvider" ]; then
         echo "Settings CONTAINERS_MACHINE_PROVIDER: $podmanProvider"
         export CONTAINERS_MACHINE_PROVIDER=$podmanProvider
@@ -69,7 +70,7 @@ execute_scripts() {
 
     # Check if the input string is not null or empty
     if [[ -n "$scriptPaths" ]]; then
-        scripts_folder="$resourcesPath"
+        scripts_folder="$resourcesPath/scripts"
 
         # Split the input using comma separator
         IFS=',' read -r -a paths <<< "$scriptPaths"

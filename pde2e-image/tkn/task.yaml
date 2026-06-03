@@ -162,7 +162,7 @@ spec:
       mkdir -p "${OUTPUT_FOLDER}"
 
       # get the secret file into target host
-      if [ -n $(params.secret-file) ]; then
+      if [ "$(params.secret-file)" != "''" ] && [ -n "$(params.secret-file)" ]; then
         secretFile=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file)
         echo "Copying secret file: $(params.secret-file) from $secretFile to assets folder of the image"
         cp $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file) /opt/pde2e-image/

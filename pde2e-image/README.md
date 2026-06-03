@@ -379,11 +379,7 @@ podman logs -f pde2e-image-run
 
 ## Version
 
-Current version: `0.0.1`
-
-Based on:
-- `pde2e-runner` v0.0.3
-- `pde2e-podman` v0.0.3
+Current version: `0.1.0`
 
 ## License
 
