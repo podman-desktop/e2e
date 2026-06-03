@@ -460,7 +460,7 @@ if ($extTests -eq "1") {
     }
     pnpm add -D @podman-desktop/tests-playwright@next
     cd "$workingDir\$extRepo"
-    write-host "Installing dependencies of $repo"
+    write-host "Installing dependencies of $extRepo"
     pnpm install --frozen-lockfile 2>&1 | Tee-Object -FilePath 'output.log' -Append
     write-host "Running the e2e playwright tests using target: $npmTarget"
     if (-not [string]::IsNullOrWhiteSpace($podmanProvider) -and $podmanProvider -eq "hyperv") {

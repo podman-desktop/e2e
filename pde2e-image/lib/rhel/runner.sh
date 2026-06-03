@@ -95,12 +95,6 @@ function load_variables() {
     else
         echo "Input string is empty."
     fi
-    # check if we have explicit podman provider env. var. added
-    if [ -n "$podmanProvider" ]; then
-        echo "Settings CONTAINERS_MACHINE_PROVIDER: $podmanProvider"
-        export CONTAINERS_MACHINE_PROVIDER=$podmanProvider
-        script_env_vars+=("CONTAINERS_MACHINE_PROVIDER")
-    fi
 }
 
 function execute_scripts() {

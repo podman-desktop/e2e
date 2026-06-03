@@ -252,7 +252,7 @@ if ! command -v podman &> /dev/null; then
     echo "Check podman version..."
     podman -v
 else
-    echo "Warning: Podman is already"
+    echo "Warning: Podman is already installed..."
     # exit 1;
 fi
 

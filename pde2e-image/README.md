@@ -154,6 +154,28 @@ podman run --rm -d --name pde2e-image-run \
   podman logs -f pde2e-image-run
 ```
 
+### RHEL/Ubuntu Example without Podman, with remote Podman Desktop, using CDP
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-rhel) \
+  -e TARGET_HOST_USERNAME=$(cat username-rhel) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-rhel \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.1.0-rhel \
+    pd-e2e/runner.sh \
+    --targetFolder pd-e2e \
+    --resultsFolder results \
+    --fork odockal \
+    --branch dashboard-test \
+    --npmTarget "test:e2e:smoke:run" 
+  podman logs -f pde2e-image-run
+```
+
 ### Windows Example with Podman Installation
 
 ```sh
