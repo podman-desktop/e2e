@@ -172,6 +172,7 @@ spec:
 
       # Create command - command to substitute from GHA workflow using images
       if [[ $(params.os) == "windows" ]]; then
+        # windows parameters
         cmd="${TARGET_FOLDER}/runner.ps1 "
         cmd="$cmd -targetFolder ${TARGET_FOLDER} "
         cmd="$cmd -resultsFolder ${TARGET_RESULTS} "
@@ -214,8 +215,8 @@ spec:
           cmd="$cmd -podmanProvider $(params.podman-provider) "
         fi
         cmd="$cmd -saveTraces $(params.save-traces) "
-      fi
-      if [[ $(params.os) == "darwin" ]]; then
+      else
+        # Darwin and rhel shared parameters
         cmd="${TARGET_FOLDER}/runner.sh "
         cmd="$cmd --targetFolder ${TARGET_FOLDER} "
         cmd="$cmd --resultsFolder ${TARGET_RESULTS} "
@@ -246,57 +247,19 @@ spec:
         if [[ -n "$(params.podman-download-url)" ]]; then
           cmd="$cmd --podmanDownloadUrl $(params.podman-download-url) "
         fi
-        cmd="$cmd --initialize $(params.podman-initialize) "
-        cmd="$cmd --start $(params.podman-start) "
-        cmd="$cmd --rootful $(params.podman-rootful) "
-        if [[ -n "$(params.podman-provider)" ]]; then
-          cmd="$cmd --podmanProvider $(params.podman-provider) "
-        fi
         cmd="$cmd --saveTraces $(params.save-traces) "
-        cmd="$cmd --cleanMachine $(params.clean-machine) "
         if [[ -n "$(params.script-paths)" ]]; then
           cmd="$cmd --scriptPaths $(params.script-paths) "
         fi
-      fi
-      if [[ $(params.os) == "rhel" ]]; then
-        cmd="${TARGET_FOLDER}/runner.sh "
-        cmd="$cmd --targetFolder ${TARGET_FOLDER} "
-        cmd="$cmd --resultsFolder ${TARGET_RESULTS} "
-        if [[ -n "$(params.pd-path)" ]]; then
-          cmd="$cmd --pdPath $(params.pd-path) "
-        fi
-        if [[ -n "$(params.pd-url)" ]]; then
-          cmd="$cmd --pdUrl $(params.pd-url) "
-        fi
-        cmd="$cmd --extTests $(params.ext-tests) "
-        if [[ -n "$(params.ext-repo)" ]]; then
-          cmd="$cmd --extRepo $(params.ext-repo) "
-        fi
-        if [[ -n "$(params.ext-fork)" ]]; then
-          cmd="$cmd --extFork $(params.ext-fork) "
-        fi
-        if [[ -n "$(params.ext-branch)" ]]; then
-          cmd="$cmd --extBranch $(params.ext-branch) "
-        fi
-        cmd="$cmd --envVars '$(params.env-vars)' "
-        cmd="$cmd --secretFile $(params.secret-file) "
-        cmd="$cmd --fork $(params.fork) "
-        cmd="$cmd --branch $(params.branch) "
-        cmd="$cmd --npmTarget $(params.npm-target) "
-        if [[ -n "$(params.podman-path)" ]]; then
-          cmd="$cmd --podmanPath $(params.podman-path) "
-        fi
-        if [[ -n "$(params.podman-download-url)" ]]; then
-          cmd="$cmd --podmanDownloadUrl $(params.podman-download-url) "
-        fi
-        cmd="$cmd --rootful $(params.podman-rootful) "
-        if [[ -n "$(params.podman-provider)" ]]; then
-          cmd="$cmd --podmanProvider $(params.podman-provider) "
-        fi
-        cmd="$cmd --saveTraces $(params.save-traces) "
-        cmd="$cmd --cleanMachine $(params.clean-machine) "
-        if [[ -n "$(params.script-paths)" ]]; then
-          cmd="$cmd --scriptPaths $(params.script-paths) "
+        # darwin specific parameters
+        if [[ $(params.os) == "darwin" ]]; then
+          cmd="$cmd --initialize $(params.podman-initialize) "
+          cmd="$cmd --start $(params.podman-start) "
+          cmd="$cmd --rootful $(params.podman-rootful) "
+          if [[ -n "$(params.podman-provider)" ]]; then
+            cmd="$cmd --podmanProvider $(params.podman-provider) "
+          fi
+          cmd="$cmd --cleanMachine $(params.clean-machine) "
         fi
       fi
 
