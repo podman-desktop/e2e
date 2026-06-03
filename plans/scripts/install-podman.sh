@@ -20,7 +20,7 @@ if [[ "$PODMAN_VERSION" == "nightly" ]]; then
 else
     # For "latest" or specific version, fetch version if needed and install from RPM
     if [[ "$PODMAN_VERSION" == "latest" ]]; then
-        PODMAN_VERSION="$(curl -s https://api.github.com/repos/containers/podman/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -n1 | sed 's/^v//')"
+        PODMAN_VERSION="$(curl -sL https://api.github.com/repos/podman-container-tools/podman/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -n1 | sed 's/^v//')"
     fi
     CUSTOM_PODMAN_URL="https://kojipkgs.fedoraproject.org//packages/podman/${PODMAN_VERSION}/1.${COMPOSE_VERSION}/${ARCH}/podman-${PODMAN_VERSION}-1.${COMPOSE_VERSION}.${ARCH}.rpm"
     curl -Lo podman.rpm "$CUSTOM_PODMAN_URL"
