@@ -59,7 +59,7 @@ jobs:
       fail-fast: false
       matrix:
         windows-version: ['11']
-        windows-featurepack: ['24h2-ent']
+        windows-featurepack: ['25h2-ent']
 
     steps:
     - name: Extract Podman version from options
