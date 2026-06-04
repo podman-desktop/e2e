@@ -1,12 +1,28 @@
-FROM quay.io/rhqp/deliverest:v0.0.7
-
-LABEL org.opencontainers.image.authors="Ondrej Dockal<odockal@redhat.com>"
-
-# Expects one of windows or darwin as builds args
 ARG OS
 
-ENV ASSETS_FOLDER=/opt/pde2e-test \
-    OS=${OS}
+FROM quay.io/rhqp/deliverest:v0.0.7 AS base
 
-COPY /common/${OS}/* ${ASSETS_FOLDER}/
-COPY /lib/${OS}/* ${ASSETS_FOLDER}/
+LABEL org.opencontainers.image.authors="Ondrej Dockal<odockal@redhat.com>"
+ENV ASSETS_FOLDER=/opt/pde2e-image
+
+FROM base AS darwin
+COPY /lib/darwin/ ${ASSETS_FOLDER}/
+COPY /lib/unix/ ${ASSETS_FOLDER}/unix/
+COPY /common/unix/ ${ASSETS_FOLDER}/unix/common/
+ENV OS=darwin
+
+FROM base AS windows
+COPY /lib/windows/ ${ASSETS_FOLDER}/
+COPY /common/windows/ ${ASSETS_FOLDER}/windows/common/
+ENV OS=windows
+
+# Linux distributions
+FROM base AS linux
+ENV OS=linux
+
+FROM linux AS rhel
+COPY /lib/rhel/ ${ASSETS_FOLDER}/
+COPY /lib/unix/ ${ASSETS_FOLDER}/unix/
+COPY /common/unix/ ${ASSETS_FOLDER}/unix/common/
+
+FROM ${OS}
