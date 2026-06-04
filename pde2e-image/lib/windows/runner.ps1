@@ -5,7 +5,7 @@ param(
     $pdPath="",
     [Parameter(Mandatory,HelpMessage='folder on target host where assets are copied')]
     $targetFolder,
-    [Parameter(Mandatory,HelpMessage='Results folder')]
+    [Parameter(HelpMessage='Results folder')]
     $resultsFolder="results",
     [Parameter(HelpMessage = 'Base Repository Fork')]
     [string]$fork = "podman-desktop",

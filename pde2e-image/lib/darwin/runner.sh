@@ -79,7 +79,7 @@ done
 # SCRIPT ENVIRONMENT INITIALIZATION
 ####################################################################
 
-if [ $debug == "1" ]; then
+if [ "$debug" == "1" ]; then
     echo "DEBUG: Script parameters:"
     echo "pdUrl=$pdUrl"
     echo "pdPath=$pdPath"
@@ -367,6 +367,12 @@ if [ -z "$pdPath" ]; then
             exit 1
         fi
         version=$(echo "$pdUrl" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        if [ -z "$version" ]; then
+            echo "Warning: Could not extract version from URL, searching for app volume without version"
+            pdVolumePath=$(find /Volumes -name "*${appName}*" -maxdepth 1 | head -1)
+        else
+            pdVolumePath=$(find /Volumes -name "*${appName} ${version}*" -maxdepth 1 | head -1)
+        fi
         if ! hdiutil attach "$dmgPath"; then
             echo "Error: hdiutil attach failed - image not recognised"
             exit 1
@@ -405,7 +411,7 @@ if [[ "$extTests" -eq 1 ]] && [ -n "$podmanDesktopBinary" ] ; then
 else
     echo "Checking out $repo repository"
     clone_checkout "$repo" "$fork" "$branch" "$gitProviderUrl"
-    cd "$workingDir/$repo"
+    cd "$workingDir/$repo" || exit
     echo "Installing dependencies and storing pnpm run output in: $testsOutputLog"
     pnpm install --frozen-lockfile 2>&1 | tee -a $testsOutputLog
     # extract since tests should be run afte execute scripts
