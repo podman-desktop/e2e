@@ -154,7 +154,7 @@ podman run --rm -d --name pde2e-image-run \
   podman logs -f pde2e-image-run
 ```
 
-### RHEL/Ubuntu Example without Podman, with remote Podman Desktop, using CDP
+### RHEL Example without Podman, with remote Podman Desktop, using CDP
 
 ```sh
 podman run --rm -d --name pde2e-image-run \
@@ -172,8 +172,9 @@ podman run --rm -d --name pde2e-image-run \
     --resultsFolder results \
     --fork odockal \
     --branch dashboard-test \
-    --npmTarget "test:e2e:smoke:run" 
-  podman logs -f pde2e-image-run
+    --npmTarget "test:e2e:smoke:run"
+# get the logs
+podman logs -f pde2e-image-run
 ```
 
 ### Windows Example with Podman Installation

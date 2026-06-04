@@ -277,7 +277,7 @@ if (( cleanMachine == 1 )); then
     # remove old podman system connections from user space
     rm -rf ~/.config/containers/podman-connections.json*
     rm -rf ~/.config/containers/podman
-    echo "Cleanup finshed..."
+    echo "Cleanup finished..."
 fi
 
 # get running Podman Desktop instances and terminate them
@@ -391,7 +391,7 @@ if (( extTests == 1 )); then
     fi
     pnpm add -D @podman-desktop/tests-playwright@next
     cd "$workingDir/$extRepo"
-    echo "Installing dependencies of $extRrepo"
+    echo "Installing dependencies of $extRepo"
     pnpm install --frozen-lockfile 2>&1 | tee -a $testsOutputLog
     echo "Running the e2e playwright tests using target: $npmTarget"
     pnpm $npmTarget 2>&1 | tee -a $testsOutputLog
