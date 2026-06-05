@@ -40,7 +40,7 @@ saveTraces=1
 cleanMachine=1
 scriptPaths=""
 podmanDownloadUrl=""
-debug=0
+debugScript=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -69,7 +69,7 @@ while [[ $# -gt 0 ]]; do
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
-        --debug) debug="$2"; shift ;;
+        --debugScript) debugScript="$2"; shift ;;
         *) ;;
     esac
     shift
@@ -79,7 +79,7 @@ done
 # SCRIPT ENVIRONMENT INITIALIZATION
 ####################################################################
 
-if [ "$debug" == "1" ]; then
+if [ "$debugScript" == "1" ]; then
     echo "DEBUG: Script parameters:"
     echo "pdUrl=$pdUrl"
     echo "pdPath=$pdPath"
@@ -106,7 +106,7 @@ if [ "$debug" == "1" ]; then
     echo "cleanMachine=$cleanMachine"
     echo "scriptPaths=$scriptPaths"
     echo "podmanDownloadUrl=$podmanDownloadUrl"
-    echo "debug=$debug"
+    echo "debugScript=$debugScript"
 fi
 
 echo "Reading envVars in script: '$envVars'"
@@ -190,6 +190,10 @@ if ! command -v node &> /dev/null; then
     else
         echo "Node installation path not found"
     fi
+else
+    whereis node
+    which node
+    echo $PATH
 fi
 
 # node and npm version check

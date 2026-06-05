@@ -16,6 +16,11 @@ targetFolder=""
 resultsFolder="results"
 fork="podman-desktop"
 branch="main"
+# TODO: integrate repo, appName, gitProviderUrl, debug into RHEL runner logic
+repo="podman-desktop"
+appName="Podman Desktop"
+gitProviderUrl="https://github.com"
+debug=0
 extTests=0
 extRepo=""
 extFork=""
@@ -39,6 +44,10 @@ while [[ $# -gt 0 ]]; do
         --resultsFolder) resultsFolder="$2"; shift ;;
         --fork) fork="$2"; shift ;;
         --branch) branch="$2"; shift ;;
+        --repo) repo="$2"; shift ;;
+        --appName) appName="$2"; shift ;;
+        --gitProviderUrl) gitProviderUrl="$2"; shift ;;
+        --debug) debug="$2"; shift ;;
         --extRepo) extRepo="$2"; shift ;;
         --extTests) extTests="$2"; shift ;;
         --extFork) extFork="$2"; shift ;;

@@ -69,30 +69,42 @@ spec:
   - name: install-wsl
     description: Install WSL on Windows (Windows only)
     default: '0'
+  - name: podman-version
+    description: Podman version to install (RHEL only)
+    default: "''"
 
-  # Podman Desktop Configuration
+  # Application Configuration
   - name: pd-url
-    description: URL to download specific Podman Desktop version
+    description: URL to download application binary
     default: "''"
   - name: pd-path
-    description: Path to existing Podman Desktop binary on target
+    description: Path to existing application binary on target
     default: "''"
+  - name: repo
+    description: Repository name to clone and test
+    default: 'podman-desktop'
+  - name: app-name
+    description: Application display name (e.g. "Podman Desktop", "Kaiden")
+    default: 'Podman Desktop'
+  - name: git-provider-url
+    description: Git provider base URL (e.g. https://github.com, https://gitlab.com)
+    default: 'https://github.com'
 
   # Test Execution Configuration
   - name: fork
-    description: Podman Desktop repo fork
+    description: Base repository fork/org
     default: 'podman-desktop'
   - name: branch
-    description: Podman Desktop repository branch or tag to checkout
+    description: Repository branch or tag to checkout
     default: 'main'
   - name: ext-repo
-    description: Podman Desktop Extension repo name
+    description: Extension repository name
     default: "''"
   - name: ext-fork
-    description: Podman Desktop extension repo fork
+    description: Extension repository fork
     default: "''"
   - name: ext-branch
-    description: Podman Desktop extension branch or tag to checkout
+    description: Extension branch or tag to checkout
     default: "''"
   - name: ext-tests
     description: Whether to run E2E tests from the extension
@@ -100,6 +112,9 @@ spec:
   - name: npm-target
     description: npm script task for tests execution
     default: 'test:e2e'
+  - name: run-as-admin
+    description: Run tests as admin (Windows only)
+    default: '0'
 
   # Environment & Secrets
   - name: env-vars
@@ -128,6 +143,9 @@ spec:
   - name: target-cleanup
     description: 'this param controls if folder on target host will be removed. Defaults true'
     default: 'true'
+  - name: debug-script
+    description: Print all script parameters for debugging
+    default: '0'
 
   results:
   - name: duration
@@ -184,6 +202,9 @@ spec:
         fi
         cmd="$cmd -fork $(params.fork) "
         cmd="$cmd -branch $(params.branch) "
+        cmd="$cmd -repo $(params.repo) "
+        cmd="$cmd -appName '$(params.app-name)' "
+        cmd="$cmd -gitProviderUrl $(params.git-provider-url) "
         cmd="$cmd -extTests $(params.ext-tests) "
         if [[ -n "$(params.ext-repo)" ]]; then
           cmd="$cmd -extRepo $(params.ext-repo) "
@@ -215,6 +236,8 @@ spec:
           cmd="$cmd -podmanProvider $(params.podman-provider) "
         fi
         cmd="$cmd -saveTraces $(params.save-traces) "
+        cmd="$cmd -runAsAdmin $(params.run-as-admin) "
+        cmd="$cmd -debugScript $(params.debug-script) "
       else
         # Darwin and rhel shared parameters
         cmd="${TARGET_FOLDER}/runner.sh "
@@ -240,6 +263,9 @@ spec:
         cmd="$cmd --secretFile $(params.secret-file) "
         cmd="$cmd --fork $(params.fork) "
         cmd="$cmd --branch $(params.branch) "
+        cmd="$cmd --repo $(params.repo) "
+        cmd="$cmd --appName '$(params.app-name)' "
+        cmd="$cmd --gitProviderUrl $(params.git-provider-url) "
         cmd="$cmd --npmTarget $(params.npm-target) "
         if [[ -n "$(params.podman-path)" ]]; then
           cmd="$cmd --podmanPath $(params.podman-path) "
@@ -248,8 +274,16 @@ spec:
           cmd="$cmd --podmanDownloadUrl $(params.podman-download-url) "
         fi
         cmd="$cmd --saveTraces $(params.save-traces) "
+        cmd="$cmd --cleanMachine $(params.clean-machine) "
+        cmd="$cmd --debugScript $(params.debug-script) "
         if [[ -n "$(params.script-paths)" ]]; then
           cmd="$cmd --scriptPaths $(params.script-paths) "
+        fi
+        # rhel specific parameters
+        if [[ $(params.os) == "rhel" ]]; then
+          if [[ -n "$(params.podman-version)" ]]; then
+            cmd="$cmd --podmanVersion $(params.podman-version) "
+          fi
         fi
         # darwin specific parameters
         if [[ $(params.os) == "darwin" ]]; then
@@ -259,7 +293,6 @@ spec:
           if [[ -n "$(params.podman-provider)" ]]; then
             cmd="$cmd --podmanProvider $(params.podman-provider) "
           fi
-          cmd="$cmd --cleanMachine $(params.clean-machine) "
         fi
       fi
 

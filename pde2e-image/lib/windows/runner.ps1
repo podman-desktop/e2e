@@ -54,7 +54,7 @@ param(
     [Parameter(HelpMessage = 'Install WSL on Windows, default is 0/false')]
     $installWSL = '0',
     [Parameter(HelpMessage = 'Print all script parameters, default is 0/false')]
-    $debug = '0'
+    $debugScript = '0'
 )
 
 # Map display name to installation slug
@@ -82,7 +82,7 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\windows\common\common.ps1"
 
 # Debug output
-if ($debug -eq "1") {
+if ($debugScript -eq "1") {
     Write-Host "DEBUG: Script parameters:"
     Write-Host "pdUrl=$pdUrl"
     Write-Host "pdPath=$pdPath"
@@ -111,7 +111,7 @@ if ($debug -eq "1") {
     Write-Host "runAsAdmin=$runAsAdmin"
     Write-Host "podmanDownloadUrl=$podmanDownloadUrl"
     Write-Host "installWSL=$installWSL"
-    Write-Host "debug=$debug"
+    Write-Host "debugScript=$debugScript"
 }
 
 # Execution beginning
