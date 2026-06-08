@@ -9,7 +9,10 @@ function Command-Exists($command) {
 # Download application binary
 function Download-App($fileName) {
     Write-Host "Downloading application from $pdUrl and saving to $fileName"
-    curl.exe -L $pdUrl -o $fileName
+    curl.exe -fL --retry 3 --retry-delay 2 $pdUrl -o $fileName
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -Path $fileName -PathType Leaf)) {
+        throw "Failed to download application from $pdUrl to $fileName"
+    }
 }
 
 # Copy files if source exists

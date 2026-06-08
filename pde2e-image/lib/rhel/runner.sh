@@ -20,7 +20,7 @@ branch="main"
 repo="podman-desktop"
 appName="Podman Desktop"
 gitProviderUrl="https://github.com"
-debug=0
+debugScript=0
 extTests=0
 extRepo=""
 extFork=""
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
         --repo) repo="$2"; shift ;;
         --appName) appName="$2"; shift ;;
         --gitProviderUrl) gitProviderUrl="$2"; shift ;;
-        --debug) debug="$2"; shift ;;
+        --debugScript) debugScript="$2"; shift ;;
         --extRepo) extRepo="$2"; shift ;;
         --extTests) extTests="$2"; shift ;;
         --extFork) extFork="$2"; shift ;;
