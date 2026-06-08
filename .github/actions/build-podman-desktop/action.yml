@@ -41,6 +41,11 @@ inputs:
     default: 'main'
     type: string
     example: 'main'
+  repo:
+    description: 'The repository name to clone (e.g., podman-desktop, kaiden).'
+    required: false
+    default: 'podman-desktop'
+    type: string
   target-folder:
     description: 'The target folder on the remote host where the build will occur.'
     required: false
@@ -107,6 +112,7 @@ runs:
                 -resultsFolder ${{ inputs.results-folder }} \
                 -fork ${{ inputs.fork }} \
                 -branch ${{ inputs.branch }} \
+                -repo ${{ inputs.repo }} \
                 ${ENV_VARS_PARAM}
                 
         echo "Build container started. Tailing logs..."

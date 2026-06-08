@@ -38,6 +38,14 @@ inputs:
   branch-name:
     description: 'The branch of the fork repository to check out.'
     required: true
+  repo:
+    description: 'The repository name to clone (e.g., podman-desktop, kaiden).'
+    required: false
+    default: 'podman-desktop'
+  app-name:
+    description: 'The application display name (e.g., Podman Desktop, Kaiden).'
+    required: false
+    default: 'Podman Desktop'
   npm-target:
     description: 'The npm target script to run for the tests (e.g., test-e2e).'
     required: true
@@ -174,6 +182,8 @@ runs:
                 ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \
                 -branch ${{ inputs.branch-name }} \
+                -repo ${{ inputs.repo }} \
+                -appName "${{ inputs.app-name }}" \
                 ${EXT_REPO_PARAM} \
                 ${EXT_FORK_PARAM} \
                 ${EXT_BRANCH_PARAM} \
