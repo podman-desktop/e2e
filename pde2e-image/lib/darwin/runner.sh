@@ -358,11 +358,13 @@ if (( initialize == 1 )); then
 fi
 
 # Podman desktop binary
+echo "Application installation and preparation for running with e2e tests..."
 podmanDesktopBinary=""
 appPath=""
 
 if [ -z "$pdPath" ]; then
     if [ -n "$pdUrl" ]; then
+        echo "Downloading app from pdUrl parameter: $pdUrl"
         download_app
         dmgPath="$workingDir/app-installer.dmg"
         if ! file "$dmgPath" | grep -q "zlib"; then
@@ -390,9 +392,13 @@ if [ -z "$pdPath" ]; then
         # sudo codesign --force --deep --sign - "$appPath"
         codesign --verify --deep --verbose=2 "$appPath"
         podmanDesktopBinary="$appPath/Contents/MacOS/${appName}"
+    else
+        echo "Nor pdUrl or pdPath is set, continue in development mode..."
     fi
 else
+    echo "Setting podmanDesktopBinary path by pdPath: $pdPath"
     podmanDesktopBinary="$pdPath"
+    # check that app does not have quarantine attribute - which is the case after manual install from dmg
 fi
 
 if [ -n "$podmanDesktopBinary" ]; then
