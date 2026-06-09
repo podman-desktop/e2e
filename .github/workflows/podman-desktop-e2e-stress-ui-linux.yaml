@@ -140,11 +140,14 @@ jobs:
         
         # Capture baseline image count before creating test objects.
         # Podman Desktop lists images from all detected engines (Podman + Docker on GHA runners).
-        podmanBaseline=$(podman images --format json | jq '. | length')
+        # Podman returns a JSON array; Docker returns one JSON object per line (use jq -s to count).
+        podmanBaseline=$(podman images --format json | jq -er 'length' 2>/dev/null) || podmanBaseline=0
         dockerBaseline=0
         if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-          dockerBaseline=$(docker images --format json | jq '. | length')
+          dockerBaseline=$(docker images --format json | jq -s 'length' 2>/dev/null) || dockerBaseline=0
         fi
+        podmanBaseline=${podmanBaseline:-0}
+        dockerBaseline=${dockerBaseline:-0}
         BASELINE_IMAGE_COUNT=$((podmanBaseline + dockerBaseline))
         echo "Podman baseline images: $podmanBaseline"
         echo "Docker baseline images: $dockerBaseline"
