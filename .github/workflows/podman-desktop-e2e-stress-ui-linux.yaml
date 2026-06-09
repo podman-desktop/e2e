@@ -138,8 +138,16 @@ jobs:
 
         podman pull $testImage
         
-        # Capture baseline image count before creating test objects
-        BASELINE_IMAGE_COUNT=$(podman images --format json | jq '. | length')
+        # Capture baseline image count before creating test objects.
+        # Podman Desktop lists images from all detected engines (Podman + Docker on GHA runners).
+        podmanBaseline=$(podman images --format json | jq '. | length')
+        dockerBaseline=0
+        if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+          dockerBaseline=$(docker images --format json | jq '. | length')
+        fi
+        BASELINE_IMAGE_COUNT=$((podmanBaseline + dockerBaseline))
+        echo "Podman baseline images: $podmanBaseline"
+        echo "Docker baseline images: $dockerBaseline"
         echo "BASELINE_IMAGE_COUNT=$BASELINE_IMAGE_COUNT" >> $GITHUB_ENV
         echo "BASELINE_IMAGE_COUNT: $BASELINE_IMAGE_COUNT"
         
