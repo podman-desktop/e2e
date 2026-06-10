@@ -21,6 +21,9 @@ targetFolder=""
 resultsFolder="results"
 fork="podman-desktop"
 branch="main"
+repo="podman-desktop"
+appName="Podman Desktop"
+gitProviderUrl="https://github.com"
 extTests=0
 extRepo=""
 extFork=""
@@ -37,6 +40,7 @@ saveTraces=1
 cleanMachine=1
 scriptPaths=""
 podmanDownloadUrl=""
+debugScript=0
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -46,6 +50,9 @@ while [[ $# -gt 0 ]]; do
         --resultsFolder) resultsFolder="$2"; shift ;;
         --fork) fork="$2"; shift ;;
         --branch) branch="$2"; shift ;;
+        --repo) repo="$2"; shift ;;
+        --appName) appName="$2"; shift ;;
+        --gitProviderUrl) gitProviderUrl="$2"; shift ;;
         --extRepo) extRepo="$2"; shift ;;
         --extTests) extTests="$2"; shift ;;
         --extFork) extFork="$2"; shift ;;
@@ -62,6 +69,7 @@ while [[ $# -gt 0 ]]; do
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
+        --debugScript) debugScript="$2"; shift ;;
         *) ;;
     esac
     shift
@@ -71,9 +79,39 @@ done
 # SCRIPT ENVIRONMENT INITIALIZATION
 ####################################################################
 
+if [ "$debugScript" == "1" ]; then
+    echo "DEBUG: Script parameters:"
+    echo "pdUrl=$pdUrl"
+    echo "pdPath=$pdPath"
+    echo "targetFolder=$targetFolder"
+    echo "resultsFolder=$resultsFolder"
+    echo "fork=$fork"
+    echo "branch=$branch"
+    echo "repo=$repo"
+    echo "appName=$appName"
+    echo "gitProviderUrl=$gitProviderUrl"
+    echo "extTests=$extTests"
+    echo "extRepo=$extRepo"
+    echo "extFork=$extFork"
+    echo "extBranch=$extBranch"
+    echo "npmTarget=$npmTarget"
+    echo "podmanPath=$podmanPath"
+    echo "initialize=$initialize"
+    echo "start=$start"
+    echo "rootful=$rootful"
+    echo "envVars=$envVars"
+    echo "secretFile=$secretFile"
+    echo "podmanProvider=$podmanProvider"
+    echo "saveTraces=$saveTraces"
+    echo "cleanMachine=$cleanMachine"
+    echo "scriptPaths=$scriptPaths"
+    echo "podmanDownloadUrl=$podmanDownloadUrl"
+    echo "debugScript=$debugScript"
+fi
+
 echo "Reading envVars in script: '$envVars'"
 
-echo "Podman desktop E2E runner script is being run..."
+echo "E2E runner script is being run for $appName (repo: $repo)..."
 
 if [ -z "$targetFolder" ]; then
     echo "Error: targetFolder is required"
@@ -116,10 +154,10 @@ fi
 # TOOLS INSTALLATION
 ###########################################################
 
-# Download Podman Desktop
-download_pd() {
-    echo "Downloading Podman Desktop dmg from $pdUrl"
-    curl -L -O "$pdUrl"
+# Download application installer
+download_app() {
+    echo "Downloading application installer from $pdUrl"
+    curl -L -o "app-installer.dmg" "$pdUrl"
 }
 
 # node installation
@@ -152,6 +190,10 @@ if ! command -v node &> /dev/null; then
     else
         echo "Node installation path not found"
     fi
+else
+    whereis node
+    which node
+    echo $PATH
 fi
 
 # node and npm version check
@@ -280,15 +322,15 @@ if (( cleanMachine == 1 )); then
     echo "Cleanup finished..."
 fi
 
-# get running Podman Desktop instances and terminate them
+# get running application instances and terminate them
 exit_status=0
-echo "pid of running Podman Desktop instances:"
-pgrep -f "Podman Desktop" || exit_status=$?
+echo "pid of running $appName instances:"
+pgrep -f "$appName" || exit_status=$?
 if (( exit_status == 0 )); then
-    echo "Podman Desktop is running, terminating..."
-    kill -9 $(pgrep -f "Podman Desktop")
+    echo "$appName is running, terminating..."
+    kill -9 $(pgrep -f "$appName")
 else
-    echo "No running Podman Desktop"
+    echo "No running $appName"
 fi
 
 # Configure Podman Machine
@@ -316,35 +358,55 @@ if (( initialize == 1 )); then
 fi
 
 # Podman desktop binary
+echo "Application installation and preparation for running with e2e tests..."
 podmanDesktopBinary=""
 appPath=""
 
 if [ -z "$pdPath" ]; then
-    if [ -n "$pdUrl" ]; then    
-        download_pd
-        dmgPath=$(realpath $(find . -name *podman-desktop*))
-        version=$(echo $dmgPath | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-        hdiutil attach $dmgPath
-        pdVolumePath=$(find /Volumes -name "*Podman Desktop $version*" -maxdepth 1)
-        echo "PD Volume path: $pdVolumePath"
-        sudo cp -R "$pdVolumePath/Podman Desktop.app" /Applications
+    if [ -n "$pdUrl" ]; then
+        echo "Downloading app from pdUrl parameter: $pdUrl"
+        download_app
+        dmgPath="$workingDir/app-installer.dmg"
+        if ! file "$dmgPath" | grep -q "zlib"; then
+            echo "Error: Downloaded file is not a valid DMG image"
+            file "$dmgPath"
+            exit 1
+        fi
+        version=$(echo "$pdUrl" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        if [ -z "$version" ]; then
+            echo "Warning: Could not extract version from URL, searching for app volume without version"
+            pdVolumePath=$(find /Volumes -name "*${appName}*" -maxdepth 1 | head -1)
+        else
+            pdVolumePath=$(find /Volumes -name "*${appName} ${version}*" -maxdepth 1 | head -1)
+        fi
+        if ! hdiutil attach "$dmgPath"; then
+            echo "Error: hdiutil attach failed - image not recognised"
+            exit 1
+        fi
+        pdVolumePath=$(find /Volumes -name "*${appName} ${version}*" -maxdepth 1 | head -1)
+        echo "Volume path: $pdVolumePath"
+        sudo cp -R "$pdVolumePath/${appName}.app" /Applications
         hdiutil detach "$pdVolumePath"
         # codesign the extracted app
-        appPath="/Applications/Podman Desktop.app"
-        sudo codesign --force --deep --sign - "$appPath"
+        appPath="/Applications/${appName}.app"
+        # sudo codesign --force --deep --sign - "$appPath"
         codesign --verify --deep --verbose=2 "$appPath"
-        podmanDesktopBinary="$appPath/Contents/MacOS/Podman Desktop"
+        podmanDesktopBinary="$appPath/Contents/MacOS/${appName}"
+    else
+        echo "Nor pdUrl or pdPath is set, continue in development mode..."
     fi
 else
+    echo "Setting podmanDesktopBinary path by pdPath: $pdPath"
     podmanDesktopBinary="$pdPath"
+    # check that app does not have quarantine attribute - which is the case after manual install from dmg
 fi
 
 if [ -n "$podmanDesktopBinary" ]; then
     echo "Setting PODMAN_DESKTOP_BINARY to: $podmanDesktopBinary"
     export PODMAN_DESKTOP_BINARY="$podmanDesktopBinary"
 elif (( extTests == 1 )); then
-    echo "Setting PODMAN_DESKTOP_ARGS to: $workingDir/podman-desktop"
-    export PODMAN_DESKTOP_ARGS="$workingDir/podman-desktop"
+    echo "Setting PODMAN_DESKTOP_ARGS to: $workingDir/$repo"
+    export PODMAN_DESKTOP_ARGS="$workingDir/$repo"
 fi
 
 ###################################
@@ -353,18 +415,18 @@ fi
 
 export CI=true
 testsOutputLog="$workingDir/$resultsFolder/tests.log"
-# Checkout Podman Desktop only if necessary
+# Checkout repository only if necessary
 if [[ "$extTests" -eq 1 ]] && [ -n "$podmanDesktopBinary" ] ; then
-    echo "Running ext. tests and podman Desktop binary is specified, skipping checkout for podman-desktop"
+    echo "Running ext. tests and binary is specified, skipping checkout for $repo"
 else
-    echo "Checking out Podman Desktop repository"
-    clone_checkout "podman-desktop" $fork $branch
-    cd "$workingDir/podman-desktop"
+    echo "Checking out $repo repository"
+    clone_checkout "$repo" "$fork" "$branch" "$gitProviderUrl"
+    cd "$workingDir/$repo" || exit
     echo "Installing dependencies and storing pnpm run output in: $testsOutputLog"
     pnpm install --frozen-lockfile 2>&1 | tee -a $testsOutputLog
     # extract since tests should be run afte execute scripts
     if [[ "$extTests" -eq 1 ]]; then
-        echo "Building podman-desktop for extension e2e tests"
+        echo "Building $repo for extension e2e tests"
         pnpm test:e2e:build 2>&1 | tee -a $testsOutputLog
     fi
 fi
@@ -397,10 +459,10 @@ if (( extTests == 1 )); then
     pnpm $npmTarget 2>&1 | tee -a $testsOutputLog
     ## Collect results
     collect_logs $extRepo
-else 
+else
     echo "Running the e2e playwright tests using target: $npmTarget, binary path, if any: $podmanDesktopBinary"
     pnpm "$npmTarget" 2>&1 | tee -a $testsOutputLog
-    collect_logs "podman-desktop"
+    collect_logs "$repo"
 fi
 
 ###################################
@@ -424,7 +486,7 @@ fi
 
 if [ -n "$podmanDesktopBinary" ]; then
     # removing installed app
-    echo "Removing Podman Desktop app from /Applications"
+    echo "Removing $appName app from /Applications"
     sudo rm -rf "$appPath"
 fi
 

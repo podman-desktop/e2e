@@ -122,19 +122,19 @@ load_secrets() {
 
 # Clone repository and checkout specific branch
 clone_checkout() {
-    # Checkout Podman Desktop if it does not exist
     local_repo=$1
     local_fork=$2
     local_branch=$3
+    local_git_provider_url="${4:-https://github.com}"
     echo "Working Dir: $workingDir"
-    cd $workingDir
+    cd $workingDir || exit
     echo "Cloning $local_repo"
-    if [ -d $local_repo ]; then
-        echo "$local_repo github repo exists"
+    if [ -d "$local_repo" ]; then
+        echo "$local_repo repo exists"
     else
-        repositoryURL="https://github.com/$local_fork/$local_repo.git"
+        repositoryURL="$local_git_provider_url/$local_fork/$local_repo.git"
         echo "Checking out $repositoryURL"
-        git clone $repositoryURL
+        git clone "$repositoryURL"
     fi
 
     cd $local_repo || exit

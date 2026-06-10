@@ -6,10 +6,13 @@ function Command-Exists($command) {
     return $?
 }
 
-# Download Podman Desktop
-function Download-PD($fileName) {
-    Write-Host "Downloading Podman Desktop from $pdUrl and saving to $fileName"
-    curl.exe -L $pdUrl -o $fileName
+# Download application binary
+function Download-App($fileName) {
+    Write-Host "Downloading application from $pdUrl and saving to $fileName"
+    curl.exe -fL --retry 3 --retry-delay 2 $pdUrl -o $fileName
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -Path $fileName -PathType Leaf)) {
+        throw "Failed to download application from $pdUrl to $fileName"
+    }
 }
 
 # Copy files if source exists
@@ -23,16 +26,14 @@ function Copy-Exists($source, $target) {
 }
 
 # Clone repository and checkout specific branch
-function Clone-Checkout($repo, $fork, $branch) {
-    # clean up previous folder
+function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github.com") {
     cd $workingDir
     write-host "Working Dir: " $workingDir
     write-host "Cloning " $repo
     if (Test-Path -Path $repo) {
         write-host "repository already exists"
     } else {
-        # Clone the GitHub repository and switch to the specified branch
-        $repositoryURL ="https://github.com/$fork/$repo.git"
+        $repositoryURL = "$gitProviderUrl/$fork/$repo.git"
         write-host "Checking out" $repositoryURL
         git clone $repositoryURL
     }
@@ -69,9 +70,9 @@ function Load-Variables() {
         $global:scriptEnvVars += "PODMAN_DESKTOP_BINARY"
         $global:envVarDefs += "PODMAN_DESKTOP_BINARY=$podmanDesktopBinary"
     } elseif ($extTests -eq "1") {
-        Set-Item -Path "env:PODMAN_DESKTOP_ARGS" -Value "$workingDir\podman-desktop"
+        Set-Item -Path "env:PODMAN_DESKTOP_ARGS" -Value "$workingDir\$repo"
         $global:scriptEnvVars += "PODMAN_DESKTOP_ARGS"
-        $global:envVarDefs += "PODMAN_DESKTOP_ARGS=$workingDir\podman-desktop"
+        $global:envVarDefs += "PODMAN_DESKTOP_ARGS=$workingDir\$repo"
     }
     # Check if the input string is not null or empty
     if (-not [string]::IsNullOrWhiteSpace($envVars)) {

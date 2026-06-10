@@ -111,7 +111,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.1.0-darwin \
+  quay.io/odockal/pde2e-image:v0.1.1-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
@@ -137,7 +137,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.1.0-darwin \
+  quay.io/odockal/pde2e-image:v0.1.1-darwin \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
@@ -154,6 +154,34 @@ podman run --rm -d --name pde2e-image-run \
   podman logs -f pde2e-image-run
 ```
 
+### MacOS Example without Podman, with remote Custom build of Podman Desktop, using CDP
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-mac) \
+  -e TARGET_HOST_USERNAME=$(cat username-mac) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-mac \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.1.1-darwin \
+    pd-e2e/runner.sh \
+    --targetFolder pd-e2e \
+    --resultsFolder results \
+    --fork podman-desktop \
+    --branch main \
+    --repo podman-desktop \
+    --appName "'Custom build of Podman Desktop'" \
+    --pdUrl "'https://somepage.domain/my-app.exe'" \
+    --envVars DEBUGGING_PORT=9222 \
+    --npmTarget "test:e2e:smoke:run" \
+    --podmanProvider "libkrun" \
+    --debug 1
+podman logs -f pde2e-image-run
+```
+
 ### RHEL Example without Podman, with remote Podman Desktop, using CDP
 
 ```sh
@@ -166,12 +194,12 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.1.0-rhel \
+  quay.io/odockal/pde2e-image:v0.1.1-rhel \
     pd-e2e/runner.sh \
     --targetFolder pd-e2e \
     --resultsFolder results \
-    --fork odockal \
-    --branch dashboard-test \
+    --fork podman-desktop \
+    --branch main \
     --npmTarget "test:e2e:smoke:run"
 # get the logs
 podman logs -f pde2e-image-run
@@ -190,7 +218,7 @@ podman run --rm -d --name pde2e-image-run \
   -e DEBUG=true \
   -v $PWD:/data:z \
   -v $PWD/secrets.txt:/opt/pde2e-image/secrets.txt:z \
-  quay.io/odockal/pde2e-image:v0.1.0-windows \
+  quay.io/odockal/pde2e-image:v0.1.1-windows \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
@@ -207,7 +235,7 @@ podman run --rm -d --name pde2e-image-run \
     -podmanProvider "wsl"
 ```
 
-### Windows Example without Podman Installation
+### Podman Desktop Windows Example without Podman Installation
 
 ```sh
 podman run --rm -d --name pde2e-image-run \
@@ -219,7 +247,7 @@ podman run --rm -d --name pde2e-image-run \
   -e OUTPUT_FOLDER=/data \
   -e DEBUG=true \
   -v $PWD:/data:z \
-  quay.io/odockal/pde2e-image:v0.1.0-windows \
+  quay.io/odockal/pde2e-image:v0.1.1-windows \
     pd-e2e/runner.ps1 \
     -targetFolder pd-e2e \
     -resultsFolder results \
@@ -230,7 +258,63 @@ podman run --rm -d --name pde2e-image-run \
     -installWSL 0 \
     -envVars DEBUGGING_PORT=9222 \
     -podmanProvider "wsl"
-  podman logs -f pde2e-image-run
+podman logs -f pde2e-image-run
+```
+
+### RH build of PD Windows Example without Podman Installation
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-win) \
+  -e TARGET_HOST_USERNAME=$(cat username-win) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-win \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.1.1-windows \
+    pd-e2e/runner.ps1 \
+    -targetFolder pd-e2e \
+    -resultsFolder results \
+    -fork odockal \
+    -branch dashboard-test \
+    -repo podman-desktop \
+    -appName "\"Custom build of Podman Desktop\"" \
+    -pdUrl "https://custom.page.domain/my-app-setup.exe" \
+    -npmTarget "test:e2e:smoke:run" \
+    -installWSL 0 \
+    -envVars DEBUGGING_PORT=9222 \
+    -podmanProvider "wsl"
+podman logs -f pde2e-image-run
+```
+
+### Kaiden Windows Example without Podman Installation
+
+```sh
+podman run --rm -d --name pde2e-image-run \
+  -e TARGET_HOST=$(cat host-win) \
+  -e TARGET_HOST_USERNAME=$(cat username-win) \
+  -e TARGET_HOST_KEY_PATH=/data/id_rsa-win \
+  -e TARGET_FOLDER=pd-e2e \
+  -e TARGET_RESULTS=results \
+  -e OUTPUT_FOLDER=/data \
+  -e DEBUG=true \
+  -v $PWD:/data:z \
+  quay.io/odockal/pde2e-image:v0.1.1-windows \
+    pd-e2e/runner.ps1 \
+    -targetFolder pd-e2e \
+    -resultsFolder results \
+    -fork openkaiden \
+    -branch main \
+    -repo kaiden \
+    -appName Kaiden \
+    -pdUrl https://github.com/openkaiden/kaiden/releases/download/v0.2.3/kaiden-0.2.3-setup-x64.exe \
+    -npmTarget "test:e2e:smoke" \
+    -installWSL 0 \
+    -envVars DEBUGGING_PORT=9222 \
+    -podmanProvider "wsl"
+podman logs -f pde2e-image-run
 ```
 
 ### Extension Testing Example (without Podman installation)

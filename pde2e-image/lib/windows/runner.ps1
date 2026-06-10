@@ -1,18 +1,22 @@
 param(
-    [Parameter(HelpMessage='url to download the exe for podman desktop, in case we want to test an specific build')]
+    [Parameter(HelpMessage='url to download the exe for app to test, in case we want to test an specific build')]
     $pdUrl="",
-    [Parameter(HelpMessage='path for the exe for podman desktop to be tested')]
+    [Parameter(HelpMessage='path to the executable of the application to be tested')]
     $pdPath="",
     [Parameter(Mandatory,HelpMessage='folder on target host where assets are copied')]
     $targetFolder,
-    [Parameter(Mandatory,HelpMessage='Results folder')]
+    [Parameter(HelpMessage='Results folder')]
     $resultsFolder="results",
-    [Parameter(HelpMessage = 'Podman Desktop Fork')]
+    [Parameter(HelpMessage = 'Base Repository Fork')]
     [string]$fork = "podman-desktop",
-    [Parameter(HelpMessage = 'Podman Desktop Branch')]
+    [Parameter(HelpMessage = 'Base Repo Branch')]
     [string]$branch = "main",
-    [Parameter(HelpMessage = 'Podman Desktop Repository name')]
+    [Parameter(HelpMessage = 'Base Repository name')]
     [string]$repo = "podman-desktop",
+    [Parameter(HelpMessage = 'Application display name')]
+    [string]$appName = "Podman Desktop",
+    [Parameter(HelpMessage = 'Git provider base URL')]
+    [string]$gitProviderUrl = "https://github.com",
     [Parameter(HelpMessage = 'Extension repo')]
     [string]$extRepo = "",
     [Parameter(HelpMessage = 'Extension Fork')]
@@ -48,8 +52,22 @@ param(
     [Parameter(HelpMessage = 'Podman download URL for installation')]
     [string]$podmanDownloadUrl = "",
     [Parameter(HelpMessage = 'Install WSL on Windows, default is 0/false')]
-    $installWSL = '0'
+    $installWSL = '0',
+    [Parameter(HelpMessage = 'Print all script parameters, default is 0/false')]
+    $debugScript = '0'
 )
+
+# Map display name to installation slug
+$appNameSlugMap = @{
+    "Red Hat build of Podman Desktop" = "rh-podman-desktop"
+    "Podman Desktop"                  = "podman-desktop"
+    "Kaiden"                          = "kaiden"
+}
+if ($appNameSlugMap.ContainsKey($appName)) {
+    $appNameSlug = $appNameSlugMap[$appName]
+} else {
+    $appNameSlug = $appName.ToLower().Replace(' ', '-')
+}
 
 # Program Versions
 $nodejsLatestVersion = "v24.15.0"
@@ -63,8 +81,41 @@ $global:envVarDefs = @()
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\windows\common\common.ps1"
 
+# Debug output
+if ($debugScript -eq "1") {
+    Write-Host "DEBUG: Script parameters:"
+    Write-Host "pdUrl=$pdUrl"
+    Write-Host "pdPath=$pdPath"
+    Write-Host "targetFolder=$targetFolder"
+    Write-Host "resultsFolder=$resultsFolder"
+    Write-Host "fork=$fork"
+    Write-Host "branch=$branch"
+    Write-Host "repo=$repo"
+    Write-Host "appName=$appName"
+    Write-Host "gitProviderUrl=$gitProviderUrl"
+    Write-Host "extRepo=$extRepo"
+    Write-Host "extFork=$extFork"
+    Write-Host "extBranch=$extBranch"
+    Write-Host "npmTarget=$npmTarget"
+    Write-Host "extTests=$extTests"
+    Write-Host "podmanPath=$podmanPath"
+    Write-Host "initialize=$initialize"
+    Write-Host "start=$start"
+    Write-Host "rootful=$rootful"
+    Write-Host "userNetworking=$userNetworking"
+    Write-Host "envVars=$envVars"
+    Write-Host "podmanProvider=$podmanProvider"
+    Write-Host "secretFile=$secretFile"
+    Write-Host "scriptPaths=$scriptPaths"
+    Write-Host "saveTraces=$saveTraces"
+    Write-Host "runAsAdmin=$runAsAdmin"
+    Write-Host "podmanDownloadUrl=$podmanDownloadUrl"
+    Write-Host "installWSL=$installWSL"
+    Write-Host "debugScript=$debugScript"
+}
+
 # Execution beginning
-Write-Host "Podman desktop E2E runner script is being run..."
+Write-Host "E2E runner script is being run for $appName (repo: $repo)..."
 $actualUser=whoami
 Write-Host "Whoami: $actualUser"
 
@@ -99,7 +150,7 @@ if (-not(Test-Path -Path $toolsInstallDir)) {
     mkdir -p $toolsInstallDir
 }
 
-# Installation of podman desktop
+# Installation of application
 $podmanDesktopBinary=""
 
 if ([string]::IsNullOrWhiteSpace($pdPath))
@@ -107,48 +158,43 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
     if (-not [string]::IsNullOrWhiteSpace($pdUrl)) {
         # set binary path
         if ($pdUrl.Contains('setup')) {
-            # TODO: parametrization, in cases where product is not podman-desktop
-            Download-PD('pd-setup.exe')
-            write-host "Installing Podman Desktop from setup.exe file..."
-            # run the installer
-            # TODO: add logic to install pd either under user or for the machine scope (PROGRAM FILES)
+            Download-App('pd-setup.exe')
+            write-host "Installing $appName from setup.exe file..."
             Start-Process -Wait -FilePath "$workingDir\pd-setup.exe" -ArgumentList "/S" -PassThru
-            # podman desktop should be under $env:LOCALAPPDATA\Programs\podman-desktop
-            # newly, it can be on $env:LOCALAPPDATA\Programs\Podman Desktop\
             $localAppDataPrograms="$env:LOCALAPPDATA\Programs"
             Get-ChildItem -Path $localAppDataPrograms
-            $pdLocalAppData="$localAppDataPrograms\podman-desktop"
+            $pdLocalAppData="$localAppDataPrograms\$appNameSlug"
             if (Test-Path -Path "$pdLocalAppData") {
-                write-host "Podman Desktop installation path: $pdLocalAppData"
+                write-host "$appName installation path: $pdLocalAppData"
             } else {
-                $pdLocalAppData="$localAppDataPrograms\Podman Desktop"
+                $pdLocalAppData="$localAppDataPrograms\$appName"
                 if (Test-Path -Path "$pdLocalAppData") {
-                    write-host "Podman Desktop new installation path path: $pdLocalAppData"
+                    write-host "$appName installation path: $pdLocalAppData"
                 } else {
-                    write-host "Podman Desktop installation path is missing..."
+                    write-host "$appName installation path is missing..."
                     exit 1
                 }
             }
-            $pdPath="$pdLocalAppData\Podman Desktop.exe"
-            write-host "Podman Desktop is installed on expected path: $pdLocalAppData"
+            $pdPath="$pdLocalAppData\$appName.exe"
+            write-host "$appName is installed on expected path: $pdLocalAppData"
             if (Test-Path -Path $pdPath -PathType Leaf) {
-                write-host "Podman Desktop installation present..."
+                write-host "$appName installation present..."
                 mv "$pdPath" "$pdLocalAppData\pd.exe"
                 write-host
                 $podmanDesktopBinary="$pdLocalAppData\pd.exe"
             } else {
-                write-host "Podman Desktop binary is missing..."
+                write-host "$appName binary is missing..."
                 ls $pdLocalAppData
                 exit 1
             }
         } else {
-            Download-PD('pd.exe')
+            Download-App('pd.exe')
             write-host "Only a binary is available from url..."
             $podmanDesktopBinary="$workingDir\pd.exe"
         }
     }
 } else {
-    # set podman desktop binary path
+    # set application binary path
     $podmanDesktopBinary=$pdPath
 }
 
@@ -414,21 +460,21 @@ if ($initialize -eq "1") {
 }
 
 
-# checkout podman-desktop
-Clone-Checkout $repo $fork $branch
+# checkout repository
+Clone-Checkout $repo $fork $branch $gitProviderUrl
 
 if ($extTests -eq "1") {
-    Clone-Checkout $extRepo $extFork $extBranch
+    Clone-Checkout $extRepo $extFork $extBranch $gitProviderUrl
 }
 
-# pnpm INSTALL AND TEST PART PODMAN-DESKTOP
-$thisDir="$workingDir\podman-desktop"
+# pnpm INSTALL AND TEST PART
+$thisDir="$workingDir\$repo"
 cd $thisDir
 
 # Execute the arbitrary code from external source
 Execute-Scripts
 
-write-host "Installing dependencies of podman-desktop"
+write-host "Installing dependencies of $repo"
 pnpm install --frozen-lockfile 2>&1 | Tee-Object -FilePath 'output.log' -Append
 
 # Running the e2e tests
@@ -444,9 +490,9 @@ if ($extTests -ne "1") {
         pnpm $npmTarget 2>&1 | Tee-Object -FilePath 'output.log' -Append
     }
     ## Collect results
-    Collect-Logs "podman-desktop"
+    Collect-Logs $repo
 } else {
-    write-host "Building podman-desktop to run e2e from extension repo"
+    write-host "Building $repo to run e2e from extension repo"
     pnpm test:e2e:build 2>&1 | Tee-Object -FilePath 'output.log' -Append
 }
 
