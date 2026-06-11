@@ -117,7 +117,7 @@ podman run --rm -d --name pde2e-image-run \
     --resultsFolder results \
     --fork podman-desktop \
     --branch main \
-    --podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
+    --podmanDownloadUrl "https://github.com/podman-container-tools/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
     --initialize 1 \
     --rootful 1 \
     --start 1 \
@@ -145,7 +145,7 @@ podman run --rm -d --name pde2e-image-run \
     --branch dashboard-test \
     --pdUrl https://github.com/podman-desktop/podman-desktop/releases/download/v1.27.2/podman-desktop-1.27.2-arm64.dmg \
     --envVars DEBUGGING_PORT=9222 \
-    --podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
+    --podmanDownloadUrl "https://github.com/podman-container-tools/podman/releases/download/v5.8.2/podman-remote-release-darwin_arm64.zip" \
     --initialize 1 \
     --rootful 1 \
     --start 1 \
@@ -225,7 +225,7 @@ podman run --rm -d --name pde2e-image-run \
     -fork odockal \
     -branch dashboard-test \
     -pdUrl https://github.com/podman-desktop/podman-desktop/releases/download/v1.27.2/podman-desktop-1.27.2-setup-x64.exe \
-    -podmanDownloadUrl "https://github.com/containers/podman/releases/download/v5.8.2/podman-installer-windows-amd64.msi" \
+    -podmanDownloadUrl "https://github.com/podman-container-tools/podman/releases/download/v5.8.2/podman-installer-windows-amd64.msi" \
     -initialize 1 \
     -rootful 1 \
     -start 1 \
@@ -408,7 +408,7 @@ spec:
     - name: os
       value: "darwin"
     - name: podman-download-url
-      value: "https://github.com/containers/podman/releases/download/v5.2.5/podman-remote-release-darwin_arm64.zip"
+      value: "https://github.com/podman-container-tools/podman/releases/download/v5.2.5/podman-remote-release-darwin_arm64.zip"
     - name: podman-initialize
       value: "1"
     - name: podman-rootful
