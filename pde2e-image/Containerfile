@@ -21,6 +21,7 @@ FROM base AS linux
 ENV OS=linux
 
 FROM linux AS rhel
+COPY /lib/unix/scripts/ ${ASSETS_FOLDER}/scripts/
 COPY /lib/rhel/ ${ASSETS_FOLDER}/
 COPY /lib/unix/ ${ASSETS_FOLDER}/unix/
 COPY /common/unix/ ${ASSETS_FOLDER}/unix/common/
