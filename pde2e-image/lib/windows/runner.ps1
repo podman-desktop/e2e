@@ -152,6 +152,8 @@ if (-not(Test-Path -Path $toolsInstallDir)) {
 
 # Installation of application
 $podmanDesktopBinary=""
+$kaidenBinary=""
+$isKaidenApp = ($appName -eq 'Kaiden') -or ($repo -eq 'kaiden')
 
 if ([string]::IsNullOrWhiteSpace($pdPath))
 {
@@ -179,9 +181,14 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
             write-host "$appName is installed on expected path: $pdLocalAppData"
             if (Test-Path -Path $pdPath -PathType Leaf) {
                 write-host "$appName installation present..."
-                mv "$pdPath" "$pdLocalAppData\pd.exe"
-                write-host
-                $podmanDesktopBinary="$pdLocalAppData\pd.exe"
+                if ($isKaidenApp) {
+                    $kaidenBinary = $pdPath
+                    $podmanDesktopBinary = $pdPath
+                } else {
+                    mv "$pdPath" "$pdLocalAppData\pd.exe"
+                    write-host
+                    $podmanDesktopBinary="$pdLocalAppData\pd.exe"
+                }
             } else {
                 write-host "$appName binary is missing..."
                 ls $pdLocalAppData
@@ -191,11 +198,17 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
             Download-App('pd.exe')
             write-host "Only a binary is available from url..."
             $podmanDesktopBinary="$workingDir\pd.exe"
+            if ($isKaidenApp) {
+                $kaidenBinary = $podmanDesktopBinary
+            }
         }
     }
 } else {
     # set application binary path
     $podmanDesktopBinary=$pdPath
+    if ($isKaidenApp) {
+        $kaidenBinary = $pdPath
+    }
 }
 
 # load variables
