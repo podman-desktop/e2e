@@ -1,3 +1,19 @@
+#
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
 name: pde2e-image release
 
 on:
@@ -30,11 +46,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build darwin image
+      - name: Build images
         working-directory: pde2e-image
         run: |
-          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-darwin \
+          podman build -t ${{ env.IMAGE }}-darwin:v${{ inputs.version }} \
             -f Containerfile --build-arg=OS=darwin \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=${{ inputs.version }} .
+          podman build -t ${{ env.IMAGE }}-windows:v${{ inputs.version }} \
+            -f Containerfile --build-arg=OS=windows \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=${{ inputs.version }} .
+          podman build -t ${{ env.IMAGE }}-rhel:v${{ inputs.version }} \
+            -f Containerfile --build-arg=OS=rhel \
             --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
             --label org.opencontainers.image.revision=${{ github.sha }} \
             --label org.opencontainers.image.version=${{ inputs.version }} .
@@ -42,56 +68,38 @@ jobs:
       - name: Scan darwin image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-darwin
+          image-ref: ${{ env.IMAGE }}-darwin:v${{ inputs.version }}
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Scan windows image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}-windows:v${{ inputs.version }}
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Scan rhel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}-rhel:v${{ inputs.version }}
           format: table
           severity: CRITICAL,HIGH
 
       - name: Push darwin image
         run: |
-          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-darwin
-          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-darwin ${{ env.IMAGE }}:latest-darwin
-          podman push ${{ env.IMAGE }}:latest-darwin
-
-      - name: Build windows image
-        working-directory: pde2e-image
-        run: |
-          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-windows \
-            -f Containerfile --build-arg=OS=windows \
-            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            --label org.opencontainers.image.revision=${{ github.sha }} \
-            --label org.opencontainers.image.version=${{ inputs.version }} .
-
-      - name: Scan windows image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-windows
-          format: table
-          severity: CRITICAL,HIGH
+          podman push ${{ env.IMAGE }}-darwin:v${{ inputs.version }}
+          podman tag ${{ env.IMAGE }}-darwin:v${{ inputs.version }} ${{ env.IMAGE }}-darwin:latest
+          podman push ${{ env.IMAGE }}-darwin:latest
 
       - name: Push windows image
         run: |
-          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-windows
-          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-windows ${{ env.IMAGE }}:latest-windows
-          podman push ${{ env.IMAGE }}:latest-windows
-
-      - name: Build rhel image
-        working-directory: pde2e-image
-        run: |
-          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-rhel \
-            -f Containerfile --build-arg=OS=rhel \
-            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            --label org.opencontainers.image.revision=${{ github.sha }} \
-            --label org.opencontainers.image.version=${{ inputs.version }} .
-
-      - name: Scan rhel image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-rhel
-          format: table
-          severity: CRITICAL,HIGH
+          podman push ${{ env.IMAGE }}-windows:v${{ inputs.version }}
+          podman tag ${{ env.IMAGE }}-windows:v${{ inputs.version }} ${{ env.IMAGE }}-windows:latest
+          podman push ${{ env.IMAGE }}-windows:latest
 
       - name: Push rhel image
         run: |
-          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-rhel
-          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-rhel ${{ env.IMAGE }}:latest-rhel
-          podman push ${{ env.IMAGE }}:latest-rhel
+          podman push ${{ env.IMAGE }}-rhel:v${{ inputs.version }}
+          podman tag ${{ env.IMAGE }}-rhel:v${{ inputs.version }} ${{ env.IMAGE }}-rhel:latest
+          podman push ${{ env.IMAGE }}-rhel:latest
