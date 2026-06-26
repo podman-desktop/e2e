@@ -14,39 +14,48 @@
 # limitations under the License.
 #
 # SPDX-License-Identifier: Apache-2.0
-name: pde2e-image PR check
+name: e2e-runner PR check
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'pde2e-image/**'
-      - '.github/workflows/pde2e-image-pr.yaml'
+      - 'e2e-runner/**'
+      - '.github/workflows/e2e-runner-pr.yaml'
 
 env:
-  IMAGE: ghcr.io/podman-desktop/pde2e-image
+  IMAGE: ghcr.io/podman-desktop/e2e-runner
 
 jobs:
   build:
-    name: Build & scan pde2e-image
+    name: Build & scan e2e-runner
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Build images
-        working-directory: pde2e-image
+      - name: Start podman socket
         run: |
-          systemctl --user enable --now podman.socket
-          podman build -t ${{ env.IMAGE }}-darwin:pr -f Containerfile --build-arg=OS=darwin .
-          podman build -t ${{ env.IMAGE }}-windows:pr -f Containerfile --build-arg=OS=windows .
-          podman build -t ${{ env.IMAGE }}-rhel:pr -f Containerfile --build-arg=OS=rhel .
+          systemctl --user enable --now podman.socket || {
+            echo "::warning::systemd socket activation failed, using podman system service"
+            podman system service --time=0 &
+            sleep 1
+          }
+
+      - name: Build images
+        working-directory: e2e-runner
+        run: |
+          podman build -t ${{ env.IMAGE }}:pr-darwin -f Containerfile --build-arg=OS=darwin .
+          podman build -t ${{ env.IMAGE }}:pr-windows -f Containerfile --build-arg=OS=windows .
+          podman build -t ${{ env.IMAGE }}:pr-rhel -f Containerfile --build-arg=OS=rhel .
 
       - name: Scan darwin image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}-darwin:pr
+          image-ref: ${{ env.IMAGE }}:pr-darwin
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
@@ -54,7 +63,7 @@ jobs:
       - name: Scan windows image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}-windows:pr
+          image-ref: ${{ env.IMAGE }}:pr-windows
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
@@ -62,7 +71,7 @@ jobs:
       - name: Scan rhel image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}-rhel:pr
+          image-ref: ${{ env.IMAGE }}:pr-rhel
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
