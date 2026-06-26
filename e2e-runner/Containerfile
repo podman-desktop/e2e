@@ -2,8 +2,15 @@ ARG OS
 
 FROM quay.io/rhqp/deliverest:v0.0.7 AS base
 
-LABEL org.opencontainers.image.authors="Ondrej Dockal<odockal@redhat.com>"
-ENV ASSETS_FOLDER=/opt/pde2e-image
+LABEL org.opencontainers.image.title="Podman Desktop E2E testing image" \
+      org.opencontainers.image.authors="Ondrej Dockal<odockal@redhat.com>,Anton Misskii<amisskii@redhat.com>" \
+      org.opencontainers.image.url="https://github.com/podman-desktop/e2e" \
+      org.opencontainers.image.description="An image designed to ship Podman Desktop E2E tests into target host" \
+      org.opencontainers.image.vendor="Red Hat" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+
+ENV ASSETS_FOLDER=/opt/e2e-runner
 
 FROM base AS darwin
 COPY /lib/darwin/ ${ASSETS_FOLDER}/

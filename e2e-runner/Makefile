@@ -1,7 +1,7 @@
 VERSION ?= 0.1.1
 CONTAINER_MANAGER ?= podman
-IMG ?= quay.io/odockal/pde2e-image:v${VERSION}
-TKN_IMG ?= quay.io/odockal/pde2e-image-tkn:v${VERSION}
+IMG ?= ghcr.io/podman-desktop/e2e-runner:v${VERSION}
+TKN_IMG ?= ghcr.io/podman-desktop/e2e-runner-tkn:v${VERSION}
 
 TOOLS_DIR := tools
 include tools/tools.mk
