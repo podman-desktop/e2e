@@ -1,0 +1,97 @@
+name: pde2e-image release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.0)'
+        required: true
+        type: string
+
+env:
+  IMAGE: ghcr.io/podman-desktop/pde2e-image
+
+jobs:
+  release:
+    name: Build, scan & release pde2e-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build darwin image
+        working-directory: pde2e-image
+        run: |
+          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-darwin \
+            -f Containerfile --build-arg=OS=darwin \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=${{ inputs.version }} .
+
+      - name: Scan darwin image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-darwin
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Push darwin image
+        run: |
+          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-darwin
+          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-darwin ${{ env.IMAGE }}:latest-darwin
+          podman push ${{ env.IMAGE }}:latest-darwin
+
+      - name: Build windows image
+        working-directory: pde2e-image
+        run: |
+          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-windows \
+            -f Containerfile --build-arg=OS=windows \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=${{ inputs.version }} .
+
+      - name: Scan windows image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-windows
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Push windows image
+        run: |
+          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-windows
+          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-windows ${{ env.IMAGE }}:latest-windows
+          podman push ${{ env.IMAGE }}:latest-windows
+
+      - name: Build rhel image
+        working-directory: pde2e-image
+        run: |
+          podman build -t ${{ env.IMAGE }}:v${{ inputs.version }}-rhel \
+            -f Containerfile --build-arg=OS=rhel \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=${{ inputs.version }} .
+
+      - name: Scan rhel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ inputs.version }}-rhel
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Push rhel image
+        run: |
+          podman push ${{ env.IMAGE }}:v${{ inputs.version }}-rhel
+          podman tag ${{ env.IMAGE }}:v${{ inputs.version }}-rhel ${{ env.IMAGE }}:latest-rhel
+          podman push ${{ env.IMAGE }}:latest-rhel

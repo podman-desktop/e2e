@@ -1,0 +1,55 @@
+name: pde2e-image PR check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pde2e-image/**'
+
+env:
+  IMAGE: ghcr.io/podman-desktop/pde2e-image
+
+jobs:
+  build:
+    name: Build & scan pde2e-image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build darwin image
+        working-directory: pde2e-image
+        run: podman build -t ${{ env.IMAGE }}:pr-darwin -f Containerfile --build-arg=OS=darwin .
+
+      - name: Scan darwin image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:pr-darwin
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Build windows image
+        working-directory: pde2e-image
+        run: podman build -t ${{ env.IMAGE }}:pr-windows -f Containerfile --build-arg=OS=windows .
+
+      - name: Scan windows image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:pr-windows
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Build rhel image
+        working-directory: pde2e-image
+        run: podman build -t ${{ env.IMAGE }}:pr-rhel -f Containerfile --build-arg=OS=rhel .
+
+      - name: Scan rhel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:pr-rhel
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
