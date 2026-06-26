@@ -25,6 +25,10 @@ on:
 env:
   IMAGE: ghcr.io/podman-desktop/pde2e-image
 
+concurrency:
+  group: pde2e-image-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-push:
     name: Build, scan & push pde2e-image
