@@ -21,6 +21,7 @@ on:
     branches: [main]
     paths:
       - 'pde2e-image/**'
+      - '.github/workflows/pde2e-image-pr.yaml'
 
 env:
   IMAGE: ghcr.io/podman-desktop/pde2e-image
@@ -37,6 +38,7 @@ jobs:
       - name: Build images
         working-directory: pde2e-image
         run: |
+          systemctl --user enable --now podman.socket
           podman build -t ${{ env.IMAGE }}-darwin:pr -f Containerfile --build-arg=OS=darwin .
           podman build -t ${{ env.IMAGE }}-windows:pr -f Containerfile --build-arg=OS=windows .
           podman build -t ${{ env.IMAGE }}-rhel:pr -f Containerfile --build-arg=OS=rhel .

@@ -36,6 +36,14 @@ jobs:
       packages: write
 
     steps:
+      - name: Validate release version
+        shell: bash
+        run: |
+          [[ '${{ inputs.version }}' =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Invalid version: '${{ inputs.version }}'" >&2
+            exit 1
+          }
+
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -49,6 +57,7 @@ jobs:
       - name: Build images
         working-directory: pde2e-image
         run: |
+          systemctl --user enable --now podman.socket
           podman build -t ${{ env.IMAGE }}-darwin:v${{ inputs.version }} \
             -f Containerfile --build-arg=OS=darwin \
             --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
@@ -71,6 +80,7 @@ jobs:
           image-ref: ${{ env.IMAGE }}-darwin:v${{ inputs.version }}
           format: table
           severity: CRITICAL,HIGH
+          exit-code: '1'
 
       - name: Scan windows image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -78,6 +88,7 @@ jobs:
           image-ref: ${{ env.IMAGE }}-windows:v${{ inputs.version }}
           format: table
           severity: CRITICAL,HIGH
+          exit-code: '1'
 
       - name: Scan rhel image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -85,6 +96,7 @@ jobs:
           image-ref: ${{ env.IMAGE }}-rhel:v${{ inputs.version }}
           format: table
           severity: CRITICAL,HIGH
+          exit-code: '1'
 
       - name: Push darwin image
         run: |
