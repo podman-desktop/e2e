@@ -19,13 +19,24 @@ if [[ "$PODMAN_VERSION" == "nightly" ]]; then
         list --showduplicates podman 2>/dev/null | grep dev | tail -n1 | cut -d':' -f2 | cut -d'-' -f1 )"
 else
     # For "latest" or specific version, fetch version if needed and install from RPM
+    REQUESTED_PODMAN_VERSION="$PODMAN_VERSION"
     if [[ "$PODMAN_VERSION" == "latest" ]]; then
         PODMAN_VERSION="$(curl -sL https://api.github.com/repos/podman-container-tools/podman/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -n1 | sed 's/^v//')"
     fi
     CUSTOM_PODMAN_URL="https://kojipkgs.fedoraproject.org//packages/podman/${PODMAN_VERSION}/1.${COMPOSE_VERSION}/${ARCH}/podman-${PODMAN_VERSION}-1.${COMPOSE_VERSION}.${ARCH}.rpm"
-    curl -Lo podman.rpm "$CUSTOM_PODMAN_URL"
-    sudo dnf install -y ./podman.rpm
-    rm -f podman.rpm
+    if curl -fLo podman.rpm "$CUSTOM_PODMAN_URL"; then
+        sudo dnf install -y ./podman.rpm
+        rm -f podman.rpm
+    else
+        rm -f podman.rpm
+        if [[ "$REQUESTED_PODMAN_VERSION" != "latest" ]]; then
+            echo "ERROR: Requested Podman ${PODMAN_VERSION} RPM is unavailable on Koji for ${COMPOSE_VERSION}"
+            exit 1
+        fi
+        echo "WARNING: Podman ${PODMAN_VERSION} RPM not available on Koji for ${COMPOSE_VERSION}, falling back to dnf repos"
+        sudo dnf install -y podman --disablerepo=testing-farm-tag-repository
+        PODMAN_VERSION="$(podman --version | cut -d' ' -f3)"
+    fi
 fi
 
 # Verify that the installed Podman version matches the expected version. 
