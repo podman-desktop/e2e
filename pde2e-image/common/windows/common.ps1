@@ -74,6 +74,19 @@ function Load-Variables() {
         $global:scriptEnvVars += "PODMAN_DESKTOP_ARGS"
         $global:envVarDefs += "PODMAN_DESKTOP_ARGS=$workingDir\$repo"
     }
+
+    # Kaiden Playwright tests read KAIDEN_BINARY (not PODMAN_DESKTOP_BINARY)
+    $isKaidenApp = ($appName -eq 'Kaiden') -or ($repo -eq 'kaiden')
+    $binaryForKaiden = $kaidenBinary
+    if (-not $binaryForKaiden -and $podmanDesktopBinary -and $isKaidenApp) {
+        $binaryForKaiden = $podmanDesktopBinary
+    }
+    if ($binaryForKaiden -and $isKaidenApp) {
+        Set-Item -Path "env:KAIDEN_BINARY" -Value "$binaryForKaiden"
+        $global:scriptEnvVars += "KAIDEN_BINARY"
+        $global:envVarDefs += "KAIDEN_BINARY=$binaryForKaiden"
+        Write-Host "Setting env. var.: KAIDEN_BINARY=$binaryForKaiden"
+    }
     # Check if the input string is not null or empty
     if (-not [string]::IsNullOrWhiteSpace($envVars)) {
         # Split the input using comma separator

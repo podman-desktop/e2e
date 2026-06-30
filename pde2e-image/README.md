@@ -291,6 +291,9 @@ podman logs -f pde2e-image-run
 
 ### Kaiden Windows Example without Podman Installation
 
+When `-appName Kaiden` (or `-repo kaiden`) is used, the runner keeps `Kaiden.exe` at
+`%LOCALAPPDATA%\Programs\kaiden\` and exports `KAIDEN_BINARY` for Kaiden's Playwright CDP harness.
+
 ```sh
 podman run --rm -d --name pde2e-image-run \
   -e TARGET_HOST=$(cat host-win) \
