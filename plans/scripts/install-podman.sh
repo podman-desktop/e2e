@@ -23,9 +23,15 @@ else
         PODMAN_VERSION="$(curl -sL https://api.github.com/repos/podman-container-tools/podman/releases | jq -r '.[] | select(.prerelease == false) | .tag_name' | head -n1 | sed 's/^v//')"
     fi
     CUSTOM_PODMAN_URL="https://kojipkgs.fedoraproject.org//packages/podman/${PODMAN_VERSION}/1.${COMPOSE_VERSION}/${ARCH}/podman-${PODMAN_VERSION}-1.${COMPOSE_VERSION}.${ARCH}.rpm"
-    curl -Lo podman.rpm "$CUSTOM_PODMAN_URL"
-    sudo dnf install -y ./podman.rpm
-    rm -f podman.rpm
+    if curl -fLo podman.rpm "$CUSTOM_PODMAN_URL"; then
+        sudo dnf install -y ./podman.rpm
+        rm -f podman.rpm
+    else
+        echo "WARNING: Podman ${PODMAN_VERSION} RPM not available on Koji for ${COMPOSE_VERSION}, falling back to dnf repos"
+        rm -f podman.rpm
+        sudo dnf install -y podman
+        PODMAN_VERSION="$(podman --version | cut -d' ' -f3)"
+    fi
 fi
 
 # Verify that the installed Podman version matches the expected version. 
