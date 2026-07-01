@@ -1,0 +1,153 @@
+#
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+name: e2e-runner release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.2.0)'
+        required: true
+        type: string
+
+env:
+  IMAGE: ghcr.io/podman-desktop/e2e-runner
+
+concurrency:
+  group: e2e-runner-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, scan & release e2e-runner
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env: 
+      VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Validate release version
+        shell: bash
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "Invalid version: '$VERSION'" >&2
+            exit 1
+          }
+
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if latest tag can be updated
+        id: check-latest
+        shell: bash
+        run: |
+          CURRENT=$(skopeo inspect docker://${{ env.IMAGE }}:latest-darwin 2>/dev/null \
+            | jq -r '.Labels["org.opencontainers.image.version"] // empty') || true
+          NEW="$VERSION"
+          if [[ -z "$CURRENT" ]]; then
+            echo "No existing latest tag found, will set latest"
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Current latest version: $CURRENT"
+            echo "New version: $NEW"
+            HIGHER=$(printf '%s\n%s' "$CURRENT" "$NEW" | sort -V | tail -n1)
+            if [[ "$HIGHER" == "$NEW" ]]; then
+              echo "New version is >= current latest, will update latest"
+              echo "update=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::Skipping latest tag update: current latest ($CURRENT) is newer than $NEW"
+              echo "update=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Start podman socket
+        run: |
+          systemctl --user enable --now podman.socket || {
+            echo "::warning::systemd socket activation failed, using podman system service"
+            podman system service --time=0 &
+            sleep 1
+          }
+
+      - name: Build images
+        working-directory: e2e-runner
+        run: |
+          podman build -t ${{ env.IMAGE }}:v$VERSION-darwin \
+            -f Containerfile --build-arg=OS=darwin \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=$VERSION .
+          podman build -t ${{ env.IMAGE }}:v$VERSION-windows \
+            -f Containerfile --build-arg=OS=windows \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=$VERSION .
+          podman build -t ${{ env.IMAGE }}:v$VERSION-rhel \
+            -f Containerfile --build-arg=OS=rhel \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} \
+            --label org.opencontainers.image.version=$VERSION .
+
+      - name: Scan darwin image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-darwin
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Scan windows image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-windows
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Scan rhel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-rhel
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Push versioned images
+        run: |
+          podman push ${{ env.IMAGE }}:v$VERSION-darwin
+          podman push ${{ env.IMAGE }}:v$VERSION-windows
+          podman push ${{ env.IMAGE }}:v$VERSION-rhel
+
+      - name: Push latest images
+        if: steps.check-latest.outputs.update == 'true'
+        run: |
+          podman tag ${{ env.IMAGE }}:v$VERSION-darwin ${{ env.IMAGE }}:latest-darwin
+          podman push ${{ env.IMAGE }}:latest-darwin
+          podman tag ${{ env.IMAGE }}:v$VERSION-windows ${{ env.IMAGE }}:latest-windows
+          podman push ${{ env.IMAGE }}:latest-windows
+          podman tag ${{ env.IMAGE }}:v$VERSION-rhel ${{ env.IMAGE }}:latest-rhel
+          podman push ${{ env.IMAGE }}:latest-rhel

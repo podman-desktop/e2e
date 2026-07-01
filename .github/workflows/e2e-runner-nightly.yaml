@@ -1,0 +1,121 @@
+#
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+name: e2e-runner nightly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'e2e-runner/**'
+      - '.github/workflows/e2e-runner-nightly.yaml'
+
+env:
+  IMAGE: ghcr.io/podman-desktop/e2e-runner
+
+concurrency:
+  group: e2e-runner-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-push:
+    name: Build, scan & push e2e-runner
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Start podman socket
+        run: |
+          systemctl --user enable --now podman.socket || {
+            echo "::warning::systemd socket activation failed, using podman system service"
+            podman system service --time=0 &
+            sleep 1
+          }
+
+      - name: Build images
+        working-directory: e2e-runner
+        run: |
+          podman build -t ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-darwin \
+            -f Containerfile --build-arg=OS=darwin \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} .
+          podman build -t ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-windows \
+            -f Containerfile --build-arg=OS=windows \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} .
+          podman build -t ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-rhel \
+            -f Containerfile --build-arg=OS=rhel \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} .
+
+      - name: Scan darwin image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-darwin
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Scan windows image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-windows
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Scan rhel image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-rhel
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Push darwin image
+        run: |
+          podman push ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-darwin
+          podman tag ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-darwin ${{ env.IMAGE }}:nightly-darwin
+          podman push ${{ env.IMAGE }}:nightly-darwin
+
+      - name: Push windows image
+        run: |
+          podman push ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-windows
+          podman tag ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-windows ${{ env.IMAGE }}:nightly-windows
+          podman push ${{ env.IMAGE }}:nightly-windows
+
+      - name: Push rhel image
+        run: |
+          podman push ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-rhel
+          podman tag ${{ env.IMAGE }}:${{ env.SHORT_SHA }}-rhel ${{ env.IMAGE }}:nightly-rhel
+          podman push ${{ env.IMAGE }}:nightly-rhel
