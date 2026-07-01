@@ -29,7 +29,7 @@ env:
 
 concurrency:
   group: e2e-runner-release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -52,6 +52,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Log in to ghcr.io
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
@@ -66,7 +68,7 @@ jobs:
         run: |
           CURRENT=$(skopeo inspect docker://${{ env.IMAGE }}:latest-darwin 2>/dev/null \
             | jq -r '.Labels["org.opencontainers.image.version"] // empty') || true
-          NEW='$VERSION'
+          NEW="$VERSION"
           if [[ -z "$CURRENT" ]]; then
             echo "No existing latest tag found, will set latest"
             echo "update=true" >> "$GITHUB_OUTPUT"
@@ -113,7 +115,7 @@ jobs:
       - name: Scan darwin image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:v$VERSION-darwin
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-darwin
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
@@ -121,7 +123,7 @@ jobs:
       - name: Scan windows image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:v$VERSION-windows
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-windows
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
@@ -129,7 +131,7 @@ jobs:
       - name: Scan rhel image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE }}:v$VERSION-rhel
+          image-ref: ${{ env.IMAGE }}:v${{ env.VERSION }}-rhel
           format: table
           severity: CRITICAL,HIGH
           exit-code: '1'
