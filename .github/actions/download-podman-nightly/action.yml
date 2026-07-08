@@ -77,7 +77,7 @@ runs:
         chmod 600 "$KEY_PATH"
         REMOTE_TOOLS='tools'
         REMOTE_MSI="${REMOTE_TOOLS}/podman.msi"
-        REMOTE_SCRIPT="${TARGET_FOLDER}/${RESULTS_FOLDER}/scripts/install-local-podman.ps1"
+        REMOTE_SCRIPT="${RESULTS_FOLDER}/scripts/install-local-podman.ps1"
 
         ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
           "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '${REMOTE_TOOLS}', '${TARGET_FOLDER}/${RESULTS_FOLDER}/scripts' | Out-Null\""
@@ -117,7 +117,7 @@ runs:
         EOF
 
         scp -i "$KEY_PATH" -o StrictHostKeyChecking=no install-local-podman.ps1 \
-          "${TARGET_USER}@${TARGET_HOST}:${REMOTE_SCRIPT}"
+          "${TARGET_USER}@${TARGET_HOST}:${TARGET_FOLDER}/${REMOTE_SCRIPT}"
 
         ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
           "cd '${TARGET_FOLDER}' && powershell -NoProfile -ExecutionPolicy Bypass -File '${REMOTE_SCRIPT}'"

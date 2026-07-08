@@ -130,6 +130,7 @@ jobs:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
         podman-local-installer: ${{ env.PODMAN_LOCAL_INSTALLER }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
