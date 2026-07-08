@@ -172,6 +172,10 @@ runs:
           echo "version=$LATEST_VERSION" >> "$GITHUB_OUTPUT"
           VERSION_NUMBER="${LATEST_VERSION#v}"
         elif [[ "$INPUT_VERSION" =~ ^https?:// ]]; then
+          if [[ "$INPUT_VERSION" == *$'\n'* || "$INPUT_VERSION" == *$'\r'* ]]; then
+            echo "Error: URL input cannot contain newline characters"
+            exit 1
+          fi
           echo "Full URL provided: $INPUT_VERSION"
           echo "download_url=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
           if [[ "$INPUT_VERSION" =~ v([0-9]+\.[0-9]+\.[0-9]+) ]]; then
