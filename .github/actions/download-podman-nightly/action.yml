@@ -109,7 +109,9 @@ runs:
 
         \$env:Path += ";\$podmanPath"
         \$currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if (-not \$currentUserPath.Contains(\$podmanPath)) {
+        if ([string]::IsNullOrWhiteSpace(\$currentUserPath)) {
+          [Environment]::SetEnvironmentVariable('Path', \$podmanPath, 'User')
+        } elseif (-not \$currentUserPath.Contains(\$podmanPath)) {
           [Environment]::SetEnvironmentVariable('Path', (\$currentUserPath + ';' + \$podmanPath), 'User')
         }
 
