@@ -26,7 +26,7 @@ on:
         required: true
       podman_options:
         default: 'PODMAN_VERSION=latest,INIT=1,START=1,ROOTFUL=1,NETWORKING=0,PROVIDER=wsl'
-        description: 'Podman configuration options with provider choice. For PODMAN_VERSION use "latest" or a version like "v5.6.2"; for PROVIDER use "wsl" or "hyperv" options.'
+        description: 'Podman configuration options with provider choice. For PODMAN_VERSION use "latest", "nightly", or a version like "v5.6.2"; for PROVIDER use "wsl" or "hyperv" options.'
         type: string
         required: true
       env_vars:
@@ -55,6 +55,9 @@ jobs:
     name: ${{ matrix.windows-version }} - Debug
     timeout-minutes: 180
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -88,6 +91,7 @@ jobs:
         echo "${PODMAN_OPTS}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); if(kv[1] != "PODMAN_VERSION") print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "PODMAN_REMOTE_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
+        echo "PODMAN_LOCAL_INSTALLER=${{ steps.fetch-podman.outputs.local_installer_path }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.ext_repo_options }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "EXT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options }}" | awk -F ',' \
@@ -135,6 +139,8 @@ jobs:
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_REMOTE_URL }}
+        podman-local-installer: ${{ env.PODMAN_LOCAL_INSTALLER }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main

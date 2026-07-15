@@ -41,8 +41,13 @@ inputs:
     description: 'The tag for the builder-image to be used for downloading Podman.'
     required: true
   podman-download-url:
-    description: 'The URL to download the Podman nightly build from.'
-    required: true
+    description: 'The URL to download the Podman build from.'
+    required: false
+    default: ''
+  podman-local-installer:
+    description: 'Local MSI path on the runner for GitHub Actions nightly artifacts.'
+    required: false
+    default: ''
   podman-provider:
     description: 'The Podman provider to be used.'
     required: false
@@ -51,9 +56,81 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: 'Download Podman nightly, do not initialize'
+    - name: 'Install Podman from local nightly artifact'
+      if: inputs.podman-local-installer != ''
       shell: bash
       run: |
+        set -euo pipefail
+
+        TARGET_HOST="$(cat host)"
+        TARGET_USER="$(cat username)"
+        KEY_PATH="id_rsa"
+        TARGET_FOLDER="${{ inputs.target-folder }}"
+        RESULTS_FOLDER="${{ inputs.results-folder }}"
+        LOCAL_INSTALLER="${{ inputs.podman-local-installer }}"
+
+        if [ ! -f "$LOCAL_INSTALLER" ]; then
+          echo "Error: Local installer not found at $LOCAL_INSTALLER"
+          exit 1
+        fi
+
+        chmod 600 "$KEY_PATH"
+        REMOTE_TOOLS='tools'
+        REMOTE_MSI="${REMOTE_TOOLS}/podman.msi"
+        REMOTE_SCRIPT="${RESULTS_FOLDER}/scripts/install-local-podman.ps1"
+
+        ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+          "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '${REMOTE_TOOLS}', '${TARGET_FOLDER}/${RESULTS_FOLDER}/scripts' | Out-Null\""
+
+        scp -i "$KEY_PATH" -o StrictHostKeyChecking=no "$LOCAL_INSTALLER" \
+          "${TARGET_USER}@${TARGET_HOST}:${REMOTE_MSI}"
+
+        cat > install-local-podman.ps1 <<EOF
+        \$resultsFolder = Join-Path (Get-Location) '${{ inputs.results-folder }}'
+        \$toolsInstallDir = Join-Path \$env:USERPROFILE 'tools'
+        \$msiPath = Join-Path \$toolsInstallDir 'podman.msi'
+        New-Item -ItemType Directory -Force -Path \$resultsFolder | Out-Null
+        \$msiLogFile = Join-Path \$resultsFolder 'podman-msi.log'
+
+        Write-Host "Installing Podman MSI from \$msiPath"
+        \$process = Start-Process msiexec.exe -ArgumentList '/package', \$msiPath, '/quiet', '/l*v', \$msiLogFile -PassThru -Wait
+        Write-Host "Install process exit code: \$(\$process.ExitCode)"
+        if (\$process.ExitCode -ne 0) {
+          if (Test-Path \$msiLogFile) {
+            Get-Content \$msiLogFile | ForEach-Object { Write-Host \$_ }
+          }
+          throw "Podman MSI installation failed with exit code: \$(\$process.ExitCode)"
+        }
+
+        \$podmanPath = Join-Path \$env:LOCALAPPDATA 'Programs/Podman/'
+        if (-not (Test-Path \$podmanPath)) {
+          throw "Expected Podman path \$podmanPath does not exist"
+        }
+
+        \$env:Path += ";\$podmanPath"
+        \$currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if (-not \$currentUserPath.Contains(\$podmanPath)) {
+          [Environment]::SetEnvironmentVariable('Path', (\$currentUserPath + ';' + \$podmanPath), 'User')
+        }
+
+        podman version
+        EOF
+
+        scp -i "$KEY_PATH" -o StrictHostKeyChecking=no install-local-podman.ps1 \
+          "${TARGET_USER}@${TARGET_HOST}:${TARGET_FOLDER}/${REMOTE_SCRIPT}"
+
+        ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+          "cd '${TARGET_FOLDER}' && powershell -NoProfile -ExecutionPolicy Bypass -File '${REMOTE_SCRIPT}'"
+
+    - name: 'Download Podman nightly, do not initialize'
+      if: inputs.podman-local-installer == ''
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.podman-download-url }}" ]; then
+          echo "Error: podman-download-url is required when podman-local-installer is not provided"
+          exit 1
+        fi
+
         CMD="podman run --rm -d --name pde2e-podman-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
@@ -85,4 +162,37 @@ runs:
         eval "$CMD"
 
         # Check logs
+        podman logs -f pde2e-podman-run
+
+    - name: 'Configure Podman provider after local install'
+      if: inputs.podman-local-installer != ''
+      shell: bash
+      run: |
+        CMD="podman run --rm -d --name pde2e-podman-run \
+          -e TARGET_HOST=$(cat host) \
+          -e TARGET_HOST_USERNAME=$(cat username) \
+          -e TARGET_HOST_KEY_PATH=/data/id_rsa \
+          -e TARGET_FOLDER=${{ inputs.target-folder }} \
+          -e TARGET_CLEANUP=${{ inputs.target-cleanup }} \
+          -e TARGET_RESULTS=${{ inputs.results-folder }} \
+          -e OUTPUT_FOLDER=/data \
+          -e DEBUG=${{ inputs.debug-mode }} \
+          -v $PWD:/data:z \
+          ${{ inputs.builder-image }}:${{ inputs.podman-image-tag }}-windows \
+            pd-e2e/podman.ps1 \
+              -downloadUrl https://example.invalid/podman.msi \
+              -targetFolder ${{ inputs.target-folder }} \
+              -resultsFolder ${{ inputs.results-folder }} \
+              -initialize 0 \
+              -rootful 0 \
+              -start 0"
+
+        if [[ -n "${{ inputs.podman-provider }}" ]]; then
+          CMD+=" -podmanProvider ${{ inputs.podman-provider }}"
+        else
+          CMD+=" -installWSL 0"
+        fi
+
+        echo "$CMD"
+        eval "$CMD"
         podman logs -f pde2e-podman-run

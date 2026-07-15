@@ -58,6 +58,9 @@ jobs:
     name: ${{ matrix.windows-version }} - ${{ matrix.rootful == '0' && 'rootless' || 'rootful' }} ${{ matrix.user-networking == '1' && '- user mode networking enabled' || '' }}
     timeout-minutes: 180
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +97,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
         # Set podman configuration variables from fetched version
         echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
+        echo "PODMAN_LOCAL_INSTALLER=${{ steps.fetch-podman.outputs.local_installer_path }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.podman_machine_options || env.DEFAULT_PODMAN_MACHINE_OPTIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
@@ -142,6 +146,8 @@ jobs:
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
+        podman-local-installer: ${{ env.PODMAN_LOCAL_INSTALLER }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
