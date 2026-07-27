@@ -72,7 +72,7 @@ jobs:
     steps:
     - name: Get Podman version used by Desktop
       run: |
-        version=$(curl https://raw.githubusercontent.com/podman-desktop/podman-desktop/main/extensions/podman/packages/extension/src/podman5.json | jq -r '.version')
+        version=$(curl -s https://raw.githubusercontent.com/podman-desktop/podman-desktop/main/extensions/podman/packages/extension/src/podman.json | jq -r '[.versions[].version] | sort_by(split(".") | map(tonumber)) | last')
         echo "Default Podman Version from Podman Desktop: ${version}"
         echo "PD_PODMAN_VERSION=${version}" >> $GITHUB_ENV
 
