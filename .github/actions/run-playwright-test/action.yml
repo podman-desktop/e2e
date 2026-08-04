@@ -95,9 +95,13 @@ inputs:
     required: false
     default: 'false'
   podman-path:
-    description: 'Whether to include podman path parameter.'
+    description: 'Whether to pass -podmanPath from results/podman-location.log (ignored when podman-download-url is set).'
     required: false
-    default: 'true'
+    default: 'false'
+  podman-download-url:
+    description: 'URL for e2e-runner to download and install Podman on the remote host.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -151,7 +155,10 @@ runs:
         fi
 
         PODMAN_PATH=""
-        if [ "${{ inputs.podman-path }}" != "false" ]; then
+        PODMAN_DOWNLOAD_URL_PARAM=""
+        if [ -n "${{ inputs.podman-download-url }}" ]; then
+          PODMAN_DOWNLOAD_URL_PARAM="-podmanDownloadUrl ${{ inputs.podman-download-url }}"
+        elif [ "${{ inputs.podman-path }}" != "false" ]; then
           PODMAN_PATH="-podmanPath $(cat results/podman-location.log)"
         fi
 
@@ -170,6 +177,7 @@ runs:
                 -targetFolder ${{ inputs.target-folder }} \
                 -resultsFolder ${{ inputs.results-folder }} \
                 ${PODMAN_PATH} \
+                ${PODMAN_DOWNLOAD_URL_PARAM} \
                 ${PD_URL_PARAM} \
                 ${PD_PATH} \
                 -fork ${{ inputs.fork-repo }} \

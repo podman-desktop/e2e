@@ -148,16 +148,12 @@ jobs:
         branch: ${{ env.PD_BRANCH }}
         env-vars: ${{ env.ENV_VARS }}
 
-    - name: Download Podman nightly, do not initialize
-      uses: podman-desktop/e2e/.github/actions/download-podman-nightly@main
-      with:
-        podman-image-tag: ${{ env.PDE2E_PODMAN }}
-        podman-download-url: ${{ env.PODMAN_URL }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
         e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        podman-download-url: ${{ env.PODMAN_URL }}
         fork-repo: ${{ env.PD_FORK }}
         branch-name: ${{ env.PD_BRANCH }}
         npm-target: ${{ env.NPM_TARGET }}
