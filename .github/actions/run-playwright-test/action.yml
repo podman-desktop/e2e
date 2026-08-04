@@ -97,7 +97,7 @@ inputs:
   podman-path:
     description: 'Whether to pass -podmanPath from results/podman-location.log (ignored when podman-download-url is set).'
     required: false
-    default: 'false'
+    default: 'true'
   podman-download-url:
     description: 'URL for e2e-runner to download and install Podman on the remote host.'
     required: false
