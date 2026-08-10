@@ -37,9 +37,9 @@ on:
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along",RUN_KIND_TESTS=true'
         type: 'string'
         required: true
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
-        description: 'Testing images versions, no spaces'
+      e2e_runner_version:
+        default: 'v0.1.1'
+        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
         type: 'string'
         required: true
       mapt_params:
@@ -88,7 +88,6 @@ jobs:
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_MACHINE_OPTIONS: 'INIT=1,START=1'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -98,8 +97,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
         
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
@@ -137,11 +135,10 @@ jobs:
         fork: ${{ env.FORK }}
         branch: ${{ env.BRANCH }}
 
-
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
-        e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-download-url: ${{ env.PODMAN_URL }}
         fork-repo: ${{ env.FORK }}
         branch-name: ${{ env.BRANCH }}

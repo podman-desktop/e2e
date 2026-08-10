@@ -58,9 +58,9 @@ on:
             IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.8;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"
         required: false
         type: string
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
-        description: 'Testing images versions, no spaces'
+      e2e_runner_version:
+        default: 'v0.1.1'
+        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
         type: 'string'
         required: true
       host_params: 
@@ -97,7 +97,6 @@ jobs:
         DEFAULT_HOST_PARAMS: 'CPUS="8",MEMORY="16"'
         DEFAULT_IMAGE_SIZE: 'tiny'
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true,OBJECT_NUM=100,KEEP_VIDEOS_ON_PASS=true,KEEP_TRACES_ON_PASS=true'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
       run: |
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
@@ -109,8 +108,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
 
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
@@ -148,11 +146,10 @@ jobs:
         branch: ${{ env.PD_BRANCH }}
         env-vars: ${{ env.ENV_VARS }}
 
-
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
-        e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-download-url: ${{ env.PODMAN_URL }}
         fork-repo: ${{ env.PD_FORK }}
         branch-name: ${{ env.PD_BRANCH }}
@@ -195,3 +192,13 @@ jobs:
         name: ${{ env.PODMAN_PROVIDER }}-win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
         path: |
           results/*
+
+    - name: Notify Slack
+      if: always()
+      continue-on-error: true
+      uses: podman-desktop/e2e/.github/actions/notify-slack@main
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        status: ${{ job.status }}
+        workflow-name: "${{ github.workflow }} (Windows ${{ matrix.windows-version }} ${{ matrix.windows-featurepack }})"
+        branch: ${{ env.PD_BRANCH }}

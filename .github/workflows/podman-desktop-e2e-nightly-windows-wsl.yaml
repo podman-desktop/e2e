@@ -30,9 +30,9 @@ on:
         description: 'Podman version (use "latest" to auto-fetch latest release, or specify version like "v5.6.1")'
         type: string
         required: true
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
-        description: 'Testing images versions, no spaces. RUNNER is e2e-runner tag on ghcr.'
+      e2e_runner_version:
+        default: 'v0.1.1'
+        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
         type: 'string'
         required: true
       podman_provider:
@@ -84,7 +84,6 @@ jobs:
         DEFAULT_NPM_TARGET: 'test:e2e'
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
       run: |
         echo "${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
@@ -92,8 +91,7 @@ jobs:
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
         echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
 
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
@@ -130,11 +128,10 @@ jobs:
         fork: ${{ env.FORK }}
         branch: ${{ env.BRANCH }}
 
-
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
-        e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-download-url: ${{ env.PODMAN_URL }}
         fork-repo: ${{ env.FORK }}
         branch-name: ${{ env.BRANCH }}
@@ -193,3 +190,13 @@ jobs:
           results/*
           **/workflow-run-attributes.json
           **/junit-infra-failure-report.xml
+
+    - name: Notify Slack
+      if: always()
+      continue-on-error: true
+      uses: podman-desktop/e2e/.github/actions/notify-slack@main
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        status: ${{ job.status }}
+        workflow-name: "${{ github.workflow }} (Windows ${{ matrix.windows-version }} ${{ matrix.windows-featurepack }})"
+        branch: ${{ env.BRANCH }}

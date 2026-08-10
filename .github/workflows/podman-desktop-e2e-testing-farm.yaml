@@ -168,3 +168,13 @@ jobs:
             **/junit-playwright-results.xml
             **/workflow-run-attributes.json
             **/junit-infra-failure-report.xml
+
+      - name: Notify Slack
+        if: always()
+        continue-on-error: true
+        uses: podman-desktop/e2e/.github/actions/notify-slack@main
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          status: ${{ job.status }}
+          workflow-name: "${{ github.workflow }} (Fedora ${{ matrix.fedora-version }})"
+          branch: ${{ env.BRANCH }}

@@ -35,9 +35,9 @@ on:
         description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
         type: 'string'
         required: true
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
-        description: 'Testing images versions, no spaces'
+      e2e_runner_version:
+        default: 'v0.1.1'
+        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
         type: 'string'
         required: true
       mapt_params:
@@ -119,8 +119,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "EXT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
 
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
@@ -170,11 +169,10 @@ jobs:
     - name: Emulate X session
       uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
 
-
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
-        e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-download-url: ${{ env.PODMAN_REMOTE_URL }}
         podman-desktop-url: ${{ env.PODMAN_DESKTOP_URL }}
         fork-repo: ${{ env.PD_FORK }}

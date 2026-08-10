@@ -25,9 +25,9 @@ on:
         options:
           - 'false'
           - 'true'
-      images_version:
-        default: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
-        description: 'Testing images versions, no spaces'
+      e2e_runner_version:
+        default: 'v0.1.1'
+        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
         type: 'string'
         required: true
       podman_provider:
@@ -76,7 +76,6 @@ jobs:
         DEFAULT_PODMAN_PROVIDER: 'wsl'
         DEFAULT_ENV_VARS: 'TEST_PODMAN_MACHINE=true'
         DEFAULT_PODMAN_OPTIONS: 'INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
-        DEFAULT_IMAGES_VERSIONS: 'BUILDER="v0.0.3",PODMAN="v0.0.3",RUNNER="v0.1.1"'
       run: |
         # Parse fork and branch from repo_branch parameter
         REPO_BRANCH_INPUT="${{ github.event.inputs.repo_branch || env.DEFAULT_REPO_BRANCH }}"
@@ -87,8 +86,7 @@ jobs:
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
         echo "${{ env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "${{ github.event.inputs.images_version || env.DEFAULT_IMAGES_VERSIONS }}" | awk -F ',' \
-        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PDE2E_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
 
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
@@ -153,7 +151,7 @@ jobs:
       if: ${{ !github.event.inputs.debug || github.event.inputs.debug == 'false' }}
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
       with:
-        e2e-runner-tag: ${{ env.PDE2E_RUNNER }}
+        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-path: false
         fork-repo: ${{ env.FORK }}
         branch-name: ${{ env.BRANCH }}

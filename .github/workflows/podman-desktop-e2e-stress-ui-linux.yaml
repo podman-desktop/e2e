@@ -197,3 +197,12 @@ jobs:
       with:
         name: linux
         path: ./**/tests/**/output/
+
+    - name: Notify Slack
+      if: always()
+      continue-on-error: true
+      uses: podman-desktop/e2e/.github/actions/notify-slack@main
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        status: ${{ job.status }}
+        branch: ${{ env.PD_BRANCH }}
