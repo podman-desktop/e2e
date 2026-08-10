@@ -473,10 +473,8 @@ if (( extTests == 1 )); then
     pnpm install --frozen-lockfile 2>&1 | tee -a "$testsOutputLog"
     restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget"
-    set +e
     pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
     TEST_EXIT_CODE=${PIPESTATUS[0]}
-    set -e
     cleanup_deferred_secrets || true
     ## Collect results
     collect_logs "$extRepo" || true
@@ -486,10 +484,8 @@ if (( extTests == 1 )); then
 else
     restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget, binary path, if any: $podmanDesktopBinary"
-    set +e
     pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
     TEST_EXIT_CODE=${PIPESTATUS[0]}
-    set -e
     cleanup_deferred_secrets || true
     collect_logs "$repo" || true
     if [ "$TEST_EXIT_CODE" -ne 0 ]; then
