@@ -41,11 +41,10 @@ inputs:
     description: 'The tag for the builder-image to be used for downloading Podman.'
     required: true
   podman-download-url:
-    description: 'The URL to download the Podman build from.'
-    required: false
-    default: ''
-  podman-local-installer:
-    description: 'Local MSI path on the runner for GitHub Actions nightly artifacts.'
+    description: 'The URL to download the Podman build from (release asset or Actions artifact archive_download_url).'
+    required: true
+  github-token:
+    description: 'GitHub token required to download Actions artifact archive URLs (nightly/main).'
     required: false
     default: ''
   podman-provider:
@@ -56,9 +55,65 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: 'Install Podman from local nightly artifact'
-      if: inputs.podman-local-installer != ''
+    - name: 'Resolve authenticated Actions artifact to local MSI'
+      id: resolve-artifact
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PODMAN_DOWNLOAD_URL: ${{ inputs.podman-download-url }}
+      run: |
+        set -euo pipefail
+
+        if [ -z "${PODMAN_DOWNLOAD_URL}" ]; then
+          echo "Error: podman-download-url is required"
+          exit 1
+        fi
+
+        # Nightly/main from fetch-latest-podman-version-windows returns archive_download_url
+        # (…/actions/artifacts/<id>/zip). Download + unzip on the runner, then SCP the MSI.
+        if [[ "${PODMAN_DOWNLOAD_URL}" =~ /actions/artifacts/.+/zip ]]; then
+          if [ -z "${GITHUB_TOKEN}" ]; then
+            echo "Error: github-token is required to download GitHub Actions artifact archives"
+            exit 1
+          fi
+
+          ARTIFACT_DIR="${RUNNER_TEMP:-/tmp}/podman-actions-artifact"
+          ZIP_PATH="${ARTIFACT_DIR}/podman-artifact.zip"
+          EXTRACT_DIR="${ARTIFACT_DIR}/extracted"
+          MSI_PATH="${ARTIFACT_DIR}/podman.msi"
+
+          rm -rf "${ARTIFACT_DIR}"
+          mkdir -p "${EXTRACT_DIR}"
+
+          echo "Downloading Actions artifact archive…"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -o "${ZIP_PATH}" \
+            "${PODMAN_DOWNLOAD_URL}"
+
+          unzip -qo "${ZIP_PATH}" -d "${EXTRACT_DIR}"
+          FOUND_MSI="$(find "${EXTRACT_DIR}" -type f -name '*.msi' | head -n1 || true)"
+          if [ -z "${FOUND_MSI}" ]; then
+            echo "Error: No MSI file found inside Actions artifact archive"
+            find "${EXTRACT_DIR}" -type f
+            exit 1
+          fi
+
+          cp -f "${FOUND_MSI}" "${MSI_PATH}"
+          echo "Resolved local MSI: ${MSI_PATH}"
+          echo "local_msi=${MSI_PATH}" >> "${GITHUB_OUTPUT}"
+        else
+          echo "Using public/release download URL (no local MSI resolution)"
+          echo "local_msi=" >> "${GITHUB_OUTPUT}"
+        fi
+
+    - name: 'Install Podman from local nightly artifact'
+      if: steps.resolve-artifact.outputs.local_msi != ''
+      shell: bash
+      env:
+        LOCAL_INSTALLER: ${{ steps.resolve-artifact.outputs.local_msi }}
       run: |
         set -euo pipefail
 
@@ -67,22 +122,21 @@ runs:
         KEY_PATH="id_rsa"
         TARGET_FOLDER="${{ inputs.target-folder }}"
         RESULTS_FOLDER="${{ inputs.results-folder }}"
-        LOCAL_INSTALLER="${{ inputs.podman-local-installer }}"
 
-        if [ ! -f "$LOCAL_INSTALLER" ]; then
-          echo "Error: Local installer not found at $LOCAL_INSTALLER"
+        if [ ! -f "${LOCAL_INSTALLER}" ]; then
+          echo "Error: Local installer not found at ${LOCAL_INSTALLER}"
           exit 1
         fi
 
-        chmod 600 "$KEY_PATH"
+        chmod 600 "${KEY_PATH}"
         REMOTE_TOOLS='tools'
         REMOTE_MSI="${REMOTE_TOOLS}/podman.msi"
         REMOTE_SCRIPT="${RESULTS_FOLDER}/scripts/install-local-podman.ps1"
 
-        ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+        ssh -i "${KEY_PATH}" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
           "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force -Path '${REMOTE_TOOLS}', '${TARGET_FOLDER}/${RESULTS_FOLDER}/scripts' | Out-Null\""
 
-        scp -i "$KEY_PATH" -o StrictHostKeyChecking=no "$LOCAL_INSTALLER" \
+        scp -i "${KEY_PATH}" -o StrictHostKeyChecking=no "${LOCAL_INSTALLER}" \
           "${TARGET_USER}@${TARGET_HOST}:${REMOTE_MSI}"
 
         cat > install-local-podman.ps1 <<EOF
@@ -118,20 +172,17 @@ runs:
         podman version
         EOF
 
-        scp -i "$KEY_PATH" -o StrictHostKeyChecking=no install-local-podman.ps1 \
+        scp -i "${KEY_PATH}" -o StrictHostKeyChecking=no install-local-podman.ps1 \
           "${TARGET_USER}@${TARGET_HOST}:${TARGET_FOLDER}/${REMOTE_SCRIPT}"
 
-        ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
+        ssh -i "${KEY_PATH}" -o StrictHostKeyChecking=no "${TARGET_USER}@${TARGET_HOST}" \
           "cd '${TARGET_FOLDER}' && powershell -NoProfile -ExecutionPolicy Bypass -File '${REMOTE_SCRIPT}'"
 
-    - name: 'Download Podman nightly, do not initialize'
-      if: inputs.podman-local-installer == ''
+    - name: 'Download Podman from release URL, do not initialize'
+      if: steps.resolve-artifact.outputs.local_msi == ''
       shell: bash
       run: |
-        if [ -z "${{ inputs.podman-download-url }}" ]; then
-          echo "Error: podman-download-url is required when podman-local-installer is not provided"
-          exit 1
-        fi
+        set -euo pipefail
 
         CMD="podman run --rm -d --name pde2e-podman-run \
           -e TARGET_HOST=$(cat host) \
@@ -152,24 +203,24 @@ runs:
               -rootful 0 \
               -start 0"
 
-        # Add the provider or the default WSL install parameter
         if [[ -n "${{ inputs.podman-provider }}" ]]; then
           CMD+=" -podmanProvider ${{ inputs.podman-provider }}"
         else
           CMD+=" -installWSL 0"
         fi
 
-        # Execute the final command
         echo "$CMD"
         eval "$CMD"
-
-        # Check logs
         podman logs -f pde2e-podman-run
 
     - name: 'Configure Podman provider after local install'
-      if: inputs.podman-local-installer != ''
+      if: steps.resolve-artifact.outputs.local_msi != ''
       shell: bash
       run: |
+        set -euo pipefail
+
+        # Podman is already installed from the local MSI. Reuse podman.ps1 only to
+        # configure the provider / skip WSL install (download URL is unused).
         CMD="podman run --rm -d --name pde2e-podman-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \

@@ -101,7 +101,7 @@ jobs:
 
     - name: Fetch latest Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@60b05ab5b050c9f8ec8dff7e0377f8bf36c39207
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b9121eed76855854291b52c6bfbc278dbdf0288
       with:
         version_input: ${{ github.event.inputs.podman_version || 'latest' }}
         file_type: 'msi'
@@ -119,7 +119,6 @@ jobs:
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
         echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
         echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
-        echo "PODMAN_LOCAL_INSTALLER=${{ steps.fetch-podman.outputs.local_installer_path }}" >> $GITHUB_ENV
         echo "PD_URL=${{ github.event.inputs.podman_desktop_url || env.DEFAULT_PD_URL }}" >> $GITHUB_ENV
         echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
         echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
@@ -163,7 +162,7 @@ jobs:
       with:
         podman-image-tag: ${{ env.PDE2E_PODMAN }}
         podman-download-url: ${{ env.PODMAN_URL }}
-        podman-local-installer: ${{ env.PODMAN_LOCAL_INSTALLER }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
         podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
