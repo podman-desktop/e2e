@@ -56,7 +56,6 @@ jobs:
     permissions:
       contents: read
       checks: write
-      actions: read
     strategy:
       fail-fast: false
       matrix:

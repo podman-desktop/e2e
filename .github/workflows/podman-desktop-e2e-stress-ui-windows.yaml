@@ -73,9 +73,6 @@ jobs:
     name: ${{ matrix.windows-version }} - ${{ matrix.windows-featurepack }}
     timeout-minutes: 90
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
     strategy:
       fail-fast: false
       matrix:
