@@ -405,15 +405,31 @@ if (( extTests == 1 )); then
     pnpm add -D @podman-desktop/tests-playwright@next
     cd "$workingDir/$extRepo"
     echo "Installing dependencies of $extRepo"
-    pnpm install --frozen-lockfile 2>&1 | tee -a $testsOutputLog
+    pnpm install --frozen-lockfile 2>&1 | tee -a "$testsOutputLog"
+    restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget"
-    pnpm $npmTarget 2>&1 | tee -a $testsOutputLog
+    set +e
+    pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
+    TEST_EXIT_CODE=${PIPESTATUS[0]}
+    set -e
+    cleanup_deferred_secrets || true
     ## Collect results
-    collect_logs $extRepo
+    collect_logs "$extRepo" || true
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+        exit "$TEST_EXIT_CODE"
+    fi
 else
+    restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget, binary path, if any: $podmanDesktopBinary"
-    pnpm "$npmTarget" 2>&1 | tee -a $testsOutputLog
-    collect_logs "podman-desktop"
+    set +e
+    pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
+    TEST_EXIT_CODE=${PIPESTATUS[0]}
+    set -e
+    cleanup_deferred_secrets || true
+    collect_logs "podman-desktop" || true
+    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+        exit "$TEST_EXIT_CODE"
+    fi
 fi
 
 # Cleaning up, env vars - secrets

@@ -91,33 +91,72 @@ execute_scripts() {
 }
 
 # Load secrets from file into environment variables
+# Sensitive keys (*_API_KEY, *_SECRET, *_TOKEN, *_PASSWORD) are deferred to avoid leaking during build.
+# Call restore_deferred_secrets() before test execution.
+declare -a deferred_secret_names
+DEFERRED_SECRETS_FILE=""
+
 load_secrets() {
     if [ -n "$secretFile" ]; then
         secretFilePath="$resourcesPath/$secretFile"
-        if [ -f $secretFilePath ]; then
+        if [ -f "$secretFilePath" ]; then
             echo "Loading Secrets from file: $secretFilePath"
-            if [ -f "$secretFilePath" ]; then
-                while IFS='=' read -r key value || [ -n "$key" ]; do
-                    # Ignore comments and empty lines
-                    if [[ ! $key =~ ^\s*# && -n $key ]]; then
-                        # Trim leading and trailing whitespaces
-                        key=$(echo "$key" | sed 's/^[ \t]*//;s/[ \t]*$//')
-                        value=$(echo "$value" | sed 's/^[ \t]*//;s/[ \t]*$//')
-                        # Set the environment variable
+            DEFERRED_SECRETS_FILE="$HOME/.e2e-deferred-secrets"
+            (umask 077 && : > "$DEFERRED_SECRETS_FILE") || {
+                echo "Error: Cannot create deferred secrets file at $DEFERRED_SECRETS_FILE"
+                exit 1
+            }
+            trap cleanup_deferred_secrets EXIT
+            while IFS='=' read -r key value || [ -n "$key" ]; do
+                # Ignore comments and empty lines
+                if [[ ! $key =~ ^[[:space:]]*# && $key =~ [^[:space:]] ]]; then
+                    # Trim leading and trailing whitespaces
+                    key=$(echo "$key" | sed 's/^[ \t]*//;s/[ \t]*$//')
+                    value=$(echo "$value" | sed 's/^[ \t]*//;s/[ \t]*$//')
+                    # Defer sensitive keys to prevent leaking during build
+                    if [[ "$key" =~ _(API_KEY|SECRET|TOKEN|PASSWORD)$ ]]; then
+                        echo "$key=$value" >> "$DEFERRED_SECRETS_FILE"
+                        deferred_secret_names+=("$key")
+                        echo "Deferred secret: $key"
+                    else
                         export "$key"="$value"
                         script_env_vars+=("$key")
                     fi
-                done < "$secretFilePath"
-                echo "Secrets loaded from '$secretFilePath' and set as environment variables."
-            else
-                echo "File '$secretFilePath' not found."
-            fi
+                fi
+            done < "$secretFilePath"
+            echo "Secrets loaded. ${#deferred_secret_names[@]} deferred until test execution."
         else
             echo "Secret File path $secretFilePath does not exist"
         fi
     else
         echo "Secret file Parameter not set"
     fi
+}
+
+# Restore deferred secrets into the environment right before test execution
+restore_deferred_secrets() {
+    if [ -f "$DEFERRED_SECRETS_FILE" ]; then
+        local count=0
+        while IFS='=' read -r key value || [ -n "$key" ]; do
+            if [ -n "$key" ]; then
+                export "$key"="$value"
+                script_env_vars+=("$key")
+                count=$((count + 1))
+            fi
+        done < "$DEFERRED_SECRETS_FILE"
+        echo "Restored $count deferred secret(s) for test execution"
+    elif [ ${#deferred_secret_names[@]} -gt 0 ]; then
+        echo "Error: ${#deferred_secret_names[@]} secrets were deferred but $DEFERRED_SECRETS_FILE is missing"
+        exit 1
+    fi
+}
+
+# Remove deferred secrets from environment and delete the file
+cleanup_deferred_secrets() {
+    for name in "${deferred_secret_names[@]}"; do
+        unset "$name" 2>/dev/null
+    done
+    rm -f "$DEFERRED_SECRETS_FILE"
 }
 
 # Clone repository and checkout specific branch
