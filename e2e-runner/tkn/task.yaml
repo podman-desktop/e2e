@@ -146,6 +146,9 @@ spec:
   - name: debug-script
     description: Print all script parameters for debugging
     default: '0'
+  - name: resign-app
+    description: Re-sign installed app with ad-hoc signature (macOS only)
+    default: '0'
 
   results:
   - name: duration
@@ -294,6 +297,7 @@ spec:
           if [[ -n "$(params.podman-provider)" ]]; then
             cmd="$cmd --podmanProvider $(params.podman-provider) "
           fi
+          cmd="$cmd --resignApp $(params.resign-app) "
         fi
       fi
 

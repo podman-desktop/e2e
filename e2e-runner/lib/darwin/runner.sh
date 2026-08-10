@@ -40,6 +40,7 @@ saveTraces=1
 cleanMachine=1
 scriptPaths=""
 podmanDownloadUrl=""
+resignApp=0
 debugScript=0
 
 while [[ $# -gt 0 ]]; do
@@ -69,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
+        --resignApp) resignApp="$2"; shift ;;
         --debugScript) debugScript="$2"; shift ;;
         *) ;;
     esac
@@ -106,6 +108,7 @@ if [ "$debugScript" == "1" ]; then
     echo "cleanMachine=$cleanMachine"
     echo "scriptPaths=$scriptPaths"
     echo "podmanDownloadUrl=$podmanDownloadUrl"
+    echo "resignApp=$resignApp"
     echo "debugScript=$debugScript"
 fi
 
@@ -385,12 +388,23 @@ if [ -z "$pdPath" ]; then
         fi
         pdVolumePath=$(find /Volumes -name "*${appName} ${version}*" -maxdepth 1 | head -1)
         echo "Volume path: $pdVolumePath"
+        sudo rm -rf "/Applications/${appName}.app"
         sudo cp -R "$pdVolumePath/${appName}.app" /Applications
         hdiutil detach "$pdVolumePath"
         # codesign the extracted app
         appPath="/Applications/${appName}.app"
-        # sudo codesign --force --deep --sign - "$appPath"
-        codesign --verify --deep --verbose=2 "$appPath"
+        sudo xattr -r -d com.apple.quarantine "$appPath" 2>/dev/null || true
+        if (( resignApp == 1 )); then
+            echo "Re-signing $appPath with ad-hoc signature..."
+            sudo codesign --force --deep --sign - "$appPath"
+        else
+            if ! codesign --verify --deep --verbose=2 "$appPath"; then
+                echo "ERROR: Codesign verification failed for $appPath"
+                echo "The app will likely fail to launch on macOS 26+ via SSH."
+                echo "Re-run with --resignApp 1 to apply an ad-hoc signature."
+                exit 1
+            fi
+        fi
         podmanDesktopBinary="$appPath/Contents/MacOS/${appName}"
     else
         echo "Nor pdUrl or pdPath is set, continue in development mode..."
