@@ -372,7 +372,7 @@ if [ -z "$pdPath" ]; then
             file "$dmgPath"
             exit 1
         fi
-        version=$(echo "$pdUrl" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+        version=$(echo "$pdUrl" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         if [ -z "$version" ]; then
             echo "Warning: Could not extract version from URL, searching for app volume without version"
             pdVolumePath=$(find /Volumes -name "*${appName}*" -maxdepth 1 | head -1)
