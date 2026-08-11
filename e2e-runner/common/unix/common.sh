@@ -114,7 +114,8 @@ load_secrets() {
                     key=$(echo "$key" | sed 's/^[ \t]*//;s/[ \t]*$//')
                     value=$(echo "$value" | sed 's/^[ \t]*//;s/[ \t]*$//')
                     # Defer sensitive keys to prevent leaking during build
-                    if [[ "$key" =~ _(API_KEY|SECRET|TOKEN|PASSWORD)$ ]]; then
+                    # GITHUB_TOKEN is needed at build time to avoid API rate limits
+                    if [[ "$key" =~ _(API_KEY|SECRET|TOKEN|PASSWORD)$ && "$key" != "GITHUB_TOKEN" ]]; then
                         echo "$key=$value" >> "$DEFERRED_SECRETS_FILE"
                         deferred_secret_names+=("$key")
                         echo "Deferred secret: $key"
