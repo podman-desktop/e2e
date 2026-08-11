@@ -26,8 +26,8 @@ on:
         type: 'string'
         required: true
       podman_version:
-        default: 'latest'
-        description: 'Podman version (use "latest" to auto-fetch latest release, or specify version like "v5.6.1")'
+        default: 'nightly'
+        description: 'Podman version (use "nightly" for main branch CI artifacts, "latest" for stable release, or specify version like "v5.6.1")'
         type: string
         required: true
       e2e_runner_version:
@@ -72,9 +72,9 @@ jobs:
     steps:
     - name: Fetch latest Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@aea6ff44f2a4a82da13d22061ce73443a125925d
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b9121eed76855854291b52c6bfbc278dbdf0288
       with:
-        version_input: ${{ github.event.inputs.podman_version || 'latest' }}
+        version_input: ${{ github.event.inputs.podman_version || 'nightly' }}
         file_type: 'msi'
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -133,6 +133,8 @@ jobs:
       with:
         podman-image-tag: v0.0.3
         podman-download-url: ${{ env.PODMAN_URL }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main

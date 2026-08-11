@@ -27,7 +27,7 @@ on:
         required: true
       podman_options:
         default: 'PODMAN_VERSION=latest,DESKTOP_URL=latest,PROVIDER=wsl,INIT=1,START=1,ROOTFUL=1,NETWORKING=0'
-        description: 'Podman configuration options with provider choice. For PODMAN_VERSION use "latest" or a version like "v5.6.2";for DESKTOP_URL use "latest" or a URL for a x64.exe artifact from https://github.com/podman-desktop/testing-prereleases/tags; for PROVIDER use "wsl" or "hyperv" options.'
+        description: 'Podman configuration options with provider choice. For PODMAN_VERSION use "latest", "nightly", or a version like "v5.6.2";for DESKTOP_URL use "latest" or a URL for a x64.exe artifact from https://github.com/podman-desktop/testing-prereleases/tags; for PROVIDER use "wsl" or "hyperv" options.'
         type: string
         required: true
       env_vars:
@@ -73,7 +73,7 @@ jobs:
 
     - name: Fetch Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@aea6ff44f2a4a82da13d22061ce73443a125925d
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b9121eed76855854291b52c6bfbc278dbdf0288
       with:
         version_input: ${{ steps.extract-version.outputs.podman_version }}
         file_type: 'msi'
@@ -174,6 +174,8 @@ jobs:
       with:
         podman-image-tag: v0.0.3
         podman-download-url: ${{ env.PODMAN_REMOTE_URL }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
 
     - name: Run Podman Desktop Playwright E2E tests
       uses: podman-desktop/e2e/.github/actions/run-playwright-test@main

@@ -41,8 +41,12 @@ inputs:
     description: 'The tag for the builder-image to be used for downloading Podman.'
     required: true
   podman-download-url:
-    description: 'The URL to download the Podman nightly build from.'
+    description: 'The URL to download the Podman build from (release asset or Actions artifact archive_download_url).'
     required: true
+  github-token:
+    description: 'GitHub token required to download Actions artifact archive URLs (nightly/main).'
+    required: false
+    default: ''
   podman-provider:
     description: 'The Podman provider to be used.'
     required: false
@@ -53,7 +57,16 @@ runs:
   steps:
     - name: 'Download Podman nightly, do not initialize'
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
+        set -euo pipefail
+
+        if [ -z "${{ inputs.podman-download-url }}" ]; then
+          echo "Error: podman-download-url is required"
+          exit 1
+        fi
+
         CMD="podman run --rm -d --name pde2e-podman-run \
           -e TARGET_HOST=$(cat host) \
           -e TARGET_HOST_USERNAME=$(cat username) \
@@ -80,8 +93,17 @@ runs:
           CMD+=" -installWSL 0"
         fi
 
-        # Execute the final command
-        echo "$CMD"
+        # Pass GitHub token for authenticated Actions artifact downloads (nightly)
+        if [[ -n "${GITHUB_TOKEN}" ]]; then
+          CMD+=" -githubToken ${GITHUB_TOKEN}"
+        fi
+
+        # Log without exposing the token
+        if [[ -n "${GITHUB_TOKEN}" ]]; then
+          echo "${CMD//${GITHUB_TOKEN}/***}"
+        else
+          echo "$CMD"
+        fi
         eval "$CMD"
 
         # Check logs
