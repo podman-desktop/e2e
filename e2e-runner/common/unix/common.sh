@@ -1,5 +1,5 @@
 #!/bin/bash
-# Common bash utility functions for pde2e-image macOS scripts
+# Common bash utility functions for e2e-runner macOS/RHEL scripts
 
 # Detect file type and return MIME type
 detect_file_type() {

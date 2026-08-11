@@ -2,7 +2,7 @@
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
-  name: pde2e-image-rhel-display
+  name: e2e-runner-rhel-display
   labels:
     app.kubernetes.io/version: "0.1"
     redhat.com/product: podman-desktop
@@ -17,7 +17,7 @@ spec:
   description: >-
     This task sets up a headless GNOME session on a RHEL target host using
     gnome-remote-desktop-headless.service. It must run before the
-    pde2e-runner-rhel task so that a Wayland compositor is ready when
+    e2e-runner-image task so that a Wayland compositor is ready when
     the runner's setup_display() function searches for the mutter auth file.
 
   workspaces:
@@ -35,7 +35,7 @@ spec:
     description: path on workspace to find resources to connect to the target machine
   # Task parameters
   - name: image-version
-    description: pde2e-runner image version
+    description: e2e-runner image version
     default: '0.1.1'
   - name: results-folder
     description: directory for setup logs and artifacts
@@ -53,7 +53,7 @@ spec:
 
   steps:
   - name: display-setup
-    image: quay.io/odockal/pde2e-image:v$(params.image-version)-rhel
+    image: ghcr.io/podman-desktop/e2e-runner:v$(params.image-version)-rhel
     imagePullPolicy: Always
     script: |
       #!/bin/bash

@@ -1,4 +1,4 @@
-# Common PowerShell utility functions for pde2e-image Windows scripts
+# Common PowerShell utility functions for e2e-runner Windows scripts
 
 # Function to check if a command is available
 function Command-Exists($command) {
