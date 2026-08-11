@@ -395,15 +395,18 @@ if [ -z "$pdPath" ]; then
         appPath="/Applications/${appName}.app"
         sudo xattr -r -d com.apple.quarantine "$appPath" 2>/dev/null || true
         if (( resignApp == 1 )); then
+            if codesign --verify --deep --verbose=2 "$appPath" 2>/dev/null; then
+                existingSig=$(codesign -dv "$appPath" 2>&1 | grep 'Authority=' | head -1 || true)
+                echo "Warning: $appPath already has a valid signature: $existingSig"
+            fi
             echo "Re-signing $appPath with ad-hoc signature..."
             sudo codesign --force --deep --sign - "$appPath"
-        else
-            if ! codesign --verify --deep --verbose=2 "$appPath"; then
-                echo "ERROR: Codesign verification failed for $appPath"
-                echo "The app will likely fail to launch on macOS 26+ via SSH."
-                echo "Re-run with --resignApp 1 to apply an ad-hoc signature."
-                exit 1
-            fi
+        fi
+        if ! codesign --verify --deep --verbose=2 "$appPath"; then
+            echo "ERROR: Codesign verification failed for $appPath"
+            echo "The app will likely fail to launch on macOS 26+ via SSH."
+            echo "Re-run with --resignApp 1 to apply an ad-hoc signature."
+            exit 1
         fi
         podmanDesktopBinary="$appPath/Contents/MacOS/${appName}"
     else
