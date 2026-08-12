@@ -101,11 +101,11 @@ load_secrets() {
         secretFilePath="$resourcesPath/$secretFile"
         if [ -f "$secretFilePath" ]; then
             echo "Loading Secrets from file: $secretFilePath"
-            DEFERRED_SECRETS_FILE="$HOME/.e2e-deferred-secrets"
-            (umask 077 && : > "$DEFERRED_SECRETS_FILE") || {
-                echo "Error: Cannot create deferred secrets file at $DEFERRED_SECRETS_FILE"
+            DEFERRED_SECRETS_FILE=$(mktemp "$HOME/.e2e-deferred-secrets.XXXXXX") || {
+                echo "Error: Cannot create deferred secrets file in $HOME"
                 exit 1
             }
+            chmod 600 "$DEFERRED_SECRETS_FILE"
             trap cleanup_deferred_secrets EXIT
             while IFS='=' read -r key value || [ -n "$key" ]; do
                 # Ignore comments and empty lines
