@@ -126,7 +126,7 @@ jobs:
 
     - name: Install nightly Podman on Windows host
       if: steps.fetch-podman.outputs.is_nightly == 'true'
-      uses: podman-desktop/e2e/.github/actions/install-podman-nightly@main
+      uses: podman-desktop/e2e/.github/actions/install-podman-nightly@podman_nightly_runs
       with:
         download-url: ${{ steps.fetch-podman.outputs.download_url }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
