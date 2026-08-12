@@ -30,12 +30,13 @@ runs:
     - name: Download and install nightly Podman on Windows host
       shell: bash
       run: |
+        set -euo pipefail
         SSH_HOST=$(cat host)
         SSH_USER=$(cat username)
         SSH_OPTS="-i id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30 -o ServerAliveCountMax=1200"
 
         echo "Downloading nightly Podman artifact..."
-        curl -L -H "Authorization: Bearer ${{ inputs.github-token }}" \
+        curl --fail --location -H "Authorization: Bearer ${{ inputs.github-token }}" \
           -o podman-nightly.zip '${{ inputs.download-url }}'
 
         echo "Extracting MSI from artifact archive..."
