@@ -404,7 +404,6 @@ if [ -z "$pdPath" ]; then
         fi
         if ! codesign --verify --deep --verbose=2 "$appPath"; then
             echo "ERROR: Codesign verification failed for $appPath"
-            echo "The app will likely fail to launch on macOS 26+ via SSH."
             echo "Re-run with --resignApp 1 to apply an ad-hoc signature."
             exit 1
         fi
