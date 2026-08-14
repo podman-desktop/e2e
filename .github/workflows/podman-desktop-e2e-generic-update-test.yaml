@@ -55,6 +55,7 @@ jobs:
       env:
         DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         PD_REPO_OPTIONS: ${{ github.event.inputs.pd_repo_options }}
+        DEFAULT_NPM_TARGET: 'test:e2e:update:run'
       run: |
         "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $env:GITHUB_ENV
         $options = if ($env:PD_REPO_OPTIONS) { $env:PD_REPO_OPTIONS } else { $env:DEFAULT_PD_REPO_OPTIONS }
@@ -214,6 +215,23 @@ jobs:
           Remove-Job $serverJob -ErrorAction SilentlyContinue
         }
 
+    - name: Create json file with workflow run attributes
+      if: always()
+      uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
+      with: 
+        name: "workflow-run-attributes.json"
+        json: |
+          {
+            "podman-desktop-version-update-target": "${{ env.RELEASE_VERSION }}",
+            "os": "${{ runner.os }}",
+            "os-version": "${{ runner.name }}",
+            "architecture": "${{ runner.arch }}",
+            "platform": "windows-nt",
+            "repository": "${{ env.PD_REPO }}",
+            "fork": "${{ env.PD_FORK }}",
+            "branch": "${{ env.BRANCH }}"
+          }
+
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@d9f48fc87bc235f7e214acf696ca5abc0a986f16 # v6.4.2
       if: always()
@@ -232,6 +250,17 @@ jobs:
         path: |
           ./**/tests/**/output/
           !./**/tests/**/traces/raw
+          **/workflow-run-attributes.json
+
+    - name: Notify Slack
+      if: always()
+      continue-on-error: true
+      uses: podman-desktop/e2e/.github/actions/notify-slack@main
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        status: ${{ job.status }}
+        workflow-name: "${{ github.workflow }} ${{ matrix.os }}"
+        branch: "$env:PD_BRANCH"
 
   mac-generic-server-update-e2e:
     name: ${{ matrix.os }} generic server update e2e
@@ -468,6 +497,23 @@ jobs:
           kill "$UPDATE_SERVER_PID" 2>/dev/null || true
         fi
 
+    - name: Create json file with workflow run attributes
+      if: always()
+      uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
+      with: 
+        name: "workflow-run-attributes.json"
+        json: |
+          {
+            "podman-desktop-version-update-target": "${{ env.RELEASE_VERSION }}",
+            "os": "${{ runner.os }}",
+            "os-version": "${{ runner.name }}",
+            "architecture": "${{ runner.arch }}",
+            "platform": "darwin",
+            "repository": "${{ env.PD_REPO }}",
+            "fork": "${{ env.PD_FORK }}",
+            "branch": "${{ env.BRANCH }}"
+          }
+
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@d9f48fc87bc235f7e214acf696ca5abc0a986f16 # v6.4.2
       if: always()
@@ -486,3 +532,14 @@ jobs:
         path: |
           ./**/tests/**/output/
           !./**/tests/**/traces/raw
+          **/workflow-run-attributes.json
+
+    - name: Notify Slack
+      if: always()
+      continue-on-error: true
+      uses: podman-desktop/e2e/.github/actions/notify-slack@main
+      with:
+        webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        status: ${{ job.status }}
+        workflow-name: "${{ github.workflow }} ${{ matrix.os }}"
+        branch: ${{ env.PD_BRANCH }}
