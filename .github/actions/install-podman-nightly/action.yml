@@ -83,7 +83,7 @@ runs:
             if (\$p.ExitCode -eq 0) {
                 \$installed = \$true
             } elseif (\$p.ExitCode -eq 1618) {
-                Write-Host "Attempt \$attempt/\$maxAttempts: Another MSI install in progress (error 1618), waiting 30s..."
+                Write-Host "Attempt \$(\$attempt)/\$(\$maxAttempts): Another MSI install in progress (error 1618), waiting 30s..."
                 Start-Sleep -Seconds 30
             } else {
                 Write-Host "::error::msiexec failed with exit code: \$(\$p.ExitCode)"
