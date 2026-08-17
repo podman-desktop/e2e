@@ -203,13 +203,20 @@ runs:
         Write-Host "Podman found at: \$podmanExe"
         & \$podmanExe --version
 
-        # Ensure Podman is on system PATH
+        # Ensure Podman is on PATH
         \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
-        if (\$machinePath -notlike "*\$podmanDir*") {
-            Write-Host "Adding \$podmanDir to system PATH..."
-            [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine')
+        \$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        \$currentPath = "\$machinePath;\$userPath"
+        if (\$currentPath -notlike "*\$podmanDir*") {
+            try {
+                Write-Host "Adding \$podmanDir to system PATH..."
+                [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine')
+            } catch {
+                Write-Host "Cannot modify system PATH (no admin). Adding to user PATH instead..."
+                [Environment]::SetEnvironmentVariable('Path', \$userPath + ';' + \$podmanDir, 'User')
+            }
         } else {
-            Write-Host 'Podman directory already on system PATH'
+            Write-Host 'Podman directory already on PATH'
         }
 
         # Restart sshd so new sessions pick up PATH changes
