@@ -72,11 +72,27 @@ runs:
         \$log = 'C:\Users\\${SSH_USER}\podman-install.log'
         \$expectedDir = '${PODMAN_DIR}'
 
-        # Install MSI
+        # Install MSI (retry on error 1618: another install already in progress)
         Write-Host 'Installing Podman MSI...'
-        \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru
-        if (\$p.ExitCode -ne 0) {
-            Write-Host "::error::msiexec failed with exit code: \$(\$p.ExitCode)"
+        \$maxAttempts = 5
+        \$attempt = 0
+        \$installed = \$false
+        while (-not \$installed -and \$attempt -lt \$maxAttempts) {
+            \$attempt++
+            \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru
+            if (\$p.ExitCode -eq 0) {
+                \$installed = \$true
+            } elseif (\$p.ExitCode -eq 1618) {
+                Write-Host "Attempt \$attempt/\$maxAttempts: Another MSI install in progress (error 1618), waiting 30s..."
+                Start-Sleep -Seconds 30
+            } else {
+                Write-Host "::error::msiexec failed with exit code: \$(\$p.ExitCode)"
+                if (Test-Path \$log) { Get-Content \$log -Tail 40 }
+                exit 1
+            }
+        }
+        if (-not \$installed) {
+            Write-Host "::error::MSI install failed after \$maxAttempts attempts (last error: 1618 - another install in progress)"
             if (Test-Path \$log) { Get-Content \$log -Tail 40 }
             exit 1
         }
