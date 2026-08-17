@@ -104,7 +104,8 @@ runs:
             "\$expectedDir\podman.exe",
             'C:\Program Files\RedHat\Podman\podman.exe',
             'C:\Program Files\Podman\podman.exe',
-            'C:\ProgramData\RedHat\Podman\podman.exe'
+            'C:\ProgramData\RedHat\Podman\podman.exe',
+            'C:\Program Files\Podman CLI\podman.exe'
         )
 
         foreach (\$path in \$searchPaths) {
@@ -114,9 +115,33 @@ runs:
             }
         }
 
-        # If not in known paths, search the install log for TARGETDIR
+        # Check registry for MSI install location
+        if (-not \$podmanExe) {
+            Write-Host 'Checking registry for Podman install location...'
+            \$regPaths = @(
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            foreach (\$regPath in \$regPaths) {
+                \$entry = Get-ItemProperty \$regPath -ErrorAction SilentlyContinue | Where-Object { \$_.DisplayName -like '*Podman*' } | Select-Object -First 1
+                if (\$entry) {
+                    Write-Host "Registry entry found: \$(\$entry.DisplayName) v\$(\$entry.DisplayVersion)"
+                    Write-Host "  InstallLocation: \$(\$entry.InstallLocation)"
+                    Write-Host "  InstallSource: \$(\$entry.InstallSource)"
+                    if (\$entry.InstallLocation -and (Test-Path "\$(\$entry.InstallLocation)\podman.exe")) {
+                        \$podmanExe = "\$(\$entry.InstallLocation)\podman.exe"
+                    } elseif (\$entry.InstallLocation -and (Test-Path "\$(\$entry.InstallLocation)bin\podman.exe")) {
+                        \$podmanExe = "\$(\$entry.InstallLocation)bin\podman.exe"
+                    }
+                    break
+                }
+            }
+        }
+
+        # If not in known paths, search the install log for file operations
         if (-not \$podmanExe -and (Test-Path \$log)) {
             Write-Host 'Checking MSI install log for install directory...'
+            \$logContent = Get-Content \$log -Raw
             \$targetLine = Select-String -Path \$log -Pattern 'TARGETDIR\s*=\s*(.+)' | Select-Object -First 1
             if (\$targetLine) {
                 Write-Host "Install log TARGETDIR: \$(\$targetLine.Line)"
@@ -129,23 +154,45 @@ runs:
                     \$podmanExe = "\$dir\podman.exe"
                 }
             }
+            # Search for any property containing a path with 'podman' in the log
+            \$podmanPaths = Select-String -Path \$log -Pattern '(?i)podman.*\.exe' | Select-Object -First 10
+            if (\$podmanPaths) {
+                Write-Host 'MSI log references to podman executables:'
+                \$podmanPaths | ForEach-Object { Write-Host "  \$(\$_.Line.Trim())" }
+            }
+            # Look for file copy/install operations
+            \$fileCopies = Select-String -Path \$log -Pattern '(?i)Copying.*podman|Installing.*podman|File:.*podman' | Select-Object -First 10
+            if (\$fileCopies) {
+                Write-Host 'MSI log file operations:'
+                \$fileCopies | ForEach-Object { Write-Host "  \$(\$_.Line.Trim())" }
+            }
         }
 
-        # Broad search as last resort
+        # Broad search as last resort (increased depth)
         if (-not \$podmanExe) {
-            Write-Host 'Searching for podman.exe on the system...'
-            \$found = Get-ChildItem -Path 'C:\' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue -Depth 5 | Select-Object -First 3
+            Write-Host 'Searching for podman.exe on the system (depth 8)...'
+            \$found = Get-ChildItem -Path 'C:\' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue -Depth 8 | Select-Object -First 3
             if (\$found) {
                 \$found | ForEach-Object { Write-Host "Found: \$(\$_.FullName)" }
                 \$podmanExe = \$found[0].FullName
             }
         }
 
+        # Also check if it's already on PATH from the MSI
+        if (-not \$podmanExe) {
+            Write-Host 'Checking if podman is already on PATH...'
+            \$onPath = Get-Command podman -ErrorAction SilentlyContinue
+            if (\$onPath) {
+                \$podmanExe = \$onPath.Source
+                Write-Host "Found podman on PATH: \$podmanExe"
+            }
+        }
+
         if (-not \$podmanExe) {
             Write-Host "::error::podman.exe not found anywhere after MSI install"
             if (Test-Path \$log) {
-                Write-Host '--- Last 60 lines of MSI install log ---'
-                Get-Content \$log -Tail 60
+                Write-Host '--- MSI install log (full) ---'
+                Get-Content \$log
             }
             exit 1
         }
