@@ -70,7 +70,7 @@ runs:
         \$ErrorActionPreference = 'Stop'
         \$msi = 'C:\Users\\${SSH_USER}\podman-nightly.msi'
         \$log = 'C:\Users\\${SSH_USER}\podman-install.log'
-        \$podmanDir = '${PODMAN_DIR}'
+        \$expectedDir = '${PODMAN_DIR}'
 
         # Install MSI
         Write-Host 'Installing Podman MSI...'
@@ -82,21 +82,66 @@ runs:
         }
         Write-Host 'MSI install completed successfully (exit code 0)'
 
-        # Verify binary exists
-        Write-Host 'Verifying podman.exe exists at expected location...'
-        if (Test-Path "\$podmanDir\podman.exe") {
-            & "\$podmanDir\podman.exe" --version
-        } else {
-            Write-Host "::error::podman.exe not found at \$podmanDir"
+        # Discover actual install location from MSI log or known paths
+        \$podmanExe = \$null
+        \$searchPaths = @(
+            "\$expectedDir\podman.exe",
+            'C:\Program Files\RedHat\Podman\podman.exe',
+            'C:\Program Files\Podman\podman.exe',
+            'C:\ProgramData\RedHat\Podman\podman.exe'
+        )
+
+        foreach (\$path in \$searchPaths) {
+            if (Test-Path \$path) {
+                \$podmanExe = \$path
+                break
+            }
+        }
+
+        # If not in known paths, search the install log for TARGETDIR
+        if (-not \$podmanExe -and (Test-Path \$log)) {
+            Write-Host 'Checking MSI install log for install directory...'
+            \$targetLine = Select-String -Path \$log -Pattern 'TARGETDIR\s*=\s*(.+)' | Select-Object -First 1
+            if (\$targetLine) {
+                Write-Host "Install log TARGETDIR: \$(\$targetLine.Line)"
+            }
+            \$installDir = Select-String -Path \$log -Pattern 'Property\(S\):\s+INSTALLFOLDER\s*=\s*(.+)' | Select-Object -First 1
+            if (\$installDir) {
+                \$dir = \$installDir.Matches[0].Groups[1].Value.Trim()
+                Write-Host "Install log INSTALLFOLDER: \$dir"
+                if (Test-Path "\$dir\podman.exe") {
+                    \$podmanExe = "\$dir\podman.exe"
+                }
+            }
+        }
+
+        # Broad search as last resort
+        if (-not \$podmanExe) {
             Write-Host 'Searching for podman.exe on the system...'
-            Get-ChildItem -Path 'C:\Program Files' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host \$_.FullName }
+            \$found = Get-ChildItem -Path 'C:\' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue -Depth 5 | Select-Object -First 3
+            if (\$found) {
+                \$found | ForEach-Object { Write-Host "Found: \$(\$_.FullName)" }
+                \$podmanExe = \$found[0].FullName
+            }
+        }
+
+        if (-not \$podmanExe) {
+            Write-Host "::error::podman.exe not found anywhere after MSI install"
+            if (Test-Path \$log) {
+                Write-Host '--- Last 60 lines of MSI install log ---'
+                Get-Content \$log -Tail 60
+            }
             exit 1
         }
+
+        \$podmanDir = Split-Path -Parent \$podmanExe
+        Write-Host "Podman found at: \$podmanExe"
+        & \$podmanExe --version
 
         # Ensure Podman is on system PATH
         \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
         if (\$machinePath -notlike "*\$podmanDir*") {
-            Write-Host 'Adding Podman to system PATH...'
+            Write-Host "Adding \$podmanDir to system PATH..."
             [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine')
         } else {
             Write-Host 'Podman directory already on system PATH'
