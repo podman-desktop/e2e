@@ -1,0 +1,250 @@
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Install Nightly Podman on Windows Host'
+description: 'Downloads a nightly Podman MSI from GitHub Actions artifacts and installs it on the remote Windows host via SSH.'
+inputs:
+  download-url:
+    description: 'GitHub Actions artifact archive URL for the nightly Podman MSI (from fetch-latest-podman-version-windows).'
+    required: true
+  github-token:
+    description: 'GitHub token with actions:read permission for downloading the artifact.'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set SSH connection variables
+      shell: bash
+      run: |
+        echo "SSH_HOST=$(cat host)" >> "$GITHUB_ENV"
+        echo "SSH_USER=$(cat username)" >> "$GITHUB_ENV"
+        echo "SSH_OPTS=-i id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30 -o ServerAliveCountMax=1200" >> "$GITHUB_ENV"
+        echo "PODMAN_DIR=C:\Program Files\RedHat\Podman" >> "$GITHUB_ENV"
+
+    - name: Download nightly Podman artifact
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        echo "Downloading nightly Podman artifact..."
+        curl --fail --location -H "Authorization: Bearer ${{ inputs.github-token }}" \
+          -o podman-nightly.zip '${{ inputs.download-url }}'
+
+        echo "Extracting MSI from artifact archive..."
+        unzip -qo podman-nightly.zip -d podman-nightly-extract
+        MSI_FILE=$(find podman-nightly-extract -name "*.msi" | head -1)
+
+        if [ -z "$MSI_FILE" ]; then
+          echo "::error::No MSI file found in nightly artifact archive"
+          exit 1
+        fi
+        echo "Nightly MSI: $MSI_FILE"
+
+        echo "Transferring MSI to Windows host..."
+        scp $SSH_OPTS "$MSI_FILE" "${SSH_USER}@${SSH_HOST}:C:\\Users\\${SSH_USER}\\podman-nightly.msi"
+
+    - name: Install nightly Podman MSI and update PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Generate PowerShell script locally to avoid multi-layer shell escaping issues.
+        # The Windows host uses PowerShell as its default SSH shell, so any $var in an
+        # inline ssh command gets expanded (to empty) by the outer PS session before
+        # reaching the inner -Command execution.
+        cat > /tmp/install-podman-nightly.ps1 << PSCRIPT
+        \$ErrorActionPreference = 'Stop'
+        \$msi = 'C:\Users\\${SSH_USER}\podman-nightly.msi'
+        \$log = 'C:\Users\\${SSH_USER}\podman-install.log'
+        \$expectedDir = '${PODMAN_DIR}'
+
+        # Install MSI (retry on error 1618: another install already in progress)
+        Write-Host 'Installing Podman MSI...'
+        \$maxAttempts = 5
+        \$attempt = 0
+        \$installed = \$false
+        while (-not \$installed -and \$attempt -lt \$maxAttempts) {
+            \$attempt++
+            \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru
+            if (\$p.ExitCode -eq 0) {
+                \$installed = \$true
+            } elseif (\$p.ExitCode -eq 1618) {
+                Write-Host "Attempt \$(\$attempt)/\$(\$maxAttempts): Another MSI install in progress (error 1618), waiting 30s..."
+                Start-Sleep -Seconds 30
+            } else {
+                Write-Host "::error::msiexec failed with exit code: \$(\$p.ExitCode)"
+                if (Test-Path \$log) { Get-Content \$log -Tail 40 }
+                exit 1
+            }
+        }
+        if (-not \$installed) {
+            Write-Host "::error::MSI install failed after \$maxAttempts attempts (last error: 1618 - another install in progress)"
+            if (Test-Path \$log) { Get-Content \$log -Tail 40 }
+            exit 1
+        }
+        Write-Host 'MSI install completed successfully (exit code 0)'
+
+        # Discover actual install location from MSI log or known paths
+        \$podmanExe = \$null
+        \$userLocalPrograms = "\$env:LOCALAPPDATA\Programs\Podman\podman.exe"
+        \$searchPaths = @(
+            \$userLocalPrograms,
+            "\$expectedDir\podman.exe",
+            'C:\Program Files\RedHat\Podman\podman.exe',
+            'C:\Program Files\Podman\podman.exe',
+            'C:\ProgramData\RedHat\Podman\podman.exe',
+            'C:\Program Files\Podman CLI\podman.exe'
+        )
+
+        foreach (\$path in \$searchPaths) {
+            if (Test-Path \$path) {
+                \$podmanExe = \$path
+                break
+            }
+        }
+
+        # Check registry for MSI install location
+        if (-not \$podmanExe) {
+            Write-Host 'Checking registry for Podman install location...'
+            \$regPaths = @(
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
+            foreach (\$regPath in \$regPaths) {
+                \$entry = Get-ItemProperty \$regPath -ErrorAction SilentlyContinue | Where-Object { \$_.DisplayName -like '*Podman*' } | Select-Object -First 1
+                if (\$entry) {
+                    Write-Host "Registry entry found: \$(\$entry.DisplayName) v\$(\$entry.DisplayVersion)"
+                    Write-Host "  InstallLocation: \$(\$entry.InstallLocation)"
+                    Write-Host "  InstallSource: \$(\$entry.InstallSource)"
+                    if (\$entry.InstallLocation -and (Test-Path "\$(\$entry.InstallLocation)\podman.exe")) {
+                        \$podmanExe = "\$(\$entry.InstallLocation)\podman.exe"
+                    } elseif (\$entry.InstallLocation -and (Test-Path "\$(\$entry.InstallLocation)bin\podman.exe")) {
+                        \$podmanExe = "\$(\$entry.InstallLocation)bin\podman.exe"
+                    }
+                    break
+                }
+            }
+        }
+
+        # If not in known paths, search the install log for file operations
+        if (-not \$podmanExe -and (Test-Path \$log)) {
+            Write-Host 'Checking MSI install log for install directory...'
+            \$logContent = Get-Content \$log -Raw
+            \$targetLine = Select-String -Path \$log -Pattern 'TARGETDIR\s*=\s*(.+)' | Select-Object -First 1
+            if (\$targetLine) {
+                Write-Host "Install log TARGETDIR: \$(\$targetLine.Line)"
+            }
+            \$installDir = Select-String -Path \$log -Pattern 'Property\(S\):\s+INSTALLFOLDER\s*=\s*(.+)' | Select-Object -First 1
+            if (\$installDir) {
+                \$dir = \$installDir.Matches[0].Groups[1].Value.Trim()
+                Write-Host "Install log INSTALLFOLDER: \$dir"
+                if (Test-Path "\$dir\podman.exe") {
+                    \$podmanExe = "\$dir\podman.exe"
+                }
+            }
+            # Search for any property containing a path with 'podman' in the log
+            \$podmanPaths = Select-String -Path \$log -Pattern '(?i)podman.*\.exe' | Select-Object -First 10
+            if (\$podmanPaths) {
+                Write-Host 'MSI log references to podman executables:'
+                \$podmanPaths | ForEach-Object { Write-Host "  \$(\$_.Line.Trim())" }
+            }
+            # Look for file copy/install operations
+            \$fileCopies = Select-String -Path \$log -Pattern '(?i)Copying.*podman|Installing.*podman|File:.*podman' | Select-Object -First 10
+            if (\$fileCopies) {
+                Write-Host 'MSI log file operations:'
+                \$fileCopies | ForEach-Object { Write-Host "  \$(\$_.Line.Trim())" }
+            }
+        }
+
+        # Broad search as last resort (increased depth)
+        if (-not \$podmanExe) {
+            Write-Host 'Searching for podman.exe on the system (depth 8)...'
+            \$found = Get-ChildItem -Path 'C:\' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue -Depth 8 | Select-Object -First 3
+            if (\$found) {
+                \$found | ForEach-Object { Write-Host "Found: \$(\$_.FullName)" }
+                \$podmanExe = \$found[0].FullName
+            }
+        }
+
+        # Also check if it's already on PATH from the MSI
+        if (-not \$podmanExe) {
+            Write-Host 'Checking if podman is already on PATH...'
+            \$onPath = Get-Command podman -ErrorAction SilentlyContinue
+            if (\$onPath) {
+                \$podmanExe = \$onPath.Source
+                Write-Host "Found podman on PATH: \$podmanExe"
+            }
+        }
+
+        if (-not \$podmanExe) {
+            Write-Host "::error::podman.exe not found anywhere after MSI install"
+            if (Test-Path \$log) {
+                Write-Host '--- MSI install log (full) ---'
+                Get-Content \$log
+            }
+            exit 1
+        }
+
+        \$podmanDir = Split-Path -Parent \$podmanExe
+        Write-Host "Podman found at: \$podmanExe"
+        & \$podmanExe --version
+
+        # Ensure Podman is on PATH
+        \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        \$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        \$currentPath = "\$machinePath;\$userPath"
+        if (\$currentPath -notlike "*\$podmanDir*") {
+            try {
+                Write-Host "Adding \$podmanDir to system PATH..."
+                [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine')
+            } catch {
+                Write-Host "Cannot modify system PATH (no admin). Adding to user PATH instead..."
+                [Environment]::SetEnvironmentVariable('Path', \$userPath + ';' + \$podmanDir, 'User')
+            }
+        } else {
+            Write-Host 'Podman directory already on PATH'
+        }
+
+        # Restart sshd so new sessions pick up PATH changes
+        Write-Host 'Scheduling sshd restart (detached) so future sessions pick up PATH changes...'
+        Start-Process powershell -ArgumentList '-Command', 'Start-Sleep 2; Restart-Service sshd -Force' -WindowStyle Hidden
+        PSCRIPT
+
+        echo "Transferring install script to Windows host..."
+        scp $SSH_OPTS /tmp/install-podman-nightly.ps1 "${SSH_USER}@${SSH_HOST}:C:\\Users\\${SSH_USER}\\install-podman-nightly.ps1"
+
+        echo "Executing install script on Windows host..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\${SSH_USER}\\install-podman-nightly.ps1"
+
+        echo "Waiting for sshd to come back up..."
+        for i in $(seq 1 10); do
+          sleep 3
+          if ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "echo ok" 2>/dev/null; then
+            echo "sshd is back (attempt $i)"
+            break
+          fi
+          echo "Attempt $i: sshd not ready yet..."
+          if [ "$i" -eq 10 ]; then
+            echo "::error::sshd did not come back after 10 attempts"
+            exit 1
+          fi
+        done
+
+        echo "Verifying podman is discoverable via PATH in a fresh session..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "podman --version" || \
+          ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"podman --version\"" || \
+          { echo "::error::podman not found on PATH after install and sshd restart. Binary was verified at ${PODMAN_DIR} but PATH propagation failed."; exit 1; }

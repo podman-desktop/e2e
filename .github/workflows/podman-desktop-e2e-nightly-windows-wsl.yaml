@@ -1,5 +1,5 @@
-name: PD E2E with Podman Nightly WSL
-run-name: PD E2E Podman Nightly WSL
+name: PD E2E Windows WSL (Podman Latest + Nightly)
+run-name: PD E2E Windows WSL - Podman ${{ inputs.podman_version || 'latest + nightly' }}
 
 on:
   schedule:
@@ -26,10 +26,10 @@ on:
         type: 'string'
         required: true
       podman_version:
-        default: 'latest'
-        description: 'Podman version (use "latest" to auto-fetch latest release, or specify version like "v5.6.1")'
+        default: ''
+        description: 'Podman version - leave empty to run matrix (latest + nightly), or specify: "latest", "nightly", "v5.6.1"'
         type: string
-        required: true
+        required: false
       e2e_runner_version:
         default: 'v0.1.1'
         description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
@@ -58,11 +58,13 @@ jobs:
     permissions:
       contents: read
       checks: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
         windows-version: ['10','11']
         windows-featurepack: ['22h2-ent', '25h2-ent']
+        podman-release: ${{ github.event.inputs.podman_version != '' && fromJSON(format('["{0}"]', github.event.inputs.podman_version)) || fromJSON('["latest","nightly"]') }}
         exclude:
           - windows-version: '10'
             windows-featurepack: '25h2-ent'
@@ -70,11 +72,11 @@ jobs:
             windows-featurepack: '22h2-ent'
 
     steps:
-    - name: Fetch latest Podman version
+    - name: Fetch Podman version
       id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@aea6ff44f2a4a82da13d22061ce73443a125925d
+      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@6b9121eed76855854291b52c6bfbc278dbdf0288
       with:
-        version_input: ${{ github.event.inputs.podman_version || 'latest' }}
+        version_input: ${{ matrix.podman-release }}
         file_type: 'msi'
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -119,8 +121,19 @@ jobs:
     - name: Check instance system info
       uses: podman-desktop/e2e/.github/actions/instance-system-info@main
 
-    - name: Emulate X session 
+    - name: Emulate X session
       uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
+
+    - name: Install nightly Podman on Windows host
+      if: steps.fetch-podman.outputs.is_nightly == 'true'
+      uses: podman-desktop/e2e/.github/actions/install-podman-nightly@main
+      with:
+        download-url: ${{ steps.fetch-podman.outputs.download_url }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Clear Podman download URL for nightly
+      if: steps.fetch-podman.outputs.is_nightly == 'true'
+      run: echo "PODMAN_URL=" >> $GITHUB_ENV
 
     - name: Setup dependencies and build Podman Desktop locally
       uses: podman-desktop/e2e/.github/actions/build-podman-desktop@main
@@ -133,13 +146,15 @@ jobs:
       with:
         e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
         podman-download-url: ${{ env.PODMAN_URL }}
+        # When PODMAN_URL is cleared (nightly), prevents runner from reading podman-location.log
+        podman-path: ${{ env.PODMAN_URL != '' }}
         fork-repo: ${{ env.FORK }}
         branch-name: ${{ env.BRANCH }}
         npm-target: ${{ env.NPM_TARGET }}
         podman-provider: ${{ env.PODMAN_PROVIDER }}
         env-vars: ${{ env.ENV_VARS }}
         ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
-    
+
     - name: Create json file with workflow run attributes
       if: always()
       uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
@@ -149,6 +164,7 @@ jobs:
           {
             "podman-provider": "${{ env.PODMAN_PROVIDER }}",
             "podman-version": "${{ steps.fetch-podman.outputs.version }}",
+            "podman-release": "${{ matrix.podman-release }}",
             "os": "windows",
             "os-version": "${{ matrix.windows-version }}",
             "architecture": "x86_64",
@@ -185,7 +201,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
+        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}-${{ matrix.podman-release }}
         path: |
           results/*
           **/workflow-run-attributes.json
@@ -198,5 +214,5 @@ jobs:
       with:
         webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
         status: ${{ job.status }}
-        workflow-name: "${{ github.workflow }} (Windows ${{ matrix.windows-version }} ${{ matrix.windows-featurepack }})"
+        workflow-name: "${{ github.workflow }} (Windows ${{ matrix.windows-version }} ${{ matrix.windows-featurepack }} - Podman ${{ matrix.podman-release }})"
         branch: ${{ env.BRANCH }}
