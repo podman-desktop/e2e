@@ -27,13 +27,18 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Download and install nightly Podman on Windows host
+    - name: Set SSH connection variables
+      shell: bash
+      run: |
+        echo "SSH_HOST=$(cat host)" >> "$GITHUB_ENV"
+        echo "SSH_USER=$(cat username)" >> "$GITHUB_ENV"
+        echo "SSH_OPTS=-i id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30 -o ServerAliveCountMax=1200" >> "$GITHUB_ENV"
+        echo "PODMAN_DIR=C:\Program Files\RedHat\Podman" >> "$GITHUB_ENV"
+
+    - name: Download nightly Podman artifact
       shell: bash
       run: |
         set -euo pipefail
-        SSH_HOST=$(cat host)
-        SSH_USER=$(cat username)
-        SSH_OPTS="-i id_rsa -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=30 -o ServerAliveCountMax=1200"
 
         echo "Downloading nightly Podman artifact..."
         curl --fail --location -H "Authorization: Bearer ${{ inputs.github-token }}" \
@@ -52,10 +57,62 @@ runs:
         echo "Transferring MSI to Windows host..."
         scp $SSH_OPTS "$MSI_FILE" "${SSH_USER}@${SSH_HOST}:C:\\Users\\${SSH_USER}\\podman-nightly.msi"
 
-        echo "Installing Podman MSI on Windows host..."
-        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "msiexec /package C:\\Users\\${SSH_USER}\\podman-nightly.msi /quiet /norestart"
+    - name: Install nightly Podman MSI and update PATH
+      shell: bash
+      run: |
+        set -euo pipefail
 
-        echo "Verifying Podman is on PATH in a fresh session..."
+        echo "Installing Podman MSI on Windows host (Start-Process -Wait to block until complete)..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
+          \$msi = 'C:\\Users\\${SSH_USER}\\podman-nightly.msi'; \
+          \$log = 'C:\\Users\\${SSH_USER}\\podman-install.log'; \
+          \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru; \
+          if (\$p.ExitCode -ne 0) { \
+            Write-Host '::error::msiexec failed with exit code:' \$p.ExitCode; \
+            if (Test-Path \$log) { Get-Content \$log -Tail 40 }; \
+            exit 1 \
+          }; \
+          Write-Host 'MSI install completed successfully (exit code 0)'\""
+
+        echo "Verifying podman.exe exists at expected location..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
+          if (Test-Path '${PODMAN_DIR}\\podman.exe') { \
+            & '${PODMAN_DIR}\\podman.exe' --version \
+          } else { \
+            Write-Host '::error::podman.exe not found at ${PODMAN_DIR}'; \
+            Write-Host 'Searching for podman.exe on the system...'; \
+            Get-ChildItem -Path 'C:\\Program Files' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host \$_.FullName }; \
+            exit 1 \
+          }\""
+
+        echo "Ensuring Podman directory is on the system PATH and restarting sshd..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
+          \$podmanDir = '${PODMAN_DIR}'; \
+          \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine'); \
+          if (\$machinePath -notlike \"*\$podmanDir*\") { \
+            Write-Host 'Adding Podman to system PATH...'; \
+            [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine') \
+          } else { \
+            Write-Host 'Podman directory already on system PATH' \
+          }; \
+          Write-Host 'Scheduling sshd restart (detached) so future sessions pick up PATH changes...'; \
+          Start-Process powershell -ArgumentList '-Command', 'Start-Sleep 2; Restart-Service sshd -Force' -WindowStyle Hidden\""
+
+        echo "Waiting for sshd to come back up..."
+        for i in $(seq 1 10); do
+          sleep 3
+          if ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "echo ok" 2>/dev/null; then
+            echo "sshd is back (attempt $i)"
+            break
+          fi
+          echo "Attempt $i: sshd not ready yet..."
+          if [ "$i" -eq 10 ]; then
+            echo "::error::sshd did not come back after 10 attempts"
+            exit 1
+          fi
+        done
+
+        echo "Verifying podman is discoverable via PATH in a fresh session..."
         ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "podman --version" || \
           ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"podman --version\"" || \
-          { echo "::error::Podman not found on PATH after MSI install. The e2e-runner expects podman on the system PATH for nightly runs."; exit 1; }
+          { echo "::error::podman not found on PATH after install and sshd restart. Binary was verified at ${PODMAN_DIR} but PATH propagation failed."; exit 1; }
