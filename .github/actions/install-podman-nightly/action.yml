@@ -62,41 +62,56 @@ runs:
       run: |
         set -euo pipefail
 
-        echo "Installing Podman MSI on Windows host (Start-Process -Wait to block until complete)..."
-        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
-          \$msi = 'C:\\Users\\${SSH_USER}\\podman-nightly.msi'; \
-          \$log = 'C:\\Users\\${SSH_USER}\\podman-install.log'; \
-          \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru; \
-          if (\$p.ExitCode -ne 0) { \
-            Write-Host '::error::msiexec failed with exit code:' \$p.ExitCode; \
-            if (Test-Path \$log) { Get-Content \$log -Tail 40 }; \
-            exit 1 \
-          }; \
-          Write-Host 'MSI install completed successfully (exit code 0)'\""
+        # Generate PowerShell script locally to avoid multi-layer shell escaping issues.
+        # The Windows host uses PowerShell as its default SSH shell, so any $var in an
+        # inline ssh command gets expanded (to empty) by the outer PS session before
+        # reaching the inner -Command execution.
+        cat > /tmp/install-podman-nightly.ps1 << PSCRIPT
+        \$ErrorActionPreference = 'Stop'
+        \$msi = 'C:\Users\\${SSH_USER}\podman-nightly.msi'
+        \$log = 'C:\Users\\${SSH_USER}\podman-install.log'
+        \$podmanDir = '${PODMAN_DIR}'
 
-        echo "Verifying podman.exe exists at expected location..."
-        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
-          if (Test-Path '${PODMAN_DIR}\\podman.exe') { \
-            & '${PODMAN_DIR}\\podman.exe' --version \
-          } else { \
-            Write-Host '::error::podman.exe not found at ${PODMAN_DIR}'; \
-            Write-Host 'Searching for podman.exe on the system...'; \
-            Get-ChildItem -Path 'C:\\Program Files' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host \$_.FullName }; \
-            exit 1 \
-          }\""
+        # Install MSI
+        Write-Host 'Installing Podman MSI...'
+        \$p = Start-Process msiexec -ArgumentList '/package', \$msi, '/quiet', '/norestart', '/l*v', \$log -Wait -PassThru
+        if (\$p.ExitCode -ne 0) {
+            Write-Host "::error::msiexec failed with exit code: \$(\$p.ExitCode)"
+            if (Test-Path \$log) { Get-Content \$log -Tail 40 }
+            exit 1
+        }
+        Write-Host 'MSI install completed successfully (exit code 0)'
 
-        echo "Ensuring Podman directory is on the system PATH and restarting sshd..."
-        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -Command \"\
-          \$podmanDir = '${PODMAN_DIR}'; \
-          \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine'); \
-          if (\$machinePath -notlike \"*\$podmanDir*\") { \
-            Write-Host 'Adding Podman to system PATH...'; \
-            [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine') \
-          } else { \
-            Write-Host 'Podman directory already on system PATH' \
-          }; \
-          Write-Host 'Scheduling sshd restart (detached) so future sessions pick up PATH changes...'; \
-          Start-Process powershell -ArgumentList '-Command', 'Start-Sleep 2; Restart-Service sshd -Force' -WindowStyle Hidden\""
+        # Verify binary exists
+        Write-Host 'Verifying podman.exe exists at expected location...'
+        if (Test-Path "\$podmanDir\podman.exe") {
+            & "\$podmanDir\podman.exe" --version
+        } else {
+            Write-Host "::error::podman.exe not found at \$podmanDir"
+            Write-Host 'Searching for podman.exe on the system...'
+            Get-ChildItem -Path 'C:\Program Files' -Filter 'podman.exe' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host \$_.FullName }
+            exit 1
+        }
+
+        # Ensure Podman is on system PATH
+        \$machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+        if (\$machinePath -notlike "*\$podmanDir*") {
+            Write-Host 'Adding Podman to system PATH...'
+            [Environment]::SetEnvironmentVariable('Path', \$machinePath + ';' + \$podmanDir, 'Machine')
+        } else {
+            Write-Host 'Podman directory already on system PATH'
+        }
+
+        # Restart sshd so new sessions pick up PATH changes
+        Write-Host 'Scheduling sshd restart (detached) so future sessions pick up PATH changes...'
+        Start-Process powershell -ArgumentList '-Command', 'Start-Sleep 2; Restart-Service sshd -Force' -WindowStyle Hidden
+        PSCRIPT
+
+        echo "Transferring install script to Windows host..."
+        scp $SSH_OPTS /tmp/install-podman-nightly.ps1 "${SSH_USER}@${SSH_HOST}:C:\\Users\\${SSH_USER}\\install-podman-nightly.ps1"
+
+        echo "Executing install script on Windows host..."
+        ssh $SSH_OPTS ${SSH_USER}@${SSH_HOST} "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\${SSH_USER}\\install-podman-nightly.ps1"
 
         echo "Waiting for sshd to come back up..."
         for i in $(seq 1 10); do
