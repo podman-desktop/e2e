@@ -100,7 +100,9 @@ runs:
 
         # Discover actual install location from MSI log or known paths
         \$podmanExe = \$null
+        \$userLocalPrograms = "\$env:LOCALAPPDATA\Programs\Podman\podman.exe"
         \$searchPaths = @(
+            \$userLocalPrograms,
             "\$expectedDir\podman.exe",
             'C:\Program Files\RedHat\Podman\podman.exe',
             'C:\Program Files\Podman\podman.exe',
