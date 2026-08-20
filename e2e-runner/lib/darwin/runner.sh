@@ -52,7 +52,7 @@ while [[ $# -gt 0 ]]; do
         --fork) fork="$2"; shift ;;
         --branch) branch="$2"; shift ;;
         --repo) repo="$2"; shift ;;
-        --appName) appName="$2"; shift ;;
+        --appName) appName="${2//\'/}"; shift ;;
         --gitProviderUrl) gitProviderUrl="$2"; shift ;;
         --extRepo) extRepo="$2"; shift ;;
         --extTests) extTests="$2"; shift ;;
@@ -322,6 +322,15 @@ if (( cleanMachine == 1 )); then
     # remove old podman system connections from user space
     rm -rf ~/.config/containers/podman-connections.json*
     rm -rf ~/.config/containers/podman
+    # Detach any stale DMG volumes from previous runs
+    for vol in "/Volumes/${appName}"*; do
+        if [ -d "$vol" ]; then
+            echo "Detaching stale volume: $vol"
+            hdiutil detach "$vol" 2>&1 \
+                || hdiutil detach -force "$vol" 2>&1 \
+                || echo "Warning: Could not detach $vol — may interfere with test"
+        fi
+    done
     echo "Cleanup finished..."
 fi
 
@@ -387,7 +396,20 @@ if [ -z "$pdPath" ]; then
             exit 1
         fi
         pdVolumePath=$(find /Volumes -name "*${appName} ${version}*" -maxdepth 1 | head -1)
+        if [ -z "$pdVolumePath" ]; then
+            echo "Volume not found with version pattern, trying without version..."
+            matches=$(find /Volumes -name "*${appName}*" -maxdepth 1)
+            matchCount=$(echo "$matches" | grep -c . || true)
+            if [ "$matchCount" -gt 1 ]; then
+                echo "Warning: Multiple volumes matched '${appName}': $matches"
+            fi
+            pdVolumePath=$(echo "$matches" | head -1)
+        fi
         echo "Volume path: $pdVolumePath"
+        if [ -z "$pdVolumePath" ]; then
+            echo "Error: Could not find mounted volume for ${appName}"
+            exit 1
+        fi
         sudo rm -rf "/Applications/${appName}.app"
         sudo cp -R "$pdVolumePath/${appName}.app" /Applications
         hdiutil detach "$pdVolumePath"
@@ -418,8 +440,13 @@ else
 fi
 
 if [ -n "$podmanDesktopBinary" ]; then
-    echo "Setting PODMAN_DESKTOP_BINARY to: $podmanDesktopBinary"
-    export PODMAN_DESKTOP_BINARY="$podmanDesktopBinary"
+    if [[ "${appName,,}" == *"kaiden"* ]]; then
+        binaryEnvVar="KAIDEN_BINARY"
+    else
+        binaryEnvVar="PODMAN_DESKTOP_BINARY"
+    fi
+    echo "Setting $binaryEnvVar to: $podmanDesktopBinary"
+    export "$binaryEnvVar"="$podmanDesktopBinary"
 elif (( extTests == 1 )); then
     echo "Setting PODMAN_DESKTOP_ARGS to: $workingDir/$repo"
     export PODMAN_DESKTOP_ARGS="$workingDir/$repo"
