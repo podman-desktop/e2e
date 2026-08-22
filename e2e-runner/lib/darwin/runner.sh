@@ -440,7 +440,8 @@ else
 fi
 
 if [ -n "$podmanDesktopBinary" ]; then
-    if [[ "${appName,,}" == *"kaiden"* ]]; then
+    appNameLower=$(printf '%s' "$appName" | tr '[:upper:]' '[:lower:]')
+    if [[ "$appNameLower" == *"kaiden"* ]]; then
         binaryEnvVar="KAIDEN_BINARY"
     else
         binaryEnvVar="PODMAN_DESKTOP_BINARY"
