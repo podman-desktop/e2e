@@ -409,23 +409,15 @@ if (( extTests == 1 )); then
     restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget"
     pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
-    TEST_EXIT_CODE=${PIPESTATUS[0]}
-    cleanup_deferred_secrets || true
+    cleanup_deferred_secrets
     ## Collect results
-    collect_logs "$extRepo" || true
-    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
-        exit "$TEST_EXIT_CODE"
-    fi
+    collect_logs "$extRepo"
 else
     restore_deferred_secrets
     echo "Running the e2e playwright tests using target: $npmTarget, binary path, if any: $podmanDesktopBinary"
     pnpm "$npmTarget" 2>&1 | tee -a "$testsOutputLog"
-    TEST_EXIT_CODE=${PIPESTATUS[0]}
-    cleanup_deferred_secrets || true
-    collect_logs "podman-desktop" || true
-    if [ "$TEST_EXIT_CODE" -ne 0 ]; then
-        exit "$TEST_EXIT_CODE"
-    fi
+    cleanup_deferred_secrets
+    collect_logs "podman-desktop"
 fi
 
 # Cleaning up, env vars - secrets
