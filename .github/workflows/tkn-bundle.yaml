@@ -10,6 +10,7 @@ on:
       - '.fmf/**'
       - 'plans/**'
       - 'e2e-runner/**'
+      - 'qe-on-duty-reporter/**'
       - '!.github/workflows/tkn-bundle.yaml'
   pull_request:
     branches: [ main ]
@@ -18,6 +19,7 @@ on:
       - '.fmf/**'
       - 'plans/**'
       - 'e2e-runner/**'
+      - 'qe-on-duty-reporter/**'
       - '!.github/workflows/tkn-bundle.yaml'
 
 jobs:
