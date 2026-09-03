@@ -1,10 +1,24 @@
 #!/bin/bash
 set -e
 
-echo "Cleaning up managed configuration files for Podman Desktop on macOS..."
+echo "Cleaning up managed configuration files for Podman Desktop on Unix..."
 
 MANAGED_CONFIG_DIR="/Library/Application Support/io.podman_desktop.PodmanDesktop"
 MANAGED_FILES=("default-settings.json" "locked.json")
+
+if [[ "$PRODUCT_TESTS" == "true" || "$PRODUCT_TESTS" == "1" ]]; then
+    if [ "$(uname)" == "Linux" ]; then
+        MANAGED_CONFIG_DIR="/usr/share/rh-podman-desktop"
+    else
+        MANAGED_CONFIG_DIR="/Library/Application Support/com.redhat.PodmanDesktop"
+    fi
+else
+    if [ "$(uname)" == "Linux" ]; then
+        MANAGED_CONFIG_DIR="/usr/share/podman-desktop"
+    fi
+fi
+
+echo "Working with '$MANAGED_CONFIG_DIR' managed directory"
 
 if [ -d "$MANAGED_CONFIG_DIR" ]; then
     for file in "${MANAGED_FILES[@]}"; do
