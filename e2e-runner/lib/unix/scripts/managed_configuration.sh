@@ -28,17 +28,19 @@ if [ -d "podman-desktop" ]; then
     test_default="tests/playwright/resources/managed-configuration/default-settings.json"
     test_locked="tests/playwright/resources/managed-configuration/locked.json"
     if [ -f "$test_default" ]; then
-       sudo cp "$test_default" "$MANAGED_CONFIG_DIR/default-settings.json"
+        sudo cp "$test_default" "$MANAGED_CONFIG_DIR/default-settings.json"
+        echo "Default settings:" && cat "$MANAGED_CONFIG_DIR/default-settings.json"
     else
         echo "$test_default does not exist..."
+        exit 1
     fi
     if [ -f "$test_locked" ]; then
-       sudo cp "$test_locked" "$MANAGED_CONFIG_DIR/locked.json"
+        sudo cp "$test_locked" "$MANAGED_CONFIG_DIR/locked.json"
+        echo "Locked settings:" && cat "$MANAGED_CONFIG_DIR/locked.json"
     else
         echo "$test_locked does not exist..."
+        exit 1
     fi
-    echo "Default settings:" && cat "$MANAGED_CONFIG_DIR/default-settings.json"
-    echo "Locked settings:" && cat "$MANAGED_CONFIG_DIR/locked.json"
 else
     echo "podman-desktop repository not found, could not set managed config..."
     exit 1

@@ -19,20 +19,21 @@ if (Test-Path "podman-desktop") {
 
     if (Test-Path $testDefault) {
         Copy-Item -Path $testDefault -Destination "$ManagedConfigDir\default-settings.json" -Force
+        write-host "Default settings:"
+        Get-Content "$ManagedConfigDir\default-settings.json"
     } else {
         write-host "$testDefault does not exist..."
+        exit 1
     }
 
     if (Test-Path $testLocked) {
         Copy-Item -Path $testLocked -Destination "$ManagedConfigDir\locked.json" -Force
+        write-host "Locked settings:"
+        Get-Content "$ManagedConfigDir\locked.json"
     } else {
         write-host "$testLocked does not exist..."
+        exit 1
     }
-
-    write-host "Default settings:"
-    Get-Content "$ManagedConfigDir\default-settings.json"
-    write-host "Locked settings:"
-    Get-Content "$ManagedConfigDir\locked.json"
 } else {
     write-host "podman-desktop repository not found, could not set managed config..."
     exit 1
