@@ -1,0 +1,213 @@
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Generate Test Attributes File'
+description: 'Generates file with test attributes in JSON format'
+
+inputs:
+  filename:
+    description: 'Name of the generated JSON file'
+    required: false
+    default: 'workflow-run-attributes.json'
+  dir:
+    description: 'Optional subfolder where the JSON file is saved, defaults to the workspace root'
+    required: false
+    default: ''
+  podman-provider:
+    description: 'Podman machine provider (wsl, hyperv, applehv, libkrun), empty when podman runs natively'
+    required: false
+    default: ''
+  podman-version:
+    description: 'Version of podman used during the test run'
+    required: false
+    default: ''
+  repository:
+    description: 'Repository under test'
+    required: false
+    default: 'podman-desktop'
+  os:
+    description: |
+      Operating system of the machine under test (ubuntu, fedora, windows, macos).
+      Only required when the tests do not run on the GitHub runner itself, e.g. on a VM provisioned in Azure.
+      Detected from the runner when empty.
+    required: false
+    default: ''
+  os-version:
+    description: |
+      Version of the operating system of the machine under test (24.04, 11, 2022, 15).
+      Only required when the tests do not run on the GitHub runner itself.
+      Detected from the runner when empty.
+    required: false
+    default: ''
+  architecture:
+    description: |
+      Architecture of the machine under test (x86_64, arm64).
+      Only required when the tests do not run on the GitHub runner itself.
+      Detected from the runner when empty.
+    required: false
+    default: ''
+  platform:
+    description: |
+      Platform of the machine under test (linux, windows-nt, darwin).
+      Only required when the tests do not run on the GitHub runner itself.
+      Derived from the "os" input when it is set, detected from the runner otherwise.
+    required: false
+    default: ''
+  extra-attributes:
+    description: |
+      Optional JSON object merged into the generated attributes, e.g. '{"podman-release": "6.0.2"}'.
+      Keys defined here override the generated ones.
+    required: false
+    default: ''
+
+outputs:
+  attributes:
+    description: 'The generated attributes as a JSON string'
+    value: ${{ steps.generate.outputs.attributes }}
+  attributes-file:
+    description: 'Path of the generated JSON file, relative to the workspace'
+    value: ${{ steps.generate.outputs.attributes-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate test attributes file
+      id: generate
+      shell: bash
+      env:
+        FILENAME: ${{ inputs.filename }}
+        DIR: ${{ inputs.dir }}
+        PODMAN_PROVIDER: ${{ inputs.podman-provider }}
+        PODMAN_VERSION: ${{ inputs.podman-version }}
+        REPOSITORY: ${{ inputs.repository }}
+        INPUT_OS: ${{ inputs.os }}
+        INPUT_OS_VERSION: ${{ inputs.os-version }}
+        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        EXTRA_ATTRIBUTES: ${{ inputs.extra-attributes }}
+      run: |
+        # Fail fast on error
+        set -euo pipefail
+
+        os="${INPUT_OS}"
+        os_version="${INPUT_OS_VERSION}"
+        platform="${INPUT_PLATFORM}"
+        architecture="${INPUT_ARCHITECTURE}"
+
+        if [ -n "${os}" ]; then
+          # The tests run on a machine provisioned elsewhere, e.g. a VM in Azure,
+          # nothing the runner reports about itself describes that machine
+          if [ -z "${platform}" ]; then
+            case "${os}" in
+              windows) platform="windows-nt" ;;
+              macos|darwin) platform="darwin" ;;
+              *) platform="linux" ;;
+            esac
+          fi
+        else
+          # The runner is the machine under test, detect what was not given as an input
+          case "${RUNNER_OS}" in
+            Linux)
+              detected_platform="linux"
+              if [ -f /etc/os-release ]; then
+                detected_os=$(. /etc/os-release && echo "${ID:-}")
+                detected_os_version=$(. /etc/os-release && echo "${VERSION_ID:-}")
+              fi
+              ;;
+            macOS)
+              detected_platform="darwin"
+              detected_os="macos"
+              detected_os_version=$(sw_vers -productVersion)
+              ;;
+            Windows)
+              detected_platform="windows-nt"
+              detected_os="windows"
+              caption=$(powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).Caption" 2>/dev/null | tr -d '\r' || true)
+              # Server editions are versioned by year (2022), client editions by release (10, 11)
+              if [[ "${caption}" =~ Server[[:space:]]+([0-9]+) ]] || [[ "${caption}" =~ Windows[[:space:]]+([0-9]+) ]]; then
+                detected_os_version="${BASH_REMATCH[1]}"
+              fi
+              ;;
+            *)
+              echo "::warning::Unknown runner OS '${RUNNER_OS}', os and platform can be provided as inputs"
+              ;;
+          esac
+
+          os="${detected_os:-}"
+          : "${os_version:=${detected_os_version:-}}"
+          : "${platform:=${detected_platform:-}}"
+        fi
+
+        if [ -z "${architecture}" ]; then
+          # Github Runners are x64, the provisioned VMs are expected to match, pass the architecture input when they do not
+          case "${RUNNER_ARCH}" in
+            X64) architecture="x86_64" ;;
+            X86) architecture="x86" ;;
+            ARM64) architecture="arm64" ;;
+            ARM) architecture="arm" ;;
+            *) architecture=$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]') ;;
+          esac
+        fi
+
+        if [ -z "${os}" ] || [ -z "${os_version}" ]; then
+          echo "::warning::Could not determine os ('${os}') or os-version ('${os_version}'), provide them as inputs"
+        fi
+
+        attributes=$(jq -n \
+          --arg podman_provider "${PODMAN_PROVIDER}" \
+          --arg podman_version "${PODMAN_VERSION}" \
+          --arg os "${os}" \
+          --arg os_version "${os_version}" \
+          --arg architecture "${architecture}" \
+          --arg platform "${platform}" \
+          --arg repository "${REPOSITORY}" \
+          '{
+            "podman-provider": $podman_provider,
+            "podman-version": $podman_version,
+            "os": $os,
+            "os-version": $os_version,
+            "architecture": $architecture,
+            "platform": $platform,
+            "repository": $repository
+          }')
+
+        if [ -n "${EXTRA_ATTRIBUTES}" ]; then
+          if ! echo "${EXTRA_ATTRIBUTES}" | jq -e 'type == "object"' > /dev/null 2>&1; then
+            echo "::error::extra-attributes is not a valid JSON object: ${EXTRA_ATTRIBUTES}"
+            exit 1
+          fi
+          attributes=$(echo "${EXTRA_ATTRIBUTES}" | jq --argjson base "${attributes}" '$base * .')
+        fi
+
+        file="${FILENAME}"
+        if [ -n "${DIR}" ]; then
+          file="${DIR%/}/${FILENAME}"
+          mkdir -p "${GITHUB_WORKSPACE}/${DIR}"
+        fi
+
+        # The file is always written into the workspace, 
+        # so that it is found by the upload-artifact glob no matter where the action is called from
+        echo "${attributes}" > "${GITHUB_WORKSPACE}/${file}"
+
+        echo "Test attributes written into ${file}:"
+        echo "${attributes}"
+
+        {
+          echo "attributes<<EOF"
+          echo "${attributes}"
+          echo "EOF"
+          echo "attributes-file=${file}"
+        } >> "${GITHUB_OUTPUT}"
