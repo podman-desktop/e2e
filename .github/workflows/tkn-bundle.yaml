@@ -10,6 +10,7 @@ on:
       - '.fmf/**'
       - 'plans/**'
       - 'e2e-runner/**'
+      - 'evaluation-agent/**'
       - 'qe-on-duty-reporter/**'
       - '!.github/workflows/tkn-bundle.yaml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - '.fmf/**'
       - 'plans/**'
       - 'e2e-runner/**'
+      - 'evaluation-agent/**'
       - 'qe-on-duty-reporter/**'
       - '!.github/workflows/tkn-bundle.yaml'
 
