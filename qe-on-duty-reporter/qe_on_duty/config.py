@@ -121,6 +121,11 @@ class Config:
         """Get the maximum number of open PRs to fetch per repo before local filtering."""
         return self.pr_filters.get('max_results') or 500
 
+    def get_pr_exclude_approved_by_current_user(self) -> bool:
+        """Whether to exclude PRs the current user has already approved."""
+        value = self.pr_filters.get('exclude_approved_by_current_user')
+        return True if value is None else bool(value)
+
     def get_workflow_max_age_days(self) -> int:
         """Get maximum age for workflow runs in days."""
         max_age_days = self.workflow_filters.get('max_age_days')

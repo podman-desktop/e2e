@@ -28,6 +28,7 @@ class PRCollector:
             self.qe_reviewers.add(current_user)
         self.current_user = current_user
         self.max_results = config.get_pr_max_results()
+        self.exclude_approved_by_current_user = config.get_pr_exclude_approved_by_current_user()
 
     def collect(self, repositories: List[str]) -> List[PRData]:
         """
@@ -65,10 +66,35 @@ class PRCollector:
         # Filter PRs matching QE criteria
         qe_prs = []
         for pr in prs:
-            if self._matches_qe_criteria(pr):
-                qe_prs.append(self._parse_pr(pr, repo))
+            if not self._matches_qe_criteria(pr):
+                continue
+            if self.exclude_approved_by_current_user and self._approved_by_current_user(pr):
+                continue
+            qe_prs.append(self._parse_pr(pr, repo))
 
         return qe_prs
+
+    def _approved_by_current_user(self, pr: dict) -> bool:
+        """
+        Check if the current user's latest review on this PR is an approval.
+
+        `latestReviews` holds each reviewer's most recent review, so a prior
+        "changes requested" that was later superseded by an approval is
+        correctly treated as approved.
+
+        Args:
+            pr: PR data dictionary from gh CLI
+
+        Returns:
+            True if the current user has approved this PR
+        """
+        if not self.current_user:
+            return False
+        for review in pr.get('latestReviews', []) or []:
+            author = review.get('author') or {}
+            if author.get('login') == self.current_user and review.get('state') == 'APPROVED':
+                return True
+        return False
 
     def _matches_qe_criteria(self, pr: dict) -> bool:
         """

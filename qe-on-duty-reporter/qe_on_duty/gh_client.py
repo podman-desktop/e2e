@@ -143,7 +143,7 @@ class GHClient:
             "--repo", repo,
             "--state", state,
             "--limit", str(limit),
-            "--json", "number,title,url,author,labels,assignees,reviewRequests,createdAt,updatedAt,state,isDraft"
+            "--json", "number,title,url,author,labels,assignees,reviewRequests,latestReviews,createdAt,updatedAt,state,isDraft"
         ])
 
     def run_list(self, repo: str, limit: int = 100, status: Optional[str] = None,

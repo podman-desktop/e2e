@@ -27,6 +27,7 @@ pr_filters:
     - "odockal"
     # Add more QE team GitHub usernames here
   max_results: 500  # Max open PRs fetched per repo before QE filtering (gh CLI default is only 30)
+  exclude_approved_by_current_user: true  # Don't list PRs the current user has already approved
 
 workflow_filters:
   overnight_start_hour: 18  # Look for failures from yesterday at this hour until now
