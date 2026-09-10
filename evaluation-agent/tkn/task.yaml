@@ -1,0 +1,154 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: evaluate-e2e-results
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, ai, evaluation
+    tekton.dev/displayName: "Podman Desktop E2E result evaluation"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Runs a headless Claude Code agent (Google Vertex AI) to classify Podman
+    Desktop E2E test failures from a results directory and optionally posts the
+    verdict to a Slack Workflow Builder trigger. Consumes the results produced by
+    the e2e-runner task read-only — it never modifies the workspace.
+
+  workspaces:
+  - name: pipelines-data
+    description: Shared workspace where the e2e-runner task stored the qe-results.
+  - name: gcp-credentials
+    description: >-
+      Secret mounted as a workspace, holding the Vertex service-account JSON
+      (default key: service-account.json). The service account needs the
+      "Vertex AI User" role on the project.
+
+  params:
+  - name: image-repository
+    description: 'evaluation-agent image repository (no tag), ie: ghcr.io/podman-desktop/evaluation-agent'
+    default: 'ghcr.io/podman-desktop/evaluation-agent'
+  - name: image-version
+    description: 'evaluation-agent image version, ie: v0.1.0 or nightly'
+    default: 'nightly'
+  - name: workspace-resources-path
+    description: path on workspace to find the results (same as the e2e-runner run)
+  - name: workspace-qe-subpath
+    description: subpath relative to workspace-resources-path where results are stored
+    default: qe-results
+
+  # Vertex AI auth
+  - name: vertex-project-id
+    description: GCP project id hosting the Vertex AI models
+  - name: vertex-region
+    description: Vertex region (global recommended; some models lack quota in regional endpoints)
+    default: 'global'
+  - name: gcp-credentials-file
+    description: filename of the service-account JSON inside the gcp-credentials workspace
+    default: 'service-account.json'
+
+  # Reporting
+  - name: pipeline-name
+    description: Pipeline identifier shown in the Slack header
+    default: "''"
+  - name: artifacts-url
+    description: Link to the full artifacts, shown in the Slack footer
+    default: "''"
+  - name: slack-workflow-var
+    description: Variable name for the Slack Workflow Builder trigger payload
+    default: 'text'
+
+  # Agent budget / guardrails
+  - name: agent-model
+    description: Model alias or id for the agent
+    default: 'claude-sonnet-5'
+  - name: agent-timeout
+    description: Wall-clock cap for the agent run (GNU timeout syntax)
+    default: '30m'
+  - name: agent-max-budget
+    description: Maximum USD to spend on API calls for the run
+    default: '5'
+  - name: ignore-errors
+    description: >-
+      When 'true' (default) a failed evaluation is logged but the task step still
+      succeeds, so a triage hiccup never fails the PipelineRun.
+    default: 'true'
+
+  results:
+  - name: cost-usd
+    description: Estimated USD cost of the evaluation run
+  - name: session-id
+    description: Claude Code session id (for postmortem/debugging)
+
+  steps:
+  - name: evaluate
+    image: $(params.image-repository):$(params.image-version)
+    # Versions can be overridden; force a pull so an overridden tag is honored.
+    imagePullPolicy: Always
+    env:
+    - name: CLAUDE_CODE_USE_VERTEX
+      value: "1"
+    - name: ANTHROPIC_VERTEX_PROJECT_ID
+      value: $(params.vertex-project-id)
+    - name: CLOUD_ML_REGION
+      value: $(params.vertex-region)
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: $(workspaces.gcp-credentials.path)/$(params.gcp-credentials-file)
+    - name: SLACK_WEBHOOK_URL
+      valueFrom:
+        secretKeyRef:
+          name: slack-webhook
+          key: url
+          optional: true
+    - name: SLACK_WORKFLOW_VAR
+      value: $(params.slack-workflow-var)
+    - name: PIPELINE_NAME
+      value: $(params.pipeline-name)
+    - name: ARTIFACTS_URL
+      value: $(params.artifacts-url)
+    - name: AGENT_MODEL
+      value: $(params.agent-model)
+    - name: AGENT_TIMEOUT
+      value: $(params.agent-timeout)
+    - name: AGENT_MAX_BUDGET
+      value: $(params.agent-max-budget)
+    script: |
+      #!/usr/bin/env bash
+      set -uo pipefail
+
+      # Results directory produced by the e2e-runner task (read-only for us).
+      RESULTS_DIR="$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)"
+
+      # The entrypoint only writes to /tmp + its ephemeral config dir — the
+      # workspace is never modified. Route the small machine-readable outputs to
+      # Tekton result paths (the full JSON exceeds the Tekton result size limit,
+      # so it stays on stdout / goes to Slack). Pre-create the result files so
+      # unset results never leave the task in an error state.
+      : >"$(results.cost-usd.path)"
+      : >"$(results.session-id.path)"
+
+      COST_OUT="$(results.cost-usd.path)" \
+      SESSION_OUT="$(results.session-id.path)" \
+        /usr/local/bin/entrypoint.sh "${RESULTS_DIR}"
+      rc=$?
+
+      if [[ $rc -ne 0 ]]; then
+        if [[ "$(params.ignore-errors)" == "true" ]]; then
+          echo "WARNING: evaluation failed (rc=$rc); ignore-errors=true, continuing." >&2
+          exit 0
+        fi
+        exit $rc
+      fi
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1"

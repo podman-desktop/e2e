@@ -1,3 +1,6 @@
 oci/bin
 out
 output
+# Python bytecode
+__pycache__/
+*.pyc
