@@ -32,10 +32,16 @@ inputs:
     description: 'Optional subfolder where the JSON file is saved, defaults to the workspace root'
     default: ''
   podman-provider:
-    description: 'Podman machine provider (wsl, hyperv, applehv, libkrun), empty when podman runs natively'
+    description: |
+      Podman machine provider (wsl, hyperv, applehv, libkrun), empty when podman runs natively.
+      A value outside that list is only warned about and written through, so that a provider
+      this action has not heard of yet does not break the callers.
     default: ''
   podman-version:
-    description: 'Version of podman used during the test run'
+    description: |
+      Version of podman used during the test run. Pass it whenever podman is part of the run,
+      nothing on the runner can tell which podman the tests actually ran against.
+      A missing value is only warned about, some test runs do not involve podman at all.
     default: ''
   repository:
     description: 'Repository under test'
@@ -84,6 +90,8 @@ runs:
       shell: bash
       env:
         RUNS_ON_GH_RUNNER: ${{ inputs.runs-on-gh-runner }}
+        PODMAN_PROVIDER: ${{ inputs.podman-provider }}
+        PODMAN_VERSION: ${{ inputs.podman-version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_OS_VERSION: ${{ inputs.os-version }}
         INPUT_ARCHITECTURE: ${{ inputs.architecture }}
@@ -117,6 +125,19 @@ runs:
             exit 1
           fi
         fi
+
+        # Only a warning, not every test run involves podman
+        if [ -z "${PODMAN_VERSION}" ]; then
+          echo "::warning::Input 'podman-version' is empty, the attributes will not say which podman the tests ran against"
+        fi
+
+        # Only a warning, a provider added to podman later has to keep working here
+        case "${PODMAN_PROVIDER}" in
+          ''|wsl|hyperv|applehv|libkrun) ;;
+          *)
+            echo "::warning::Unrecognised 'podman-provider' value '${PODMAN_PROVIDER}', it is written into the attributes unchanged"
+            ;;
+        esac
 
     - name: Generate test attributes file
       id: generate
