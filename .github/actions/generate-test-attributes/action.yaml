@@ -64,8 +64,8 @@ inputs:
   platform:
     description: |
       Platform of the machine under test (linux, windows-nt, darwin).
-      Only required when the tests do not run on the GitHub runner itself.
-      Derived from the "os" input when it is set, detected from the runner otherwise.
+      Never required, it is derived from the "os" input when that is set
+      and detected from the runner otherwise.
     default: ''
   extra-attributes:
     description: |
