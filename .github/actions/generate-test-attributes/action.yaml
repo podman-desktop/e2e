@@ -20,7 +20,7 @@ description: 'Generates file with test attributes in JSON format'
 inputs:
   runs-on-gh-runner:
     description: |
-      Set to 'true' or 'false'. Ifthe tests run on the GitHub runner itself ('true') or on a provisioned
+      Set to 'true' or 'false'. If the tests run on the GitHub runner itself ('true') or on a provisioned
       machine, e.g. a VM in Azure ('false'). There is no default on purpose, a forgotten
       input would tag the run with the properties of the runner instead of the tested machine.
       With 'false' the os, os-version and architecture inputs are required.
