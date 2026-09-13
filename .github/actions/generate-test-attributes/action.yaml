@@ -1,0 +1,274 @@
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: 'Generate Test Attributes File'
+description: 'Generates file with test attributes in JSON format'
+
+inputs:
+  runs-on-gh-runner:
+    description: |
+      Set to 'true' or 'false'. If the tests run on the GitHub runner itself ('true') or on a provisioned
+      machine, e.g. a VM in Azure ('false'). There is no default on purpose, a forgotten
+      input would tag the run with the properties of the runner instead of the tested machine.
+      With 'false' the os, os-version and architecture inputs are required.
+    required: true
+  filename:
+    description: 'Name of the generated JSON file'
+    default: 'workflow-run-attributes.json'
+  dir:
+    description: 'Optional subfolder where the JSON file is saved, defaults to the workspace root'
+    default: ''
+  podman-provider:
+    description: |
+      Podman machine provider (wsl, hyperv, applehv, libkrun), empty when podman runs natively.
+      A value outside that list is only warned about and written through, so that a provider
+      this action has not heard of yet does not break the callers.
+    default: ''
+  podman-version:
+    description: |
+      Version of podman used during the test run. Pass it whenever podman is part of the run,
+      nothing on the runner can tell which podman the tests actually ran against.
+      A missing value is only warned about, some test runs do not involve podman at all.
+    default: ''
+  repository:
+    description: 'Repository under test'
+    default: 'podman-desktop'
+  os:
+    description: |
+      Operating system of the machine under test (ubuntu, fedora, windows, macos).
+      Required with runs-on-gh-runner set to 'false', detected from the runner otherwise.
+    default: ''
+  os-version:
+    description: |
+      Version of the operating system of the machine under test (24.04, 11, 2022, 15).
+      Required with runs-on-gh-runner set to 'false', detected from the runner otherwise.
+    default: ''
+  architecture:
+    description: |
+      Architecture of the machine under test (x86_64, arm64).
+      Required with runs-on-gh-runner set to 'false', detected from the runner otherwise.
+    default: ''
+  platform:
+    description: |
+      Platform of the machine under test (linux, windows-nt, darwin).
+      Never required, it is derived from the "os" input when that is set
+      and detected from the runner otherwise.
+    default: ''
+  extra-attributes:
+    description: |
+      Optional JSON object merged into the generated attributes, e.g. '{"podman-desktop-release": "1.30.0"}'.
+      Keys defined here override the generated ones.
+    default: ''
+
+outputs:
+  attributes:
+    description: 'The generated attributes as a JSON string'
+    value: ${{ steps.generate.outputs.attributes }}
+  attributes-file:
+    description: 'Path of the generated JSON file, relative to the workspace'
+    value: ${{ steps.generate.outputs.attributes-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    # required: true is not enforced for composite actions, the inputs are checked
+    # in a step of their own so that a failure points at the caller of the action
+    - name: Validate inputs
+      shell: bash
+      env:
+        RUNS_ON_GH_RUNNER: ${{ inputs.runs-on-gh-runner }}
+        PODMAN_PROVIDER: ${{ inputs.podman-provider }}
+        PODMAN_VERSION: ${{ inputs.podman-version }}
+        INPUT_OS: ${{ inputs.os }}
+        INPUT_OS_VERSION: ${{ inputs.os-version }}
+        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
+      run: |
+        # Fail fast on error
+        set -euo pipefail
+
+        case "${RUNS_ON_GH_RUNNER}" in
+          true|false) ;;
+          '')
+            echo "::error::Input 'runs-on-gh-runner' is required, set it to 'true' when the tests run on the GitHub runner or to 'false' when they run on a provisioned machine"
+            exit 1
+            ;;
+          *)
+            echo "::error::Invalid 'runs-on-gh-runner' value '${RUNS_ON_GH_RUNNER}', expected 'true' or 'false'"
+            exit 1
+            ;;
+        esac
+
+        if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
+          # Nothing the runner reports about itself describes the provisioned machine,
+          # so every attribute that cannot be detected has to be provided as an input
+          missing=""
+          for pair in "os:${INPUT_OS}" "os-version:${INPUT_OS_VERSION}" "architecture:${INPUT_ARCHITECTURE}"; do
+            if [ -z "${pair#*:}" ]; then
+              missing="${missing} ${pair%%:*}"
+            fi
+          done
+          if [ -n "${missing}" ]; then
+            echo "::error::If you specify that the tests do not run on the GitHub runner, these inputs are required:${missing}"
+            exit 1
+          fi
+        fi
+
+        # Only a warning, not every test run involves podman
+        if [ -z "${PODMAN_VERSION}" ]; then
+          echo "::warning::Input 'podman-version' is empty, the attributes will not say which podman the tests ran against"
+        fi
+
+        # Only a warning, a provider added to podman later has to keep working here
+        case "${PODMAN_PROVIDER}" in
+          ''|wsl|hyperv|applehv|libkrun) ;;
+          *)
+            echo "::warning::Unrecognised 'podman-provider' value '${PODMAN_PROVIDER}', it is written into the attributes unchanged"
+            ;;
+        esac
+
+    - name: Generate test attributes file
+      id: generate
+      shell: bash
+      env:
+        FILENAME: ${{ inputs.filename }}
+        DIR: ${{ inputs.dir }}
+        PODMAN_PROVIDER: ${{ inputs.podman-provider }}
+        PODMAN_VERSION: ${{ inputs.podman-version }}
+        REPOSITORY: ${{ inputs.repository }}
+        RUNS_ON_GH_RUNNER: ${{ inputs.runs-on-gh-runner }}
+        INPUT_OS: ${{ inputs.os }}
+        INPUT_OS_VERSION: ${{ inputs.os-version }}
+        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
+        INPUT_PLATFORM: ${{ inputs.platform }}
+        EXTRA_ATTRIBUTES: ${{ inputs.extra-attributes }}
+      run: |
+        # Fail fast on error
+        set -euo pipefail
+
+        os="${INPUT_OS}"
+        os_version="${INPUT_OS_VERSION}"
+        platform="${INPUT_PLATFORM}"
+        architecture="${INPUT_ARCHITECTURE}"
+
+        # The inputs were validated in the previous step
+        if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
+          # The tests run on a provisioned machine and the inputs describe it
+          if [ -z "${platform}" ]; then
+            case "${os}" in
+              windows) platform="windows-nt" ;;
+              macos|darwin) platform="darwin" ;;
+              *) platform="linux" ;;
+            esac
+          fi
+        else
+          # The runner is the machine under test, detect what was not given as an input
+          case "${RUNNER_OS}" in
+            Linux)
+              detected_platform="linux"
+              if [ -f /etc/os-release ]; then
+                detected_os=$(. /etc/os-release && echo "${ID:-}")
+                detected_os_version=$(. /etc/os-release && echo "${VERSION_ID:-}")
+              fi
+              ;;
+            macOS)
+              detected_platform="darwin"
+              detected_os="macos"
+              detected_os_version=$(sw_vers -productVersion)
+              ;;
+            Windows)
+              detected_platform="windows-nt"
+              detected_os="windows"
+              caption=$(powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).Caption" 2>/dev/null | tr -d '\r' || true)
+              # Server editions are versioned by year (2022), client editions by release (10, 11)
+              if [[ "${caption}" =~ Server[[:space:]]+([0-9]+) ]] || [[ "${caption}" =~ Windows[[:space:]]+([0-9]+) ]]; then
+                detected_os_version="${BASH_REMATCH[1]}"
+              fi
+              ;;
+            *)
+              echo "::warning::Unknown runner OS '${RUNNER_OS}', os and platform can be provided as inputs"
+              ;;
+          esac
+
+          # Detection only fills the gaps, an input that was passed explicitly always wins
+          if [ -z "${os}" ]; then
+            os="${detected_os:-}"
+          fi
+          if [ -z "${os_version}" ]; then
+            os_version="${detected_os_version:-}"
+          fi
+          if [ -z "${platform}" ]; then
+            platform="${detected_platform:-}"
+          fi
+          if [ -z "${architecture}" ]; then
+            case "${RUNNER_ARCH}" in
+              X64) architecture="x86_64" ;;
+              X86) architecture="x86" ;;
+              ARM64) architecture="arm64" ;;
+              ARM) architecture="arm" ;;
+              *) architecture=$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]') ;;
+            esac
+          fi
+        fi
+
+        if [ -z "${os}" ] || [ -z "${os_version}" ]; then
+          echo "::warning::Could not determine os ('${os}') or os-version ('${os_version}'), provide them as inputs"
+        fi
+
+        attributes=$(jq -n \
+          --arg podman_provider "${PODMAN_PROVIDER}" \
+          --arg podman_version "${PODMAN_VERSION}" \
+          --arg os "${os}" \
+          --arg os_version "${os_version}" \
+          --arg architecture "${architecture}" \
+          --arg platform "${platform}" \
+          --arg repository "${REPOSITORY}" \
+          '{
+            "podman-provider": $podman_provider,
+            "podman-version": $podman_version,
+            "os": $os,
+            "os-version": $os_version,
+            "architecture": $architecture,
+            "platform": $platform,
+            "repository": $repository
+          }')
+
+        if [ -n "${EXTRA_ATTRIBUTES}" ]; then
+          if ! echo "${EXTRA_ATTRIBUTES}" | jq -e 'type == "object"' > /dev/null 2>&1; then
+            echo "::error::extra-attributes is not a valid JSON object: ${EXTRA_ATTRIBUTES}"
+            exit 1
+          fi
+          attributes=$(echo "${EXTRA_ATTRIBUTES}" | jq --argjson base "${attributes}" '$base * .')
+        fi
+
+        file="${FILENAME}"
+        if [ -n "${DIR}" ]; then
+          file="${DIR%/}/${FILENAME}"
+          mkdir -p "${GITHUB_WORKSPACE}/${DIR}"
+        fi
+
+        # The file is always written into the workspace, 
+        # so that it is found by the upload-artifact glob no matter where the action is called from
+        echo "${attributes}" > "${GITHUB_WORKSPACE}/${file}"
+
+        echo "Test attributes written into ${file}:"
+        echo "${attributes}"
+
+        {
+          echo "attributes<<EOF"
+          echo "${attributes}"
+          echo "EOF"
+          echo "attributes-file=${file}"
+        } >> "${GITHUB_OUTPUT}"
