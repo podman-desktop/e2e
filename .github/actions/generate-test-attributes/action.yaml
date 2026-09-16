@@ -90,6 +90,8 @@ runs:
       shell: bash
       env:
         RUNS_ON_GH_RUNNER: ${{ inputs.runs-on-gh-runner }}
+        FILENAME: ${{ inputs.filename }}
+        DIR: ${{ inputs.dir }}
         PODMAN_PROVIDER: ${{ inputs.podman-provider }}
         PODMAN_VERSION: ${{ inputs.podman-version }}
         INPUT_OS: ${{ inputs.os }}
@@ -125,6 +127,30 @@ runs:
             exit 1
           fi
         fi
+
+        # The file is written under the workspace and the artifact globs are relative
+        # to it, so a path that leads out of the workspace would produce a file that
+        # no upload step can see
+        if [ -z "${FILENAME}" ]; then
+          echo "::error::Input 'filename' cannot be empty"
+          exit 1
+        fi
+        for pair in "filename:${FILENAME}" "dir:${DIR}"; do
+          name="${pair%%:*}"
+          value="${pair#*:}"
+          case "${value}" in
+            /*)
+              echo "::error::Input '${name}' has to stay inside the workspace, '${value}' is an absolute path"
+              exit 1
+              ;;
+          esac
+          case "/${value}/" in
+            */../*)
+              echo "::error::Input '${name}' has to stay inside the workspace, '${value}' leads out of it"
+              exit 1
+              ;;
+          esac
+        done
 
         # Only a warning, not every test run involves podman
         if [ -z "${PODMAN_VERSION}" ]; then
@@ -163,17 +189,10 @@ runs:
         platform="${INPUT_PLATFORM}"
         architecture="${INPUT_ARCHITECTURE}"
 
-        # The inputs were validated in the previous step
-        if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
-          # The tests run on a provisioned machine and the inputs describe it
-          if [ -z "${platform}" ]; then
-            case "${os}" in
-              windows) platform="windows-nt" ;;
-              macos|darwin) platform="darwin" ;;
-              *) platform="linux" ;;
-            esac
-          fi
-        else
+        # The inputs were validated in the previous step. With 'false' the tests run on
+        # a provisioned machine that the inputs already describe, there is nothing to
+        # detect, everything below only applies to the runner being the machine itself.
+        if [ "${RUNS_ON_GH_RUNNER}" = "true" ]; then
           # The runner is the machine under test, detect what was not given as an input
           case "${RUNNER_OS}" in
             Linux)
@@ -209,9 +228,6 @@ runs:
           if [ -z "${os_version}" ]; then
             os_version="${detected_os_version:-}"
           fi
-          if [ -z "${platform}" ]; then
-            platform="${detected_platform:-}"
-          fi
           if [ -z "${architecture}" ]; then
             case "${RUNNER_ARCH}" in
               X64) architecture="x86_64" ;;
@@ -221,6 +237,22 @@ runs:
               *) architecture=$(echo "${RUNNER_ARCH}" | tr '[:upper:]' '[:lower:]') ;;
             esac
           fi
+        fi
+
+        # The platform follows the os in both modes, only an explicit input overrides it.
+        # Taking it from the runner instead would let an os input and the platform
+        # describe two different machines.
+        if [ -z "${platform}" ] && [ -n "${os}" ]; then
+          case "${os}" in
+            windows) platform="windows-nt" ;;
+            macos|darwin) platform="darwin" ;;
+            *) platform="linux" ;;
+          esac
+        fi
+
+        # Only reached when the os could not be determined at all
+        if [ -z "${platform}" ]; then
+          platform="${detected_platform:-}"
         fi
 
         if [ -z "${os}" ] || [ -z "${os_version}" ]; then
