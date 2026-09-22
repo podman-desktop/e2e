@@ -26,11 +26,8 @@ inputs:
       With 'false' the os, os-version and architecture inputs are required.
     required: true
   filename:
-    description: 'Name of the generated JSON file'
+    description: 'Name of the generated JSON file, written into the workspace root, no path separators'
     default: 'workflow-run-attributes.json'
-  dir:
-    description: 'Optional subfolder where the JSON file is saved, defaults to the workspace root'
-    default: ''
   podman-provider:
     description: |
       Podman machine provider (wsl, hyperv, applehv, libkrun), empty when podman runs natively.
@@ -72,7 +69,7 @@ outputs:
     description: 'The generated attributes as a JSON string'
     value: ${{ steps.generate.outputs.attributes }}
   attributes-file:
-    description: 'Path of the generated JSON file, relative to the workspace'
+    description: 'Name of the generated JSON file, written into the workspace root'
     value: ${{ steps.generate.outputs.attributes-file }}
 
 runs:
@@ -87,7 +84,6 @@ runs:
       shell: bash
       env:
         FILENAME: ${{ inputs.filename }}
-        DIR: ${{ inputs.dir }}
         PODMAN_PROVIDER: ${{ inputs.podman-provider }}
         PODMAN_VERSION: ${{ inputs.podman-version }}
         REPOSITORY: ${{ inputs.repository }}
@@ -112,6 +108,13 @@ runs:
             ;;
         esac
 
+        case "${FILENAME}" in
+          */*)
+            echo "::error::Input 'filename' cannot contain '/', it is always written into the workspace root: '${FILENAME}'"
+            exit 1
+            ;;
+        esac
+
         if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
           missing=""
           for pair in "os:${INPUT_OS}" "os-version:${INPUT_OS_VERSION}" "architecture:${INPUT_ARCHITECTURE}"; do
@@ -125,7 +128,7 @@ runs:
           fi
         fi
 
-        echo "Inputs: podman-provider='${PODMAN_PROVIDER}' podman-version='${PODMAN_VERSION}' repository='${REPOSITORY}' filename='${FILENAME}' dir='${DIR}'"
+        echo "Inputs: podman-provider='${PODMAN_PROVIDER}' podman-version='${PODMAN_VERSION}' repository='${REPOSITORY}' filename='${FILENAME}'"
 
         os="${INPUT_OS}"
         os_version="${INPUT_OS_VERSION}"
@@ -215,22 +218,16 @@ runs:
           attributes=$(echo "${EXTRA_ATTRIBUTES}" | jq --argjson base "${attributes}" '$base * .')
         fi
 
-        file="${FILENAME}"
-        if [ -n "${DIR}" ]; then
-          file="${DIR%/}/${FILENAME}"
-          mkdir -p "${GITHUB_WORKSPACE}/${DIR}"
-        fi
+        # Always written into the workspace root, so that it is found by the
+        # upload-artifact glob no matter where the action is called from
+        echo "${attributes}" > "${GITHUB_WORKSPACE}/${FILENAME}"
 
-        # The file is always written into the workspace, 
-        # so that it is found by the upload-artifact glob no matter where the action is called from
-        echo "${attributes}" > "${GITHUB_WORKSPACE}/${file}"
-
-        echo "Test attributes written into ${file}:"
+        echo "Test attributes written into ${FILENAME}:"
         echo "${attributes}"
 
         {
           echo "attributes<<EOF"
           echo "${attributes}"
           echo "EOF"
-          echo "attributes-file=${file}"
+          echo "attributes-file=${FILENAME}"
         } >> "${GITHUB_OUTPUT}"
