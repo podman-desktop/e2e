@@ -36,10 +36,9 @@ on:
         type: 'string'
         required: true
       e2e_runner_version:
-        default: 'v0.1.1'
-        description: 'e2e-runner image tag on ghcr.io/podman-desktop/e2e-runner'
+        description: 'ghcr.io/podman-desktop/e2e-runner tag (blank = vars.E2E_RUNNER_VERSION, or type nightly)'
         type: 'string'
-        required: true
+        required: false
       mapt_params:
         description: |
           **Create instance (leave empty to use repo secrets/variables)**
@@ -119,7 +118,7 @@ jobs:
          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "EXT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options }}" | awk -F ',' \
         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || 'v0.1.1' }}" >> $GITHUB_ENV
+        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || vars.E2E_RUNNER_VERSION }}" >> $GITHUB_ENV
 
         # For mapt_params, use repo variables directly if input is empty
         if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
