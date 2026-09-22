@@ -84,87 +84,10 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    # required: true is not enforced for composite actions, the inputs are checked
-    # in a step of their own so that a failure points at the caller of the action
-    - name: Validate inputs
-      shell: bash
-      env:
-        RUNS_ON_GH_RUNNER: ${{ inputs.runs-on-gh-runner }}
-        FILENAME: ${{ inputs.filename }}
-        DIR: ${{ inputs.dir }}
-        PODMAN_PROVIDER: ${{ inputs.podman-provider }}
-        PODMAN_VERSION: ${{ inputs.podman-version }}
-        INPUT_OS: ${{ inputs.os }}
-        INPUT_OS_VERSION: ${{ inputs.os-version }}
-        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
-      run: |
-        # Fail fast on error
-        set -euo pipefail
-
-        case "${RUNS_ON_GH_RUNNER}" in
-          true|false) ;;
-          '')
-            echo "::error::Input 'runs-on-gh-runner' is required, set it to 'true' when the tests run on the GitHub runner or to 'false' when they run on a provisioned machine"
-            exit 1
-            ;;
-          *)
-            echo "::error::Invalid 'runs-on-gh-runner' value '${RUNS_ON_GH_RUNNER}', expected 'true' or 'false'"
-            exit 1
-            ;;
-        esac
-
-        if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
-          # Nothing the runner reports about itself describes the provisioned machine,
-          # so every attribute that cannot be detected has to be provided as an input
-          missing=""
-          for pair in "os:${INPUT_OS}" "os-version:${INPUT_OS_VERSION}" "architecture:${INPUT_ARCHITECTURE}"; do
-            if [ -z "${pair#*:}" ]; then
-              missing="${missing} ${pair%%:*}"
-            fi
-          done
-          if [ -n "${missing}" ]; then
-            echo "::error::If you specify that the tests do not run on the GitHub runner, these inputs are required:${missing}"
-            exit 1
-          fi
-        fi
-
-        # The file is written under the workspace and the artifact globs are relative
-        # to it, so a path that leads out of the workspace would produce a file that
-        # no upload step can see
-        if [ -z "${FILENAME}" ]; then
-          echo "::error::Input 'filename' cannot be empty"
-          exit 1
-        fi
-        for pair in "filename:${FILENAME}" "dir:${DIR}"; do
-          name="${pair%%:*}"
-          value="${pair#*:}"
-          case "${value}" in
-            /*)
-              echo "::error::Input '${name}' has to stay inside the workspace, '${value}' is an absolute path"
-              exit 1
-              ;;
-          esac
-          case "/${value}/" in
-            */../*)
-              echo "::error::Input '${name}' has to stay inside the workspace, '${value}' leads out of it"
-              exit 1
-              ;;
-          esac
-        done
-
-        # Only a warning, not every test run involves podman
-        if [ -z "${PODMAN_VERSION}" ]; then
-          echo "::warning::Input 'podman-version' is empty, the attributes will not say which podman the tests ran against"
-        fi
-
-        # Only a warning, a provider added to podman later has to keep working here
-        case "${PODMAN_PROVIDER}" in
-          ''|wsl|hyperv|applehv|libkrun) ;;
-          *)
-            echo "::warning::Unrecognised 'podman-provider' value '${PODMAN_PROVIDER}', it is written into the attributes unchanged"
-            ;;
-        esac
-
+    # required: true is not enforced for composite actions, so runs-on-gh-runner is checked
+    # here: a forgotten or misspelled value would otherwise tag the run with the runner's own
+    # properties instead of failing, and 'false' needs os/os-version/architecture as inputs
+    # since there is then nothing to detect them from
     - name: Generate test attributes file
       id: generate
       shell: bash
@@ -184,14 +107,41 @@ runs:
         # Fail fast on error
         set -euo pipefail
 
+        case "${RUNS_ON_GH_RUNNER}" in
+          true|false) ;;
+          '')
+            echo "::error::Input 'runs-on-gh-runner' is required, set it to 'true' when the tests run on the GitHub runner or to 'false' when they run on a provisioned machine"
+            exit 1
+            ;;
+          *)
+            echo "::error::Invalid 'runs-on-gh-runner' value '${RUNS_ON_GH_RUNNER}', expected 'true' or 'false'"
+            exit 1
+            ;;
+        esac
+
+        if [ "${RUNS_ON_GH_RUNNER}" = "false" ]; then
+          missing=""
+          for pair in "os:${INPUT_OS}" "os-version:${INPUT_OS_VERSION}" "architecture:${INPUT_ARCHITECTURE}"; do
+            if [ -z "${pair#*:}" ]; then
+              missing="${missing} ${pair%%:*}"
+            fi
+          done
+          if [ -n "${missing}" ]; then
+            echo "::error::If you specify that the tests do not run on the GitHub runner, these inputs are required:${missing}"
+            exit 1
+          fi
+        fi
+
+        echo "Inputs: podman-provider='${PODMAN_PROVIDER}' podman-version='${PODMAN_VERSION}' repository='${REPOSITORY}' filename='${FILENAME}' dir='${DIR}'"
+
         os="${INPUT_OS}"
         os_version="${INPUT_OS_VERSION}"
         platform="${INPUT_PLATFORM}"
         architecture="${INPUT_ARCHITECTURE}"
 
-        # The inputs were validated in the previous step. With 'false' the tests run on
-        # a provisioned machine that the inputs already describe, there is nothing to
-        # detect, everything below only applies to the runner being the machine itself.
+        # With 'false' the tests run on a provisioned machine that the inputs above already
+        # describe, there is nothing to detect, everything below only applies to the runner
+        # being the machine itself.
         if [ "${RUNS_ON_GH_RUNNER}" = "true" ]; then
           # The runner is the machine under test, detect what was not given as an input
           case "${RUNNER_OS}" in
@@ -278,10 +228,6 @@ runs:
           }')
 
         if [ -n "${EXTRA_ATTRIBUTES}" ]; then
-          if ! echo "${EXTRA_ATTRIBUTES}" | jq -e 'type == "object"' > /dev/null 2>&1; then
-            echo "::error::extra-attributes is not a valid JSON object: ${EXTRA_ATTRIBUTES}"
-            exit 1
-          fi
           attributes=$(echo "${EXTRA_ATTRIBUTES}" | jq --argjson base "${attributes}" '$base * .')
         fi
 
