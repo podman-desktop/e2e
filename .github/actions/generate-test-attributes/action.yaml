@@ -61,12 +61,6 @@ inputs:
       Architecture of the machine under test (x86_64, arm64).
       Required with runs-on-gh-runner set to 'false', detected from the runner otherwise.
     default: ''
-  platform:
-    description: |
-      Platform of the machine under test (linux, windows-nt, darwin).
-      Never required, it is derived from the "os" input when that is set
-      and detected from the runner otherwise.
-    default: ''
   extra-attributes:
     description: |
       Optional JSON object merged into the generated attributes, e.g. '{"podman-desktop-release": "1.30.0"}'.
@@ -101,7 +95,6 @@ runs:
         INPUT_OS: ${{ inputs.os }}
         INPUT_OS_VERSION: ${{ inputs.os-version }}
         INPUT_ARCHITECTURE: ${{ inputs.architecture }}
-        INPUT_PLATFORM: ${{ inputs.platform }}
         EXTRA_ATTRIBUTES: ${{ inputs.extra-attributes }}
       run: |
         # Fail fast on error
@@ -136,7 +129,7 @@ runs:
 
         os="${INPUT_OS}"
         os_version="${INPUT_OS_VERSION}"
-        platform="${INPUT_PLATFORM}"
+        platform=""
         architecture="${INPUT_ARCHITECTURE}"
 
         # With 'false' the tests run on a provisioned machine that the inputs above already
@@ -146,19 +139,16 @@ runs:
           # The runner is the machine under test, detect what was not given as an input
           case "${RUNNER_OS}" in
             Linux)
-              detected_platform="linux"
               if [ -f /etc/os-release ]; then
                 detected_os=$(. /etc/os-release && echo "${ID:-}")
                 detected_os_version=$(. /etc/os-release && echo "${VERSION_ID:-}")
               fi
               ;;
             macOS)
-              detected_platform="darwin"
               detected_os="macos"
               detected_os_version=$(sw_vers -productVersion)
               ;;
             Windows)
-              detected_platform="windows-nt"
               detected_os="windows"
               caption=$(powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).Caption" 2>/dev/null | tr -d '\r' || true)
               # Server editions are versioned by year (2022), client editions by release (10, 11)
@@ -167,7 +157,7 @@ runs:
               fi
               ;;
             *)
-              echo "::warning::Unknown runner OS '${RUNNER_OS}', os and platform can be provided as inputs"
+              echo "::warning::Unknown runner OS '${RUNNER_OS}', os can be provided as an input"
               ;;
           esac
 
@@ -189,20 +179,14 @@ runs:
           fi
         fi
 
-        # The platform follows the os in both modes, only an explicit input overrides it.
-        # Taking it from the runner instead would let an os input and the platform
-        # describe two different machines.
-        if [ -z "${platform}" ] && [ -n "${os}" ]; then
+        # The platform always follows the os, an os input and the platform
+        # would otherwise be able to describe two different machines.
+        if [ -n "${os}" ]; then
           case "${os}" in
             windows) platform="windows-nt" ;;
             macos|darwin) platform="darwin" ;;
             *) platform="linux" ;;
           esac
-        fi
-
-        # Only reached when the os could not be determined at all
-        if [ -z "${platform}" ]; then
-          platform="${detected_platform:-}"
         fi
 
         if [ -z "${os}" ] || [ -z "${os_version}" ]; then
