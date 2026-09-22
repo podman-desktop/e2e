@@ -116,7 +116,7 @@ function Execute-Scripts() {
     Write-Host "ScriptPaths String: '$scriptPaths'"
     # Check if the input string is not null or empty
     if (-not [string]::IsNullOrWhiteSpace($scriptPaths)) {
-        $scriptsFolder="$resourcesPath"
+        $scriptsFolder="$scriptsPath"
         # Split the input using comma separator
         $paths = $scriptPaths -split ','
 
