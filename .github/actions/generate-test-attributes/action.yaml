@@ -98,12 +98,8 @@ runs:
 
         case "${RUNS_ON_GH_RUNNER}" in
           true|false) ;;
-          '')
-            echo "::error::Input 'runs-on-gh-runner' is required, set it to 'true' when the tests run on the GitHub runner or to 'false' when they run on a provisioned machine"
-            exit 1
-            ;;
           *)
-            echo "::error::Invalid 'runs-on-gh-runner' value '${RUNS_ON_GH_RUNNER}', expected 'true' or 'false'"
+            echo "::error::Input 'runs-on-gh-runner' must be 'true' (tests run on the GitHub runner) or 'false' (tests run on a provisioned machine), got '${RUNS_ON_GH_RUNNER}'"
             exit 1
             ;;
         esac
@@ -127,8 +123,6 @@ runs:
             exit 1
           fi
         fi
-
-        echo "Inputs: podman-provider='${PODMAN_PROVIDER}' podman-version='${PODMAN_VERSION}' repository='${REPOSITORY}' filename='${FILENAME}'"
 
         os="${INPUT_OS}"
         os_version="${INPUT_OS_VERSION}"
@@ -212,7 +206,7 @@ runs:
             "architecture": $architecture,
             "platform": $platform,
             "repository": $repository
-          }')
+          } | with_entries(select(.value != ""))')
 
         if [ -n "${EXTRA_ATTRIBUTES}" ]; then
           attributes=$(echo "${EXTRA_ATTRIBUTES}" | jq --argjson base "${attributes}" '$base * .')
