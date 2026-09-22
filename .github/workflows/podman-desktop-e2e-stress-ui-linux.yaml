@@ -90,6 +90,8 @@ jobs:
         version=$(npm view @podman-desktop/tests-playwright@next version)
         echo "Version of @podman-desktop/tests-playwright to be used: $version"
         jq --arg version "$version" '.devDependencies."@podman-desktop/tests-playwright" = $version' package.json > package.json_tmp && mv package.json_tmp package.json
+        sed -i 's/^minimumReleaseAge:.*/minimumReleaseAge: 0/' pnpm-workspace.yaml
+        pnpm install --no-frozen-lockfile
       shell: bash
  
     - name: Update podman to 5.x
