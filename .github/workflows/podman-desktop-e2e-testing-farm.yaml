@@ -145,18 +145,14 @@ jobs:
           
       - name: Create json file with workflow run attributes
         if: always()
-        uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
-        with: 
-          name: "workflow-run-attributes.json"
-          json: |
-            {
-              "podman-version": "${{ env.PODMAN_VERSION }}",
-              "os": "fedora",
-              "os-version": "${{ matrix.fedora-version }}",
-              "architecture": "x86_64",
-              "platform": "Linux",
-              "repository": "podman-desktop"
-            }
+        uses: podman-desktop/e2e/.github/actions/generate-test-attributes@053dd9e2e4511c412dcaa835d884eec303797ed6
+        with:
+          filename: workflow-run-attributes.json
+          runs-on-gh-runner: false
+          os: fedora
+          os-version: ${{ matrix.fedora-version }}
+          architecture: x86_64
+          podman-version: ${{ env.PODMAN_VERSION }}
 
       - name: Upload test artifacts
         if: always()
