@@ -39,7 +39,7 @@ prepare:
         rm -f node.tar.xz
       fi
       
-      npm install -g pnpm
+      npm install -g pnpm${PNPM_VERSION:+@$PNPM_VERSION}
       echo "NodeJS version: $(node -v)"
       echo "npm version: $(npm -v)"
       echo "pnpm Version: $(pnpm --version)"

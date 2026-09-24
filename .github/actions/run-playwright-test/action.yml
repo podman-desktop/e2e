@@ -102,7 +102,6 @@ inputs:
     description: 'URL for e2e-runner to download and install Podman on the remote host.'
     required: false
     default: ''
-
 runs:
   using: 'composite'
   steps:

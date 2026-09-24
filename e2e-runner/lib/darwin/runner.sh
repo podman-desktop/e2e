@@ -5,9 +5,9 @@
 ###################################
 
 # Versions variables
-nodeVersion="v24.15.0"
+nodeVersion="v24.21.0"
 gitVersion="2.42.0"
-pnpmVersion="10"
+pnpmVersion="12"
 
 declare -a script_env_vars
 
@@ -72,6 +72,8 @@ while [[ $# -gt 0 ]]; do
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
         --resignApp) resignApp="$2"; shift ;;
         --debugScript) debugScript="$2"; shift ;;
+        --nodeVersion) nodeVersion="$2"; shift ;;
+        --pnpmVersion) pnpmVersion="$2"; shift ;;
         *) ;;
     esac
     shift
@@ -110,6 +112,8 @@ if [ "$debugScript" == "1" ]; then
     echo "podmanDownloadUrl=$podmanDownloadUrl"
     echo "resignApp=$resignApp"
     echo "debugScript=$debugScript"
+    echo "nodeVersion=$nodeVersion"
+    echo "pnpmVersion=$pnpmVersion"
 fi
 
 echo "Reading envVars in script: '$envVars'"
