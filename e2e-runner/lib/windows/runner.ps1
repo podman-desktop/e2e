@@ -54,7 +54,11 @@ param(
     [Parameter(HelpMessage = 'Install WSL on Windows, default is 0/false')]
     $installWSL = '0',
     [Parameter(HelpMessage = 'Print all script parameters, default is 0/false')]
-    $debugScript = '0'
+    $debugScript = '0',
+    [Parameter(HelpMessage = 'Node.js version to install (e.g. v24.21.0)')]
+    [string]$nodeVersion = "v24.21.0",
+    [Parameter(HelpMessage = 'pnpm version to install (e.g. 12)')]
+    [string]$pnpmVersion = "12"
 )
 
 # Map display name to installation slug
@@ -70,9 +74,7 @@ if ($appNameSlugMap.ContainsKey($appName)) {
 }
 
 # Program Versions
-$nodejsLatestVersion = "v24.15.0"
 $gitVersion = '2.42.0.2'
-$pnpmVersion = '10'
 
 $global:scriptEnvVars = @()
 $global:envVarDefs = @()
@@ -112,6 +114,8 @@ if ($debugScript -eq "1") {
     Write-Host "podmanDownloadUrl=$podmanDownloadUrl"
     Write-Host "installWSL=$installWSL"
     Write-Host "debugScript=$debugScript"
+    Write-Host "nodeVersion=$nodeVersion"
+    Write-Host "pnpmVersion=$pnpmVersion"
 }
 
 # Execution beginning
@@ -224,13 +228,13 @@ if (-not (Test-Path -Path "$toolsInstallDir\vc_redist.x64.exe" -PathType Contain
 if (-not (Command-Exists "node -v")) {
     # Download and install the latest version of Node.js
     write-host "Installing node"
-    # $nodejsLatestVersion = (Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json' | Sort-Object -Property version -Descending)[0].version
-    if (-not (Test-Path -Path "$toolsInstallDir\node-$nodejsLatestVersion-win-x64" -PathType Container)) {
-        Invoke-WebRequest -Uri "https://nodejs.org/dist/$nodejsLatestVersion/node-$nodejsLatestVersion-win-x64.zip" -OutFile "$toolsInstallDir\nodejs.zip"
+    # $nodeVersion = (Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json' | Sort-Object -Property version -Descending)[0].version
+    if (-not (Test-Path -Path "$toolsInstallDir\node-$nodeVersion-win-x64" -PathType Container)) {
+        Invoke-WebRequest -Uri "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-win-x64.zip" -OutFile "$toolsInstallDir\nodejs.zip"
         Expand-Archive -Path "$toolsInstallDir\nodejs.zip" -DestinationPath $toolsInstallDir
     }
     # we need to set node for local access in actually running script
-    $nodePath = "$toolsInstallDir\node-$nodejsLatestVersion-win-x64\"
+    $nodePath = "$toolsInstallDir\node-$nodeVersion-win-x64\"
     $env:Path += ";$nodePath"
     # Setting node to be available for the machine scope
     # requires admin access

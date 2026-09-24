@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Versions variables
-nodeVersion="v24.15.0"
-pnpmVersion="10"
+nodeVersion="v24.21.0"
+pnpmVersion="12"
 
 declare -a script_env_vars
 
@@ -61,6 +61,8 @@ while [[ $# -gt 0 ]]; do
         --saveTraces) saveTraces="$2"; shift ;;
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
+        --nodeVersion) nodeVersion="$2"; shift ;;
+        --pnpmVersion) pnpmVersion="$2"; shift ;;
         *) ;;
     esac
     shift

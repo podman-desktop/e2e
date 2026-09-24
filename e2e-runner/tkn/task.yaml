@@ -72,6 +72,12 @@ spec:
   - name: podman-version
     description: Podman version to install (RHEL only)
     default: "''"
+  - name: node-version
+    description: Node.js version to install (e.g. v24.15.0)
+    default: "''"
+  - name: pnpm-version
+    description: pnpm version to install (e.g. 10)
+    default: "''"
 
   # Application Configuration
   - name: pd-url
@@ -242,6 +248,12 @@ spec:
         cmd="$cmd -saveTraces $(params.save-traces) "
         cmd="$cmd -runAsAdmin $(params.run-as-admin) "
         cmd="$cmd -debugScript $(params.debug-script) "
+        if [[ "$(params.node-version)" != "''" ]] && [[ -n "$(params.node-version)" ]]; then
+          cmd="$cmd -nodeVersion $(params.node-version) "
+        fi
+        if [[ "$(params.pnpm-version)" != "''" ]] && [[ -n "$(params.pnpm-version)" ]]; then
+          cmd="$cmd -pnpmVersion $(params.pnpm-version) "
+        fi
       else
         # Darwin and rhel shared parameters
         cmd="${TARGET_FOLDER}/runner.sh "
@@ -280,6 +292,12 @@ spec:
         cmd="$cmd --saveTraces $(params.save-traces) "
         cmd="$cmd --cleanMachine $(params.clean-machine) "
         cmd="$cmd --debugScript $(params.debug-script) "
+        if [[ "$(params.node-version)" != "''" ]] && [[ -n "$(params.node-version)" ]]; then
+          cmd="$cmd --nodeVersion $(params.node-version) "
+        fi
+        if [[ "$(params.pnpm-version)" != "''" ]] && [[ -n "$(params.pnpm-version)" ]]; then
+          cmd="$cmd --pnpmVersion $(params.pnpm-version) "
+        fi
         if [[ -n "$(params.script-paths)" ]]; then
           cmd="$cmd --scriptPaths $(params.script-paths) "
         fi
