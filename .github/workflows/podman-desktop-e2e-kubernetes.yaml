@@ -134,19 +134,15 @@ jobs:
 
     - name: Create json file with workflow run attributes
       if: always()
-      uses: jsdaniell/create-json@b8e77fa01397ca39cc4a6198cc29a3be5481afef
-      with: 
-        name: "workflow-run-attributes.json"
-        json: |
-          {
-            "podman-provider": "${{ env.PODMAN_PROVIDER }}",
-            "podman-version": "${{ steps.fetch-podman.outputs.version }}",
-            "os": "windows",
-            "os-version": "${{ matrix.windows-version }}",
-            "architecture": "x86_64",
-            "platform": "windows-nt",
-            "repository": "podman-desktop"
-          }
+      uses: podman-desktop/e2e/.github/actions/generate-test-attributes@053dd9e2e4511c412dcaa835d884eec303797ed6
+      with:
+        filename: workflow-run-attributes.json
+        runs-on-gh-runner: false
+        os: windows
+        os-version: ${{ matrix.windows-version }}
+        architecture: x86_64
+        podman-provider: ${{ env.PODMAN_PROVIDER }}
+        podman-version: ${{ steps.fetch-podman.outputs.version }}
 
     - name: Destroy instance
       if: always()
