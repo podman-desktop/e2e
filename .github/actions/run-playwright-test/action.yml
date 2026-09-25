@@ -102,6 +102,14 @@ inputs:
     description: 'URL for e2e-runner to download and install Podman on the remote host.'
     required: false
     default: ''
+  node-version:
+    description: 'Node.js version override (resolved from podman-desktop .nvmrc if empty).'
+    required: false
+    default: ''
+  pnpm-version:
+    description: 'pnpm version override (resolved from podman-desktop package.json if empty).'
+    required: false
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -109,6 +117,25 @@ runs:
       shell: bash
       run: |
         echo "PODMANDESKTOP_CI_BOT_TOKEN=${{ inputs.ci-bot-token }}" >> secrets.txt
+
+    - name: Resolve Node.js and pnpm versions from podman-desktop
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.node-version }}" ]; then
+          echo "NODE_VERSION=${{ inputs.node-version }}" >> $GITHUB_ENV
+        else
+          NVMRC=$(curl -sL "https://raw.githubusercontent.com/${{ inputs.fork-repo }}/podman-desktop/${{ inputs.branch-name }}/.nvmrc" | tr -d '[:space:]')
+          NODE_VERSION="v$(curl -sL "https://nodejs.org/dist/latest-v${NVMRC}.x/SHASUMS256.txt" | grep -oP 'node-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" = "v" ]; then echo "Failed to resolve Node version from .nvmrc (${NVMRC})"; exit 1; fi
+          echo "NODE_VERSION=${NODE_VERSION}" >> $GITHUB_ENV
+        fi
+        if [ -n "${{ inputs.pnpm-version }}" ]; then
+          echo "PNPM_VERSION=${{ inputs.pnpm-version }}" >> $GITHUB_ENV
+        else
+          PNPM_VERSION=$(curl -sL "https://raw.githubusercontent.com/${{ inputs.fork-repo }}/podman-desktop/${{ inputs.branch-name }}/package.json" | jq -r '.packageManager // empty' | sed 's/pnpm@//;s/+.*//')
+          if [ -z "$PNPM_VERSION" ]; then echo "Failed to resolve pnpm version from package.json"; exit 1; fi
+          echo "PNPM_VERSION=${PNPM_VERSION}" >> $GITHUB_ENV
+        fi
 
     - name: Run Podman Desktop Playwright E2E tests
       shell: bash
@@ -193,6 +220,8 @@ runs:
                 -podmanProvider ${{ inputs.podman-provider }} \
                 -envVars ${{ inputs.env-vars }} \
                 -secretFile secrets.txt \
+                -nodeVersion ${{ env.NODE_VERSION }} \
+                -pnpmVersion ${{ env.PNPM_VERSION }} \
                 ${SCRIPT_PATH_PARAM}
 
         # check logs
