@@ -1,0 +1,91 @@
+#
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+name: evaluation-agent nightly
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'evaluation-agent/**'
+      - 'ai-eval/skills/**'
+      - '.github/workflows/evaluation-agent-nightly.yaml'
+
+env:
+  IMAGE: ghcr.io/podman-desktop/evaluation-agent
+
+concurrency:
+  group: evaluation-agent-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-push:
+    name: Build, scan & push evaluation-agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to ghcr.io
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Start podman socket
+        run: |
+          systemctl --user enable --now podman.socket || {
+            echo "::warning::systemd socket activation failed, using podman system service"
+            podman system service --time=0 &
+            sleep 1
+          }
+
+      # Build context is the repository root so the Containerfile can COPY the
+      # skill from ai-eval/skills/.
+      - name: Build image
+        run: |
+          podman build -t ${{ env.IMAGE }}:${{ env.SHORT_SHA }} \
+            -f evaluation-agent/Containerfile \
+            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
+            --label org.opencontainers.image.revision=${{ github.sha }} .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.SHORT_SHA }}
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Push image
+        run: |
+          podman push ${{ env.IMAGE }}:${{ env.SHORT_SHA }}
+          podman tag ${{ env.IMAGE }}:${{ env.SHORT_SHA }} ${{ env.IMAGE }}:nightly
+          podman push ${{ env.IMAGE }}:nightly
+
+      - name: Push tekton task bundle
+        working-directory: evaluation-agent
+        run: make tkn-push
