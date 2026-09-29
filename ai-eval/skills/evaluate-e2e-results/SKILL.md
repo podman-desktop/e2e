@@ -333,6 +333,7 @@ Output **only** a single JSON object. No markdown fences, no explanation text, n
       "error": "Short error message from error.message (first line only)",
       "classification": "regression | test_bug | flaky | infra | unknown",
       "confidence": "confirmed | likely | uncertain",
+      "title": "Short noun-phrase label for Slack grouping (3-6 words, e.g. 'CDP Runner Incompatibility')",
       "root_cause": "One sentence explaining why the test failed",
       "evidence": [
         "Brief citation of the evidence that supports the classification"
@@ -377,6 +378,7 @@ Output **only** a single JSON object. No markdown fences, no explanation text, n
 - `summary`: Always present. Computed from `stats` in json-results.json.
 - `failures`: Array of failure objects. Empty array if no failures (all-pass run). One entry per unique failed spec (not per retry).
 - `failures[].error`: First line of the error message only — not the full stack trace.
+- `failures[].title`: A short noun-phrase label (3–6 words) that names the underlying issue, not the test. Used as the Slack group heading. Failures that share the same root cause MUST use the same `title` so the formatter groups them. Examples: `"CDP Runner Incompatibility"`, `"krunkit Crash on Start"`, `"Registry Pull Timeout"`.
 - `failures[].root_cause`: One sentence explaining WHY the test failed, grounded in actual evidence from logs/traces — not inferred from the error message alone. If Layer 1 only shows WHAT failed (e.g., "status was OFF"), the root_cause must cite what Layer 3 found (e.g., "WSL pipe unreachable, event stream ECONNRESET during machine restart"). If no deeper evidence is available, state what is known and flag the gap: "Machine did not restart within 360s — no trace available to determine underlying cause."
 - `failures[].evidence`: Array of 1-3 short strings citing specific evidence. Format: `"source: what it shows"`. Sources: `error-context.md`, `json-results.json`, `trace`, `console`, `stderr`. Evidence must come from actual file content, not from assumptions about what might have happened.
 - `failures[].layer`: The deepest analysis layer used for this failure (1, 2, or 3). If Layer 1 classified but Layer 3 provided the root_cause evidence, report `3`.
@@ -400,10 +402,11 @@ cat /tmp/evaluation-raw.txt | python3 /path/to/slack_formatter.py \
 
 The formatter:
 - Strips any preamble text before the JSON (handles `--print` mode behavior)
-- Shows header with pass/fail status and platform
-- Lists each failure with classification emoji, root_cause, and recommended action
-- Shows cascade skip summary when failures caused additional test skips
-- Adds links to artifacts and CI run when provided
+- Shows header with OS, pass/fail status, and virtualization backend parsed from PIPELINE_NAME
+- Groups failures by matching `title` into numbered sections with classification labels
+- Each group shows a shared root_cause paragraph and bullet-pointed affected tests with fix suggestions
+- Integrates skipped-test breakdown (by-design vs cascade) into the stats line
+- Links to artifacts as a clickable Slack link at the bottom
 
 Environment variables `ARTIFACTS_URL`, `PIPELINE_NAME` can substitute for CLI args.
 

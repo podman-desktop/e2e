@@ -19,26 +19,29 @@ Usage:
 
 Environment variables (optional):
   ARTIFACTS_URL       — link to full artifacts (S3, GHA run, etc.)
-  PIPELINE_NAME       — pipeline identifier shown in header (e.g., "pd-e2e-podman macOS applehv")
+  PIPELINE_NAME       — pipeline identifier shown in header (e.g., "pde2e-prerelease-v1.30.1-libkrun-6.1.2-darwin-arm64-26.0.1")
   SLACK_WORKFLOW_VAR  — variable name for the payload (default: text)
 """
 import json
 import sys
 import argparse
+from collections import OrderedDict
 
-CLASSIFICATION_EMOJI = {
-    "regression": "⛔",   # ⛔
-    "test_bug": "\U0001f41b", # 🐛
-    "flaky": "\U0001f504",    # 🔄
-    "infra": "\U0001f6a7",    # 🚧
-    "unknown": "❓",      # ❓
+KNOWN_BACKENDS = {"applehv", "libkrun", "hyperv", "wsl", "qemu"}
+
+OS_LABEL = {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}
+
+CLASSIFICATION_LABEL = {
+    "regression": "Regression",
+    "test_bug": "Bug",
+    "flaky": "Flaky",
+    "infra": "Infra",
+    "unknown": "Unknown",
 }
 
-CONFIDENCE_LABEL = {
-    "confirmed": "confirmed",
-    "likely": "likely",
-    "uncertain": "uncertain",
-}
+NUMBER_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣",
+                "5️⃣", "6️⃣", "7️⃣", "8️⃣",
+                "9️⃣", "\U0001f51f"]
 
 
 def extract_json(raw: str) -> dict:
@@ -48,75 +51,116 @@ def extract_json(raw: str) -> dict:
     return json.loads(raw[start:])
 
 
-def format_workflow_text(data: dict, artifacts_url: str | None = None, pipeline_name: str | None = None) -> str:
-    """Collapse the report into a single plain-text block for a Workflow trigger.
+def _parse_backend(pipeline_name: str) -> str:
+    if not pipeline_name:
+        return ""
+    for part in pipeline_name.lower().split("-"):
+        if part in KNOWN_BACKENDS:
+            return part
+    return ""
 
-    Block Kit is not available through Workflow Builder triggers, so this renders
-    a readable, newline-delimited digest that the workflow's message step can
-    drop into a variable.
-    """
+
+def _short_spec(spec_file: str) -> str:
+    if not spec_file:
+        return ""
+    return spec_file.rsplit("/", 1)[-1]
+
+
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut + "..." if cut else text[:limit] + "..."
+
+
+def _group_failures(failures: list) -> list[list[dict]]:
+    """Group failures that share the same title (preferred) or (classification, confidence)."""
+    groups: OrderedDict[str, list[dict]] = OrderedDict()
+    for f in failures:
+        title = f.get("title", "")
+        if title:
+            key = title
+        else:
+            key = f"{f.get('classification', 'unknown')}|{f.get('confidence', 'uncertain')}"
+        groups.setdefault(key, []).append(f)
+    return list(groups.values())
+
+
+def format_workflow_text(data: dict, artifacts_url: str | None = None, pipeline_name: str | None = None) -> str:
     s = data.get("summary", {})
     p = data.get("platform", {})
+    sa = data.get("skipped_analysis") or {}
 
     failed = s.get("failed", 0)
-    total = s.get("total", 0)
     passed = s.get("passed", 0)
     skipped = s.get("skipped", 0)
 
-    os_name = (p.get("os", "unknown")).replace("win32", "Windows").replace("darwin", "macOS").replace("linux", "Linux")
-    arch = p.get("arch", "")
+    os_name = OS_LABEL.get(p.get("os", ""), p.get("os", "unknown"))
+    backend = _parse_backend(pipeline_name)
+    backend_suffix = f" ({backend})" if backend else ""
 
-    status_emoji = "✅" if failed == 0 else "❌"
-    status_text = "All tests passed" if failed == 0 else f"{failed} failure{'s' if failed != 1 else ''}"
-
-    head = f"{status_emoji} {pipeline_name}: {status_text}" if pipeline_name else f"{status_emoji} E2E Results: {status_text}"
+    if failed == 0:
+        head = f"✅ {os_name} E2E Tests Passed{backend_suffix}"
+    else:
+        head = f"\U0001f6a8 {os_name} E2E Tests Failed{backend_suffix}"
 
     lines = [head]
 
-    counts = f"{total} total | {passed} passed | {failed} failed | {skipped} skipped | {os_name}/{arch}"
+    if pipeline_name:
+        lines.append(f"\n{pipeline_name}")
+
+    cascade = sa.get("cascade", 0)
+    by_design = sa.get("by_design", 0)
+    skip_detail = ""
+    if skipped:
+        if cascade:
+            skip_detail = f" ({by_design} by design, {cascade} cascaded)"
+        elif by_design:
+            skip_detail = " (all by design)"
+
+    counts = f"✅ {passed} Passed | ❌ {failed} Failed | ⚠️ {skipped} Skipped{skip_detail}"
     duration = s.get("duration_s", 0)
     if duration:
-        counts += f" | duration: {int(duration // 60)}m{int(duration % 60)}s"
+        counts += f" | ⏱ {int(duration // 60)}m {int(duration % 60)}s"
     lines.append(counts)
 
-    for f in data.get("failures", []) or []:
-        emoji = CLASSIFICATION_EMOJI.get(f.get("classification", "unknown"), "❓")
-        conf = CONFIDENCE_LABEL.get(f.get("confidence", ""), f.get("confidence", ""))
-        classification = f.get("classification", "unknown")
-        test_name = f.get("test", "Unknown test")
-        spec = f.get("spec_file", "")
-        line = f.get("line", "")
-        loc = f"{spec}:{line}" if spec and line else spec
+    failures = data.get("failures", []) or []
+    groups = _group_failures(failures)
 
-        root_cause = f.get("root_cause", "No root cause determined")
-        if len(root_cause) > 400:
-            root_cause = root_cause[:397] + "..."
-        action = f.get("recommended_action", "")
-        if len(action) > 300:
-            action = action[:297] + "..."
+    for i, group in enumerate(groups):
+        num = NUMBER_EMOJI[i] if i < len(NUMBER_EMOJI) else f"({i + 1})"
+        first = group[0]
+        classification = first.get("classification", "unknown")
+        conf = first.get("confidence", "uncertain")
+        label = CLASSIFICATION_LABEL.get(classification, classification.title())
 
-        lines.append("")
-        lines.append(f"{emoji} {test_name} [{classification}/{conf}]")
-        lines.append(f"   {root_cause}")
-        if loc:
-            lines.append(f"   {loc}")
-        if action:
-            lines.append(f"   🔧 {action}")
+        title = first.get("title", "")
+        if not title:
+            title = _truncate(first.get("root_cause", "Unknown"), 60)
 
-    sa = data.get("skipped_analysis") or {}
-    st = sa.get("total_skipped", 0)
-    if st:
-        cascade = sa.get("cascade", 0)
-        by_design = sa.get("by_design", 0)
-        if cascade == 0:
-            lines.append(f"\n💭 Skipped: {st} (all by design)")
-        else:
-            lines.append(f"\n⚠️ Skipped: {st} total — {by_design} by design, {cascade} cascade from failures")
+        lines.append(f"\n{num} {label}: {title} [{classification}/{conf}]")
 
-    if artifacts_url:
-        lines.append(f"\nArtifacts: {artifacts_url}")
-    elif p.get("ci_url"):
-        lines.append(f"\nCI run: {p['ci_url']}")
+        root_cause = first.get("root_cause", "")
+        if root_cause:
+            lines.append(f"\n{_truncate(root_cause, 500)}")
+
+        for f in group:
+            test_name = f.get("test", "Unknown test")
+            spec = _short_spec(f.get("spec_file", ""))
+            line_num = f.get("line", "")
+            loc = f"{spec}:{line_num}" if spec and line_num else spec
+            action = f.get("recommended_action", "")
+
+            bullet = f"\n• {test_name}"
+            if loc:
+                bullet += f" ({loc})"
+            if action:
+                bullet += f" └ _Fix:_ {_truncate(action, 200)}"
+            lines.append(bullet)
+
+    url = artifacts_url or p.get("ci_url", "")
+    if url:
+        lines.append(f"\n\U0001f517 <{url}|View Pipeline Logs & Artifacts>")
 
     return "\n".join(lines)
 
