@@ -225,6 +225,8 @@ collect_logs() {
         echo "Found Junit file: $junit"
         echo "Copying $junit to $target_path"
         cp "$junit" "$target_path"
+        echo "Remove the original junit file to avoid duplicates"
+        rm "$junit"
     fi
 
     if (( extTests == 1 )); then
