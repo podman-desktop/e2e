@@ -220,13 +220,14 @@ collect_logs() {
         fi
 
         local junit="${junits[0]}"
-        local target_path="$workingDir/$resultsFolder/junit-$folder.xml"
+        local target_path="$workingDir/$resultsFolder/junit-$folder-results.xml"
 
         echo "Found Junit file: $junit"
         echo "Copying $junit to $target_path"
-        cp "$junit" "$target_path"
-        echo "Remove the original junit file to avoid duplicates"
-        rm "$junit"
+        if cp "$junit" "$target_path"; then
+            echo "Remove the original junit file to avoid duplicates"
+            rm "$junit"
+        fi
     fi
 
     if (( extTests == 1 )); then
