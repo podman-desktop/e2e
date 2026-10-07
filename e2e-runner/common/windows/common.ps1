@@ -189,9 +189,15 @@ function Collect-Logs($folder) {
     if ($count -gt 0) {
         $junit = $junits[0]
         write-host "Found Junit file: $($junit.FullName)"
-        $target_path = "$workingDir\$resultsFolder\junit-$folder.xml"
+        $target_path = "$workingDir\$resultsFolder\junit-$folder-results.xml"
         write-host "Copying $($junit.FullName) and renaming to $target_path"
-        Copy-Item -Path $junit.FullName -Destination $target_path -Force
+        try {
+            Copy-Item -Path $junit.FullName -Destination $target_path -Force -ErrorAction Stop
+            write-host "Remove the junit file to avoid duplications"
+            Remove-Item -Path $junit.FullName -Force -ErrorAction Stop
+        } catch {
+            Write-Warning "Failed to copy or remove JUnit file: $_"
+        }
     } else {
         write-host "WARNING: No JUnit file found in $source"
     }
