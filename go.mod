@@ -1,8 +1,6 @@
 module github.com/containers/podman-desktop-e2e
 
-go 1.22.0
-
-toolchain go1.22.7
+go 1.25.0
 
 require (
 	github.com/adrianriobo/goax v0.1.2
@@ -25,9 +23,9 @@ require (
 	github.com/openstandia/w32uiautomation v0.0.0-20190416091226-c987b5b65d6b // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
-	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
-	golang.org/x/tools v0.26.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
