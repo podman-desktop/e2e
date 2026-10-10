@@ -1,0 +1,63 @@
+#
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+name: evaluation-agent PR check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'evaluation-agent/**'
+      - 'ai-eval/skills/**'
+      - '.github/workflows/evaluation-agent-pr.yaml'
+
+env:
+  IMAGE: ghcr.io/podman-desktop/evaluation-agent
+
+jobs:
+  build:
+    name: Build & scan evaluation-agent
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Start podman socket
+        run: |
+          systemctl --user enable --now podman.socket || {
+            echo "::warning::systemd socket activation failed, using podman system service"
+            podman system service --time=0 &
+            sleep 1
+          }
+
+      # Build context is the repository root so the Containerfile can COPY the
+      # skill from ai-eval/skills/.
+      - name: Build image
+        run: |
+          podman build -t ${{ env.IMAGE }}:pr -f evaluation-agent/Containerfile .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:pr
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'

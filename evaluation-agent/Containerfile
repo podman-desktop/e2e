@@ -1,0 +1,35 @@
+# Build context MUST be the repository root so the `ai-eval/skills` COPY resolves:
+#   podman build -t <img> -f evaluation-agent/Containerfile .
+#
+# TODO(pin): pin the base image by digest (e.g. node:22-alpine@sha256:...) once a
+# digest can be resolved in the build environment / via Renovate.
+FROM node:22-alpine
+
+# Pin the CLI version for reproducible, auditable builds.
+ARG CLAUDE_CODE_VERSION=2.1.263
+
+LABEL org.opencontainers.image.title="Podman Desktop E2E evaluation agent" \
+      org.opencontainers.image.authors="Anton Misskii<amisskii@redhat.com>" \
+      org.opencontainers.image.url="https://github.com/podman-desktop/e2e" \
+      org.opencontainers.image.description="Headless Claude Code agent that evaluates Podman Desktop E2E test results and reports to Slack" \
+      org.opencontainers.image.vendor="Red Hat" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# Runtime dependencies:
+RUN apk add --no-cache bash python3 unzip jq curl ca-certificates tini \
+    && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && npm cache clean --force
+
+# Bake the skill read-only
+COPY ai-eval/skills/evaluate-e2e-results /opt/evaluation-agent/skills/evaluate-e2e-results
+
+COPY evaluation-agent/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Least privilege: run as a non-root user.
+RUN adduser -D -u 1001 agent
+USER agent
+WORKDIR /work
+
+# tini reaps zombies and forwards signals so the entrypoint's `timeout` works.
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
