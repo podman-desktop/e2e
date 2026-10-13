@@ -1,0 +1,95 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: evaluate-e2e-results
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.50.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, ai, evaluation
+    tekton.dev/displayName: "AI-powered E2E failure triage"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Classifies Playwright E2E failures using Claude Code, groups them by root cause,
+    and posts a structured Slack message via Workflow Builder webhook.
+
+  workspaces:
+    - name: pipelines-data
+      description: shared workspace containing test results written by the e2e-runner task
+
+  params:
+    - name: results-path
+      description: path inside the workspace where test results are stored (json-results.json, error-context/, traces/)
+      default: results/podman-desktop
+    - name: pipeline-name
+      description: pipeline name string — used to parse OS and backend label for the Slack message
+    - name: artifacts-url
+      description: URL to the full test artifacts (shown in Slack footer)
+      default: ""
+    - name: e2e-repo
+      description: e2e repository to clone for skill access
+      default: https://github.com/podman-desktop/e2e
+    - name: e2e-repo-revision
+      description: git revision of the e2e repo (branch, tag, or SHA) to use for the skill
+      default: main
+    - name: image-version
+      description: evaluation-agent image version
+      default: "0.1.0"
+
+  steps:
+    - name: evaluate-and-notify
+      image: ghcr.io/podman-desktop/evaluation-agent:v$(params.image-version)
+      imagePullPolicy: Always
+      env:
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: anthropic-api-key
+              key: key
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: slack-workflow-builder-webhook
+              key: url
+        - name: RESULTS_PATH
+          value: $(workspaces.pipelines-data.path)/$(params.results-path)
+        - name: PIPELINE_NAME
+          value: $(params.pipeline-name)
+        - name: ARTIFACTS_URL
+          value: $(params.artifacts-url)
+        - name: E2E_REPO
+          value: $(params.e2e-repo)
+        - name: E2E_REVISION
+          value: $(params.e2e-repo-revision)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        echo "Cloning e2e repo (${E2E_REPO}@${E2E_REVISION}) for skill access..."
+        git clone --depth 1 --branch "${E2E_REVISION}" "${E2E_REPO}" /tmp/e2e-repo
+
+        SKILL_PATH=/tmp/e2e-repo/ai-eval/skills/evaluate-e2e-results
+        FORMATTER=${SKILL_PATH}/scripts/slack_formatter.py
+
+        echo "Running evaluation on ${RESULTS_PATH}..."
+        claude --print \
+          --skill-path "${SKILL_PATH}" \
+          "Evaluate E2E test results in ${RESULTS_PATH}" \
+          > /tmp/evaluation.json
+
+        echo "Posting Slack notification..."
+        python3 "${FORMATTER}" \
+          --pipeline-name "${PIPELINE_NAME}" \
+          --artifacts-url "${ARTIFACTS_URL}" \
+          < /tmp/evaluation.json \
+          | curl -s -X POST \
+              -H 'Content-type: application/json' \
+              -d @- \
+              "${SLACK_WEBHOOK_URL}"
+
+        echo "Done."

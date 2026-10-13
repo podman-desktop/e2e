@@ -1,0 +1,21 @@
+FROM alpine:3.20
+
+LABEL org.opencontainers.image.title="Podman Desktop E2E evaluation agent" \
+      org.opencontainers.image.authors="Anton Misskii<amisskii@redhat.com>" \
+      org.opencontainers.image.url="https://github.com/podman-desktop/e2e" \
+      org.opencontainers.image.description="AI-powered E2E test failure triage using Claude Code" \
+      org.opencontainers.image.vendor="Red Hat" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    python3 \
+    curl \
+    jq \
+    unzip \
+    git \
+    bash \
+    ca-certificates
+
+RUN npm install -g @anthropic-ai/claude-code

@@ -1,36 +1,48 @@
 #!/usr/bin/env python3
-"""Transform evaluate-e2e-results JSON output into Slack Block Kit message.
+"""Transform evaluate-e2e-results JSON into a Slack Workflow Builder message.
+
+Reads evaluation JSON from stdin, writes a flat {"<var>": "<text>"} payload to stdout
+suitable for a Slack Workflow Builder webhook trigger (not Block Kit).
 
 Usage:
-  # Pipe from skill output (strips preamble automatically):
-  claude --print ... | python3 slack_formatter.py | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+  claude --print ... | python3 slack_formatter.py | curl -X POST -H 'Content-type: application/json' -d @- "$WEBHOOK_URL"
+  python3 slack_formatter.py --pipeline-name "pde2e-nightly-libkrun" --artifacts-url "https://..." < eval.json
 
-  # From a saved file:
-  python3 slack_formatter.py < evaluation.json
-
-  # With optional args link:
-  python3 slack_formatter.py --artifacts-url "https://s3.example.com/results/run-123" < evaluation.json
-
-Environment variables (optional):
-  ARTIFACTS_URL  — link to full artifacts (S3, GHA run, etc.)
-  PIPELINE_NAME  — pipeline identifier shown in header (e.g., "pd-e2e-podman macOS applehv")
+Environment variables (substitute for CLI args):
+  ARTIFACTS_URL       — link to full artifacts
+  PIPELINE_NAME       — pipeline identifier (used to parse OS + backend)
+  SLACK_WORKFLOW_VAR  — payload key (default: "text")
 """
 import json
+import os
 import sys
 import argparse
+from itertools import islice
 
 CLASSIFICATION_EMOJI = {
-    "regression": "⛔",   # ⛔
-    "test_bug": "\U0001f41b", # 🐛
-    "flaky": "\U0001f504",    # 🔄
-    "infra": "\U0001f6a7",    # 🚧
-    "unknown": "❓",      # ❓
+    "regression": "⛔",
+    "test_bug": "🐛",
+    "flaky": "🔄",
+    "infra": "🚧",
+    "unknown": "❓",
 }
 
-CONFIDENCE_LABEL = {
-    "confirmed": "confirmed",
-    "likely": "likely",
-    "uncertain": "uncertain",
+CLASSIFICATION_LABEL = {
+    "regression": "Regression",
+    "test_bug": "Bug",
+    "flaky": "Flaky",
+    "infra": "Infra",
+    "unknown": "Unknown",
+}
+
+NUMBER_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+BACKEND_TOKENS = {
+    "applehv": "Apple HV",
+    "libkrun": "libkrun",
+    "hyperv": "Hyper-V",
+    "wsl": "WSL",
+    "qemu": "QEMU",
 }
 
 
@@ -41,180 +53,176 @@ def extract_json(raw: str) -> dict:
     return json.loads(raw[start:])
 
 
-def build_header(data: dict, pipeline_name: str | None) -> dict:
+def _parse_pipeline(pipeline_name: str | None) -> tuple[str, str | None]:
+    """Return (os_label, backend_label | None) from a pipeline name like
+    'pde2e-prerelease-v1.30.1-libkrun-6.1.2-darwin-arm64-26.0.1'."""
+    if not pipeline_name:
+        return "E2E", None
+
+    name_lower = pipeline_name.lower()
+    if "darwin" in name_lower or "macos" in name_lower:
+        os_label = "macOS"
+    elif "win" in name_lower or "windows" in name_lower:
+        os_label = "Windows"
+    elif "linux" in name_lower:
+        os_label = "Linux"
+    else:
+        os_label = "E2E"
+
+    backend = None
+    for token, label in BACKEND_TOKENS.items():
+        if token in name_lower:
+            backend = label
+            break
+
+    return os_label, backend
+
+
+def _group_failures(failures: list) -> dict:
+    """Group failures by title (preferred) or classification|confidence (fallback).
+    Returns an OrderedDict-like list of (group_key, [failure, ...]) preserving insertion order."""
+    groups: dict[str, list] = {}
+    for f in failures:
+        key = f.get("title") or f"{f.get('classification', 'unknown')}|{f.get('confidence', 'uncertain')}"
+        groups.setdefault(key, []).append(f)
+    return groups
+
+
+def _truncate(text: str, max_len: int) -> str:
+    return text if len(text) <= max_len else text[:max_len - 3] + "..."
+
+
+def _format_duration(duration_s: float) -> str:
+    mins = int(duration_s // 60)
+    secs = int(duration_s % 60)
+    return f"{mins}m{secs}s" if mins else f"{secs}s"
+
+
+def format_workflow_text(
+    data: dict,
+    artifacts_url: str | None = None,
+    pipeline_name: str | None = None,
+) -> str:
     s = data.get("summary", {})
     p = data.get("platform", {})
+    failures = data.get("failures", [])
+    skipped_analysis = data.get("skipped_analysis")
 
     failed = s.get("failed", 0)
     total = s.get("total", 0)
     passed = s.get("passed", 0)
     skipped = s.get("skipped", 0)
+    duration_s = s.get("duration_s", 0)
 
-    os_name = (p.get("os", "unknown")).replace("win32", "Windows").replace("darwin", "macOS").replace("linux", "Linux")
-    arch = p.get("arch", "")
+    os_label, backend = _parse_pipeline(pipeline_name)
+    suite_label = f"{os_label} E2E Tests"
+    if backend:
+        suite_label += f" ({backend})"
 
+    lines = []
+
+    # --- Header ---
     if failed == 0:
-        status_emoji = "✅"  # ✅
-        status_text = "All tests passed"
+        lines.append(f"✅ *{suite_label}: All {total} tests passed*")
     else:
-        status_emoji = "❌"  # ❌
-        status_text = f"{failed} failure{'s' if failed != 1 else ''}"
-
-    title = f"{status_emoji} E2E Results: {status_text}"
+        lines.append(f"🚨 *{suite_label}: {failed} failure{'s' if failed != 1 else ''}*")
     if pipeline_name:
-        title = f"{status_emoji} {pipeline_name}: {status_text}"
+        lines.append(f"`{pipeline_name}`")
 
-    header = {
-        "type": "header",
-        "text": {"type": "plain_text", "text": title[:150], "emoji": True},
-    }
+    # --- Stats line ---
+    cascade = skipped_analysis.get("cascade", 0) if skipped_analysis else 0
+    by_design = skipped_analysis.get("by_design", 0) if skipped_analysis else 0
 
-    context_parts = [f"*{total}* total | *{passed}* passed | *{failed}* failed | *{skipped}* skipped"]
-    context_parts.append(f"{os_name}/{arch}")
+    skip_detail = ""
+    if skipped:
+        if cascade and by_design:
+            skip_detail = f" ({by_design} by design, {cascade} cascaded)"
+        elif cascade:
+            skip_detail = f" ({cascade} cascaded)"
+        else:
+            skip_detail = " (all by design)"
 
+    stat_parts = [
+        f"✅ {passed} Passed",
+        f"❌ {failed} Failed",
+        f"⚠️ {skipped} Skipped{skip_detail}",
+    ]
+    if duration_s:
+        stat_parts.append(f"⏱ {_format_duration(duration_s)}")
+
+    lines.append(" | ".join(stat_parts))
+
+    # --- Platform context ---
+    ctx_parts = []
     if p.get("branch"):
-        context_parts.append(f"branch: `{p['branch']}`")
+        ctx_parts.append(f"branch: `{p['branch']}`")
     if p.get("commit"):
-        context_parts.append(f"commit: `{p['commit'][:8]}`")
+        ctx_parts.append(f"commit: `{p['commit'][:8]}`")
+    if ctx_parts:
+        lines.append(" | ".join(ctx_parts))
 
-    duration = s.get("duration_s", 0)
-    if duration:
-        mins = int(duration // 60)
-        secs = int(duration % 60)
-        context_parts.append(f"duration: {mins}m{secs}s")
+    # --- Failures grouped by title ---
+    if failures:
+        lines.append("")
+        groups = _group_failures(failures)
 
-    context = {
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": " | ".join(context_parts)}],
-    }
+        for idx, (group_key, group_failures) in enumerate(groups.items()):
+            num = NUMBER_EMOJI[idx] if idx < len(NUMBER_EMOJI) else f"({idx + 1})"
+            rep = group_failures[0]
+            classification = rep.get("classification", "unknown")
+            confidence = rep.get("confidence", "uncertain")
 
-    return [header, context]
+            cls_label = CLASSIFICATION_LABEL.get(classification, classification.title())
+            if rep.get("title"):
+                group_label = f"{cls_label}: {group_key} [{classification}/{confidence}]"
+            else:
+                group_label = f"{cls_label}: {classification}/{confidence}"
+            lines.append(f"{num} *{group_label}*")
 
+            root_cause = _truncate(rep.get("root_cause", "No root cause determined"), 500)
+            lines.append(f"> {root_cause}")
 
-def build_failure_blocks(failures: list) -> list:
-    if not failures:
-        return []
+            for f in group_failures:
+                test_name = f.get("test", "Unknown test")
+                spec = f.get("spec_file", "")
+                line_no = f.get("line", "")
+                loc = f"{spec}:{line_no}" if spec and line_no else spec
+                action = _truncate(f.get("recommended_action", ""), 300)
 
-    blocks = [{"type": "divider"}]
+                bullet = f"• {test_name}"
+                if loc:
+                    bullet += f" `{loc}`"
+                lines.append(bullet)
+                if action:
+                    lines.append(f"  └ _Fix:_ {action}")
 
-    for f in failures:
-        emoji = CLASSIFICATION_EMOJI.get(f.get("classification", "unknown"), "❓")
-        conf = CONFIDENCE_LABEL.get(f.get("confidence", ""), f.get("confidence", ""))
-        classification = f.get("classification", "unknown")
+            lines.append("")
 
-        test_name = f.get("test", "Unknown test")
-        spec = f.get("spec_file", "")
-        line = f.get("line", "")
-        loc = f"{spec}:{line}" if spec and line else spec
-
-        title = f"{emoji} *{test_name}*  [{classification}/{conf}]"
-
-        root_cause = f.get("root_cause", "No root cause determined")
-        if len(root_cause) > 300:
-            root_cause = root_cause[:297] + "..."
-
-        action = f.get("recommended_action", "")
-        if len(action) > 200:
-            action = action[:197] + "..."
-
-        text_parts = [f"> {root_cause}"]
-        if loc:
-            text_parts.append(f"_`{loc}`_")
-        if action:
-            text_parts.append(f"\U0001f527 {action}")  # 🔧
-
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"{title}\n" + "\n".join(text_parts)},
-        })
-
-    return blocks
-
-
-def build_skipped_blocks(skipped_analysis: dict | None) -> list:
-    if not skipped_analysis:
-        return []
-
-    total = skipped_analysis.get("total_skipped", 0)
-    cascade = skipped_analysis.get("cascade", 0)
-    by_design = skipped_analysis.get("by_design", 0)
-
-    if total == 0:
-        return []
-
-    if cascade == 0:
-        text = f"\U0001f4ad *Skipped tests:* {total} (all by design)"
-        return [{"type": "context", "elements": [{"type": "mrkdwn", "text": text}]}]
-
-    blocks = [{"type": "divider"}]
-
-    text = f"⚠️ *Skipped tests:* {total} total — *{by_design}* by design, *{cascade}* cascade from failures"
-
-    cascade_details = skipped_analysis.get("cascade_details", [])
-    if cascade_details:
-        grouped = {}
-        for d in cascade_details:
-            cause = d.get("caused_by_failure", "unknown")
-            grouped.setdefault(cause, []).append(d.get("skipped_test", "?"))
-
-        lines = [text]
-        for cause, skipped_tests in grouped.items():
-            names = ", ".join(skipped_tests[:3])
-            if len(skipped_tests) > 3:
-                names += f" +{len(skipped_tests) - 3} more"
-            lines.append(f"  └ _{cause}_ → skipped: {names}")
-
-        text = "\n".join(lines)
-
-    blocks.append({
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": text},
-    })
-
-    return blocks
-
-
-def build_footer(data: dict, artifacts_url: str | None) -> list:
-    blocks = []
-    p = data.get("platform", {})
-
-    elements = []
+    # --- Footer ---
     if artifacts_url:
-        elements.append({"type": "mrkdwn", "text": f"<{artifacts_url}|View full artifacts>"})
-    if p.get("ci_url"):
-        elements.append({"type": "mrkdwn", "text": f"<{p['ci_url']}|View CI run>"})
+        lines.append(f"🔗 <{artifacts_url}|View Pipeline Logs & Artifacts>")
+    if p.get("ci_url") and p.get("ci_url") != artifacts_url:
+        lines.append(f"🔗 <{p['ci_url']}|View CI Run>")
 
-    if elements:
-        blocks.append({"type": "context", "elements": elements})
-
-    return blocks
-
-
-def format_slack_message(data: dict, artifacts_url: str | None = None, pipeline_name: str | None = None) -> dict:
-    blocks = []
-    blocks.extend(build_header(data, pipeline_name))
-    blocks.extend(build_failure_blocks(data.get("failures", [])))
-    blocks.extend(build_skipped_blocks(data.get("skipped_analysis")))
-    blocks.extend(build_footer(data, artifacts_url))
-
-    return {"blocks": blocks}
+    return "\n".join(lines).strip()
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Transform evaluation JSON to Slack Block Kit")
+    parser = argparse.ArgumentParser(description="Transform evaluation JSON to Slack Workflow Builder payload")
     parser.add_argument("--artifacts-url", default=None, help="URL to full test artifacts")
-    parser.add_argument("--pipeline-name", default=None, help="Pipeline name for header")
+    parser.add_argument("--pipeline-name", default=None, help="Pipeline name (used to parse OS + backend)")
+    parser.add_argument("--workflow-var", default=None, help="Payload key name (default: 'text')")
     args = parser.parse_args()
 
-    import os
     artifacts_url = args.artifacts_url or os.environ.get("ARTIFACTS_URL")
     pipeline_name = args.pipeline_name or os.environ.get("PIPELINE_NAME")
+    workflow_var = args.workflow_var or os.environ.get("SLACK_WORKFLOW_VAR") or "text"
 
     raw = sys.stdin.read()
     data = extract_json(raw)
 
-    message = format_slack_message(data, artifacts_url, pipeline_name)
-    print(json.dumps(message, indent=2))
+    text = format_workflow_text(data, artifacts_url, pipeline_name)
+    print(json.dumps({workflow_var: text}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
