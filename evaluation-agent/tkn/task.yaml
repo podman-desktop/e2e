@@ -33,10 +33,10 @@ spec:
       default: ""
     - name: e2e-repo
       description: e2e repository to clone for skill access
-      default: https://github.com/podman-desktop/e2e
+      default: https://github.com/amisskii/podman-desktop-e2e
     - name: e2e-repo-revision
       description: git revision of the e2e repo (branch, tag, or SHA) to use for the skill
-      default: main
+      default: feat/ai-eval-skill
     - name: image-version
       description: evaluation-agent image version
       default: "0.1.0"
