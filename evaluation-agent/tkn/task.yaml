@@ -43,7 +43,7 @@ spec:
 
   steps:
     - name: evaluate-and-notify
-      image: ghcr.io/podman-desktop/evaluation-agent:v$(params.image-version)
+      image: quay.io/rh_ee_amisskii/evaluation-agent:v$(params.image-version)
       imagePullPolicy: Always
       env:
         - name: ANTHROPIC_API_KEY

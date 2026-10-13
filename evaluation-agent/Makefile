@@ -1,7 +1,7 @@
 VERSION ?= 0.1.0
 CONTAINER_MANAGER ?= podman
-IMG ?= ghcr.io/podman-desktop/evaluation-agent:v$(VERSION)
-TKN_IMG ?= ghcr.io/podman-desktop/evaluation-agent-tkn:v$(VERSION)
+IMG ?= quay.io/rh_ee_amisskii/evaluation-agent:v$(VERSION)
+TKN_IMG ?= quay.io/rh_ee_amisskii/evaluation-agent-tkn:v$(VERSION)
 
 TOOLS_DIR := ../e2e-runner/tools
 include $(TOOLS_DIR)/tools.mk
