@@ -93,8 +93,9 @@ function Find-PodmanDesktopRepo {
             write-host "  skipping search root '$root' -> '$rootReal' (outside HOME)"
             continue
         }
-        write-host "  searching under '$rootReal' (depth 4) for '$PdResourceMarker'..."
-        $found = Get-ChildItem -Path $rootReal -Recurse -Depth 4 -Filter "default-settings.json" `
+        # Marker is 5 components deep; allow the repo root up to 1 level below search root.
+        write-host "  searching under '$rootReal' (depth 5) for '$PdResourceMarker'..."
+        $found = Get-ChildItem -Path $rootReal -Recurse -Depth 5 -Filter "default-settings.json" `
             -File -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -like "*\$PdResourceMarker" } |
             Select-Object -First 1

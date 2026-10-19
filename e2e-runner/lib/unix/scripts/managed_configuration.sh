@@ -104,9 +104,11 @@ find_podman_desktop_repo() {
             echo "  skipping search root '$search_root' -> '$root_real' (outside HOME)" >&2
             continue
         fi
-        echo "  searching under '$root_real' (maxdepth 4) for '$PD_RESOURCE_MARKER'..." >&2
-        found=$(find "$root_real" -maxdepth 4 -type f \
-            -path "*/$PD_RESOURCE_MARKER" 2>/dev/null | head -1)
+        # Marker is 5 components deep; allow the repo root up to 1 level below search root.
+        echo "  searching under '$root_real' (maxdepth 6) for '$PD_RESOURCE_MARKER'..." >&2
+        found=$(find "$root_real" -maxdepth 6 \
+            \( -name node_modules -o -name .git \) -prune -o \
+            -type f -path "*/$PD_RESOURCE_MARKER" -print 2>/dev/null | head -1)
         if [ -n "$found" ]; then
             resolved=$( cd "$(dirname "$found")/../../../.." && pwd -P )
             if ! within_home "$resolved"; then
