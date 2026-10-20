@@ -94,7 +94,7 @@ jobs:
           }
 
       # Build context is the repository root so the Containerfile can COPY the
-      # skill from ai-eval/skills/.
+      # skill from .agents/skills/.
       - name: Build image
         run: |
           podman build -t ${{ env.IMAGE }}:v$VERSION \

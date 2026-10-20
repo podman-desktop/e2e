@@ -47,10 +47,16 @@ BACKEND_TOKENS = {
 
 
 def extract_json(raw: str) -> dict:
+    """Decode the evaluation object, tolerating a ```json fence or stray prose.
+
+    raw_decode stops at the end of the first JSON value, so trailing fences and
+    commentary after the object are ignored.
+    """
     start = raw.find("{")
     if start < 0:
         raise ValueError("No JSON object found in input")
-    return json.loads(raw[start:])
+    obj, _ = json.JSONDecoder().raw_decode(raw[start:])
+    return obj
 
 
 def _parse_pipeline(pipeline_name: str | None) -> tuple[str, str | None]:

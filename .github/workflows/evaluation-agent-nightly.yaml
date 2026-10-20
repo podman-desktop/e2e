@@ -21,7 +21,7 @@ on:
     branches: [main]
     paths:
       - 'evaluation-agent/**'
-      - 'ai-eval/skills/**'
+      - '.agents/skills/**'
       - '.github/workflows/evaluation-agent-nightly.yaml'
 
 env:
@@ -64,7 +64,7 @@ jobs:
           }
 
       # Build context is the repository root so the Containerfile can COPY the
-      # skill from ai-eval/skills/.
+      # skill from .agents/skills/.
       - name: Build image
         run: |
           podman build -t ${{ env.IMAGE }}:${{ env.SHORT_SHA }} \
@@ -88,4 +88,4 @@ jobs:
 
       - name: Push tekton task bundle
         working-directory: evaluation-agent
-        run: make tkn-push
+        run: make tkn-push IMAGE_TAG=nightly TKN_TAG=nightly

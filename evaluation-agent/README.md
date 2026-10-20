@@ -1,6 +1,6 @@
 # Podman Desktop E2E evaluation agent
 
-A container image that runs the [`evaluate-e2e-results`](../ai-eval/skills/evaluate-e2e-results)
+A container image that runs the [`evaluate-e2e-results`](../.agents/skills/evaluate-e2e-results)
 Claude Code skill **headlessly** to triage Podman Desktop Playwright E2E
 failures, and (optionally) posts the verdict to Slack.
 
@@ -51,13 +51,20 @@ needs the **Vertex AI User** role on the project.
 ## Build
 
 The build context is the **repository root** so the skill can be copied from
-`ai-eval/skills/` (requires PR #625):
+`.agents/skills/`:
 
 ```bash
 make oci-build          # podman build ... -f Containerfile ..
 make oci-push           # push the image
 make tkn-push           # push the tekton task bundle
 ```
+
+`make tkn-push` rewrites the task's `image-version` default to `IMAGE_TAG`
+(default `v${VERSION}`) so a versioned bundle pins the matching agent image.
+The nightly job overrides it: `make tkn-push IMAGE_TAG=nightly TKN_TAG=nightly`.
+
+On an Apple Silicon host, pass `--platform linux/amd64` — the Tekton nodes are
+amd64, and an arm64 image fails at exec time with `exec format error`.
 
 ## Run locally
 
@@ -127,7 +134,7 @@ spec:
 - Runs as a non-root user; the skill is baked read-only and cannot be overwritten.
 - Fresh `CLAUDE_CONFIG_DIR` per run — no cross-run session-state corruption, no
   resume prompt to hang on.
-- Read-only tool allowlist (`Read,Glob,Grep,Bash`) with non-interactive
+- Read-only tool allowlist (`Skill,Read,Glob,Grep,Bash`) with non-interactive
   permission handling; no secrets baked into the image.
 - Wall-clock `timeout` + `--max-budget-usd` guard against stuck runs and runaway
   cost; exit codes and the `is_error` field are checked, and the session id +

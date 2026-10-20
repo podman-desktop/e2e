@@ -55,10 +55,10 @@ spec:
   # Reporting
   - name: pipeline-name
     description: Pipeline identifier shown in the Slack header
-    default: "''"
+    default: ''
   - name: artifacts-url
     description: Link to the full artifacts, shown in the Slack footer
-    default: "''"
+    default: ''
   - name: slack-workflow-var
     description: Variable name for the Slack Workflow Builder trigger payload
     default: 'text'
@@ -68,8 +68,12 @@ spec:
     description: Model alias or id for the agent
     default: 'claude-sonnet-5'
   - name: agent-timeout
-    description: Wall-clock cap for the agent run (GNU timeout syntax)
-    default: '30m'
+    description: >-
+      Wall-clock cap for the agent run (GNU timeout syntax). Keep this below the
+      consuming pipelineTask's `timeout` — if Tekton kills the pod first, the
+      entrypoint's timeout path (which logs a clear "agent timed out" message
+      and exits 124) never runs and you lose the diagnostic.
+    default: '25m'
   - name: agent-max-budget
     description: Maximum USD to spend on API calls for the run
     default: '5'

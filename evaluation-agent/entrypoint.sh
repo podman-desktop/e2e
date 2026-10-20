@@ -133,9 +133,27 @@ if [[ "$is_error" == "true" ]]; then
 fi
 
 # The skill's evaluation report is the .result field of the JSON envelope.
+# SKILL.md asks for bare JSON, but the model still wraps it in a ```json fence
+# often enough that we cannot rely on the instruction — decode the first JSON
+# value and discard any fence or prose around it.
 EVAL_FILE="$(mktemp)"
 trap 'rm -rf "$CLAUDE_CONFIG_DIR" "$OUT_FILE" "$EVAL_FILE"' EXIT
-jq -r '.result' "$OUT_FILE" >"$EVAL_FILE"
+jq -r '.result' "$OUT_FILE" \
+  | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+start = raw.find("{")
+if start >= 0:
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(raw[start:])
+        json.dump(obj, sys.stdout)
+        sys.exit(0)
+    except ValueError:
+        pass
+# Not decodable — pass the raw text through so the validation error below can
+# show what the agent actually produced.
+sys.stdout.write(raw)
+' >"$EVAL_FILE"
 
 # Validate the skill produced parseable evaluation JSON before we act on it.
 if ! jq -e '.summary and (.failures | type == "array")' "$EVAL_FILE" >/dev/null 2>&1; then

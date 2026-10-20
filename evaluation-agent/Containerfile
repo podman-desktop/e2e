@@ -1,4 +1,4 @@
-# Build context MUST be the repository root so the `ai-eval/skills` COPY resolves:
+# Build context MUST be the repository root so the `.agents/skills` COPY resolves:
 #   podman build -t <img> -f evaluation-agent/Containerfile .
 #
 # TODO(pin): pin the base image by digest (e.g. node:22-alpine@sha256:...) once a
