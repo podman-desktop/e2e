@@ -478,6 +478,9 @@ cd $thisDir
 # Execute the arbitrary code from external source
 Execute-Scripts
 
+# Safeguard that directory did not change
+write-host "Actual directory $(pwd)"
+
 write-host "Installing dependencies of $repo"
 pnpm install --frozen-lockfile 2>&1 | Tee-Object -FilePath 'output.log' -Append
 
