@@ -21,7 +21,7 @@ RUN apk add --no-cache bash python3 unzip jq curl ca-certificates tini \
     && npm cache clean --force
 
 # Bake the skill read-only
-COPY ai-eval/skills/evaluate-e2e-results /opt/evaluation-agent/skills/evaluate-e2e-results
+COPY .agents/skills/evaluate-e2e-results /opt/evaluation-agent/skills/evaluate-e2e-results
 
 COPY evaluation-agent/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
