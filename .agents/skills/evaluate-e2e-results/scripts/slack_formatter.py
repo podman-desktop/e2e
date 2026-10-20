@@ -19,23 +19,23 @@ import sys
 import argparse
 from itertools import islice
 
-CLASSIFICATION_EMOJI = {
-    "regression": "⛔",
-    "test_bug": "🐛",
-    "flaky": "🔄",
-    "infra": "🚧",
-    "unknown": "❓",
+# Workflow Builder renders the variable as plain text — mrkdwn (*bold*, `code`,
+# <url|label>) is NOT parsed, so this formatter emits plain text only. Unicode
+# emoji and spacing do render, and are what carries the structure.
+
+# classification -> (icon, verdict label, what it means for a release reader)
+VERDICT = {
+    "regression": ("⛔", "PRODUCT BUG", "a real bug in Podman Desktop"),
+    "test_bug": ("🐛", "TEST BUG", "the test code is wrong, not the app"),
+    "flaky": ("🔄", "FLAKY TEST", "timing-sensitive, not a product problem"),
+    "infra": ("🚧", "INFRASTRUCTURE", "CI environment, not a product problem"),
+    "unknown": ("❓", "NEEDS INVESTIGATION", "not enough evidence to classify"),
 }
 
-CLASSIFICATION_LABEL = {
-    "regression": "Regression",
-    "test_bug": "Bug",
-    "flaky": "Flaky",
-    "infra": "Infra",
-    "unknown": "Unknown",
-}
+# confidence -> hedge applied to the verdict label
+CONFIDENCE_PREFIX = {"confirmed": "", "likely": "LIKELY ", "uncertain": "POSSIBLY "}
 
-NUMBER_EMOJI = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+RULE = "─" * 44
 
 BACKEND_TOKENS = {
     "applehv": "Apple HV",
@@ -95,7 +95,52 @@ def _group_failures(failures: list) -> dict:
 
 
 def _truncate(text: str, max_len: int) -> str:
-    return text if len(text) <= max_len else text[:max_len - 3] + "..."
+    """Trim to max_len, preferring a sentence end and never cutting mid-word."""
+    if len(text) <= max_len:
+        return text
+    window = text[:max_len - 1]
+    # Prefer ending on a sentence boundary if one sits in the last third.
+    sentence_end = max(window.rfind(". "), window.rfind("; "))
+    if sentence_end > max_len * 0.6:
+        return window[:sentence_end].rstrip(",;:—- ") + "."
+    space = window.rfind(" ")
+    return (window[:space] if space > 0 else window).rstrip(",;:—- ") + "…"
+
+
+def _triage(failures: list) -> tuple[str, list[str]]:
+    """Return (headline verdict, per-bucket breakdown lines)."""
+    counts: dict[str, int] = {}
+    for f in failures:
+        counts[f.get("classification", "unknown")] = counts.get(f.get("classification", "unknown"), 0) + 1
+
+    def n(key: str) -> int:
+        return counts.get(key, 0)
+
+    product = n("regression")
+
+    if product:
+        headline = (
+            f"{product} likely product bug{'s' if product != 1 else ''}"
+            " — review before release"
+        )
+    elif n("unknown"):
+        headline = f"{n('unknown')} failure(s) could not be classified — needs a look"
+    elif n("test_bug"):
+        headline = "test-code failures only — no product impact identified"
+    elif n("infra") or n("flaky"):
+        headline = "infrastructure/flake only — no product impact identified"
+    else:
+        headline = "no failures"
+
+    breakdown = []
+    for key in ("regression", "test_bug", "flaky", "infra", "unknown"):
+        if n(key):
+            icon, label, meaning = VERDICT[key]
+            breakdown.append(f"{icon} {n(key)} {label.lower()} — {meaning}")
+
+    # Only worth listing buckets when the failures are of mixed kinds — with a
+    # single kind the headline already said it.
+    return headline, breakdown if len(breakdown) > 1 else []
 
 
 def _format_duration(duration_s: float) -> str:
@@ -129,11 +174,11 @@ def format_workflow_text(
 
     # --- Header ---
     if failed == 0:
-        lines.append(f"✅ *{suite_label}: All {total} tests passed*")
+        lines.append(f"✅ {suite_label} — all {total} tests passed")
     else:
-        lines.append(f"🚨 *{suite_label}: {failed} failure{'s' if failed != 1 else ''}*")
+        lines.append(f"🚨 {suite_label} — {failed} failure{'s' if failed != 1 else ''}")
     if pipeline_name:
-        lines.append(f"`{pipeline_name}`")
+        lines.append(pipeline_name)
 
     # --- Stats line ---
     cascade = skipped_analysis.get("cascade", 0) if skipped_analysis else 0
@@ -149,23 +194,35 @@ def format_workflow_text(
             skip_detail = " (all by design)"
 
     stat_parts = [
-        f"✅ {passed} Passed",
-        f"❌ {failed} Failed",
-        f"⚠️ {skipped} Skipped{skip_detail}",
+        f"✅ {passed} passed",
+        f"❌ {failed} failed",
+        f"⚠️ {skipped} skipped{skip_detail}",
     ]
     if duration_s:
         stat_parts.append(f"⏱ {_format_duration(duration_s)}")
 
-    lines.append(" | ".join(stat_parts))
+    lines.append("   ".join(stat_parts))
 
     # --- Platform context ---
     ctx_parts = []
     if p.get("branch"):
-        ctx_parts.append(f"branch: `{p['branch']}`")
+        ctx_parts.append(f"branch {p['branch']}")
     if p.get("commit"):
-        ctx_parts.append(f"commit: `{p['commit'][:8]}`")
+        ctx_parts.append(f"commit {p['commit'][:8]}")
     if ctx_parts:
-        lines.append(" | ".join(ctx_parts))
+        lines.append("   ".join(ctx_parts))
+
+    # --- Verdict: what kind of problem is this? ---
+    if failures:
+        headline, breakdown = _triage(failures)
+        lines.append("")
+        lines.append(f"VERDICT: {headline}")
+        lines.extend(f"  {b}" for b in breakdown)
+        if cascade:
+            lines.append(
+                f"  ⚠️ {cascade} further test{'s' if cascade != 1 else ''} never ran"
+                " after an earlier failure — that coverage is unverified"
+            )
 
     # --- Failures grouped by title ---
     if failures:
@@ -173,43 +230,45 @@ def format_workflow_text(
         groups = _group_failures(failures)
 
         for idx, (group_key, group_failures) in enumerate(groups.items()):
-            num = NUMBER_EMOJI[idx] if idx < len(NUMBER_EMOJI) else f"({idx + 1})"
             rep = group_failures[0]
             classification = rep.get("classification", "unknown")
             confidence = rep.get("confidence", "uncertain")
-            emoji = CLASSIFICATION_EMOJI.get(classification, "❓")
+            icon, label, _meaning = VERDICT.get(classification, VERDICT["unknown"])
+            hedge = CONFIDENCE_PREFIX.get(confidence, "POSSIBLY ")
 
-            cls_label = CLASSIFICATION_LABEL.get(classification, classification.title())
-            if rep.get("title"):
-                group_label = f"{cls_label}: {group_key} [{classification}/{confidence}]"
-            else:
-                group_label = f"{cls_label}: {classification}/{confidence}"
-            lines.append(f"{num} *{group_label}*")
+            lines.append(RULE)
+            title = group_key if rep.get("title") else "Unlabelled failure"
+            lines.append(f"{idx + 1}. {icon} {hedge}{label} — {title}")
+            lines.append("")
 
-            root_cause = _truncate(rep.get("root_cause", "No root cause determined"), 500)
-            lines.append(f"> {root_cause}")
-
+            # Which tests this hit, with the shortest locator that still finds it.
             for f in group_failures:
-                test_name = f.get("test", "Unknown test")
-                spec = f.get("spec_file", "")
+                spec = os.path.basename(f.get("spec_file", ""))
                 line_no = f.get("line", "")
                 loc = f"{spec}:{line_no}" if spec and line_no else spec
-                action = _truncate(f.get("recommended_action", ""), 300)
-
-                bullet = f"• {test_name}"
+                lines.append(f"   Test:  {f.get('test', 'Unknown test')}")
                 if loc:
-                    bullet += f" `{loc}`"
-                lines.append(bullet)
-                if action:
-                    lines.append(f"  └ _Fix:_ {action}")
+                    lines.append(f"          {loc}")
+
+            root_cause = _truncate(rep.get("root_cause", "No root cause determined"), 420)
+            lines.append(f"   Why:   {root_cause}")
+
+            action = _truncate(rep.get("recommended_action", ""), 260)
+            if action:
+                lines.append(f"   Next:  {action}")
+
+            layer = rep.get("layer")
+            if layer:
+                basis = "trace analysis" if layer >= 3 else "error context"
+                lines.append(f"   Basis: {basis} (layer {layer})")
 
             lines.append("")
 
     # --- Footer ---
     if artifacts_url:
-        lines.append(f"🔗 <{artifacts_url}|View Pipeline Logs & Artifacts>")
+        lines.append(f"🔗 Logs & artifacts: {artifacts_url}")
     if p.get("ci_url") and p.get("ci_url") != artifacts_url:
-        lines.append(f"🔗 <{p['ci_url']}|View CI Run>")
+        lines.append(f"🔗 CI run: {p['ci_url']}")
 
     return "\n".join(lines).strip()
 

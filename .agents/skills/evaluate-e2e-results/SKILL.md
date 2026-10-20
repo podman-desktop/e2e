@@ -119,9 +119,9 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
       "classification": "regression | test_bug | flaky | infra | unknown",
       "confidence": "confirmed | likely | uncertain",
       "title": "Short noun-phrase (3-6 words) — identical for failures sharing the same root cause",
-      "root_cause": "One sentence explaining WHY the test failed, grounded in evidence",
+      "root_cause": "Two short sentences, 45 words max: the symptom, then the mechanism. Plain language, no nested parentheticals.",
       "evidence": ["source: what it shows"],
-      "recommended_action": "Specific action to fix or investigate",
+      "recommended_action": "One concrete next step, 30 words max",
       "layer": 1
     }
   ],
@@ -152,7 +152,30 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
 
 - `failures[].error`: First line of error.message only — not the full stack trace
 - `failures[].root_cause`: WHY the test failed, grounded in actual log/trace evidence. If Layer 1 shows WHAT failed but not WHY, use Layer 3. "Machine stayed OFF" is not enough — "WSL pipe unreachable, event stream ECONNRESET" is.
-- `failures[].evidence`: 1–3 strings citing specific sources. Format: `"source: what it shows"`. Sources: `error-context.md`, `json-results.json`, `trace`, `console`, `stderr`.
+
+  **Write it to be skimmed.** This line is read in Slack by an engineer deciding
+  whether to block a release. Hard limits:
+  - **Two short sentences, 45 words total.** First sentence: the observable
+    symptom. Second: the mechanism behind it.
+  - **No nested parentheticals and no chains of em-dashes.** If a clause needs
+    a bracket, it is supporting detail — move it to `evidence`.
+  - **Plain language.** Prefer "the command never appeared in the palette" over
+    "the page snapshot captured at timeout shows the palette search box still
+    holding the typed command text".
+
+  Good: `The "Synchronize certificates" command is missing from the command
+  palette. The palette returned no matches for the full 180s wait, so the sync
+  task was never created.`
+
+  Bad (one 70-word sentence, three parentheticals): `After starting an
+  interactive/TTY container and opening its details, the Logs tab renders the
+  empty-state ('No Log' heading, 'Log output of alpine-container') instead of
+  the xterm buffer, across the original attempt and both retries (all 3 fail
+  identically at ~5.1s with the same hidden .xterm-rows element) — the
+  container's state was already confirmed Running moments earlier…`
+- `failures[].recommended_action`: One concrete next step, 30 words max. What to
+  open, check, or try first — not a list of alternatives.
+- `failures[].evidence`: 1–3 strings citing specific sources. Format: `"source: what it shows"`. Sources: `error-context.md`, `json-results.json`, `trace`, `console`, `stderr`. Put the detail that does **not** belong in `root_cause` here.
 - `failures[].layer`: Deepest layer used (1, 2, or 3). If Layer 1 classified but Layer 3 filled root_cause, report `3`.
 - `failures[].title`: Assigned after all failures are classified. Identical for failures sharing root cause.
 - `skipped_analysis`: Always present when `summary.skipped > 0`.
