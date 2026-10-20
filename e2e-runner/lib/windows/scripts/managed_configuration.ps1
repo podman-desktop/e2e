@@ -93,9 +93,10 @@ function Find-PodmanDesktopRepo {
             write-host "  skipping search root '$root' -> '$rootReal' (outside HOME)"
             continue
         }
-        # Marker is 5 components deep; allow the repo root up to 1 level below search root.
-        write-host "  searching under '$rootReal' (depth 5) for '$PdResourceMarker'..."
-        $found = Get-ChildItem -Path $rootReal -Recurse -Depth 5 -Filter "default-settings.json" `
+        # Marker sits a few levels deep; depth 6 lets the repo root be up to a
+        # couple of levels below the search root (parity with the unix script).
+        write-host "  searching under '$rootReal' (depth 6) for '$PdResourceMarker'..."
+        $found = Get-ChildItem -Path $rootReal -Recurse -Depth 6 -Filter "default-settings.json" `
             -File -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -like "*\$PdResourceMarker" } |
             Select-Object -First 1
@@ -114,39 +115,53 @@ function Find-PodmanDesktopRepo {
     return $null
 }
 
-write-host "Current directory: $((Get-Location).Path)"
+# Preserve the runner's working directory. Execute-Scripts runs this script with
+# the call operator (& $scriptPath) in the SAME runspace, so any location change
+# here would leak back into runner.ps1 and break the subsequent `pnpm install`,
+# which depends on the current directory being the repo checkout. We never change
+# the location below, but restore it in a finally as a hard guarantee.
+$originalLocation = Get-Location
+write-host "Current directory: $($originalLocation.Path)"
 write-host "Searching for podman-desktop repository (TARGET_FOLDER='$($env:TARGET_FOLDER)', WORKING_DIR='$($env:WORKING_DIR)', USERPROFILE='$env:USERPROFILE')..."
-$PdRepoDir = Find-PodmanDesktopRepo
+try {
+    $PdRepoDir = Find-PodmanDesktopRepo
 
-if ($PdRepoDir) {
-    write-host "Using podman-desktop repository at: $PdRepoDir"
-    write-host "Setting up managed configuration for Windows"
-    New-Item -ItemType Directory -Force -Path $ManagedConfigDir | Out-Null
+    if ($PdRepoDir) {
+        write-host "Using podman-desktop repository at: $PdRepoDir"
+        write-host "Setting up managed configuration for Windows"
+        New-Item -ItemType Directory -Force -Path $ManagedConfigDir | Out-Null
 
-    $testDefault = Join-Path $PdRepoDir "$PdResourceSubDir\default-settings.json"
-    $testLocked = Join-Path $PdRepoDir "$PdResourceSubDir\locked.json"
-    write-host "Source default-settings: $testDefault"
-    write-host "Source locked: $testLocked"
+        $testDefault = Join-Path $PdRepoDir "$PdResourceSubDir\default-settings.json"
+        $testLocked = Join-Path $PdRepoDir "$PdResourceSubDir\locked.json"
+        write-host "Source default-settings: $testDefault"
+        write-host "Source locked: $testLocked"
 
-    if (Test-Path $testDefault) {
-        Copy-Item -Path $testDefault -Destination "$ManagedConfigDir\default-settings.json" -Force
-        write-host "Default settings:"
-        Get-Content "$ManagedConfigDir\default-settings.json"
+        if (Test-Path $testDefault) {
+            Copy-Item -Path $testDefault -Destination "$ManagedConfigDir\default-settings.json" -Force
+            write-host "Default settings:"
+            Get-Content "$ManagedConfigDir\default-settings.json"
+        } else {
+            # Do NOT call `exit` here: Execute-Scripts runs this script with the call
+            # operator (& $scriptPath) in the SAME runspace, so `exit` would terminate
+            # runner.ps1 itself. Report the failure and return cleanly instead.
+            Write-Error "$testDefault does not exist..."
+            return
+        }
+
+        if (Test-Path $testLocked) {
+            Copy-Item -Path $testLocked -Destination "$ManagedConfigDir\locked.json" -Force
+            write-host "Locked settings:"
+            Get-Content "$ManagedConfigDir\locked.json"
+        } else {
+            Write-Error "$testLocked does not exist..."
+            return
+        }
     } else {
-        write-host "$testDefault does not exist..."
-        exit 1
+        Write-Error "podman-desktop repository not found in any nearby location, could not set managed config..."
+        write-host "Searched relative to current directory ($($originalLocation.Path)), TARGET_FOLDER ('$($env:TARGET_FOLDER)') and USERPROFILE ('$env:USERPROFILE')."
+        return
     }
-
-    if (Test-Path $testLocked) {
-        Copy-Item -Path $testLocked -Destination "$ManagedConfigDir\locked.json" -Force
-        write-host "Locked settings:"
-        Get-Content "$ManagedConfigDir\locked.json"
-    } else {
-        write-host "$testLocked does not exist..."
-        exit 1
-    }
-} else {
-    write-host "podman-desktop repository not found in any nearby location, could not set managed config..."
-    write-host "Searched relative to current directory ($(Get-Location)), TARGET_FOLDER ('$($env:TARGET_FOLDER)') and USERPROFILE ('$env:USERPROFILE')."
-    exit 1
+} finally {
+    # Restore the runner's working directory for the steps that follow (pnpm install).
+    Set-Location $originalLocation
 }
