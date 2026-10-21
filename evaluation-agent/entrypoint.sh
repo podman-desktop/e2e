@@ -2,7 +2,8 @@
 #
 # Headless entrypoint for the Podman Desktop E2E evaluation agent.
 #
-# Runs the `evaluate-e2e-results` Claude Code skill non-interactively against a
+# Runs the runtime-agnostic `evaluate-e2e-results` skill (via Claude Code, the
+# agent runtime this image ships) non-interactively against a
 # results directory, prints the evaluation JSON to stdout, and (optionally) posts
 # a Slack Block Kit message. It only ever writes to /tmp and an ephemeral config
 # directory — the input results directory is treated as read-only.
@@ -61,7 +62,11 @@ elif [[ ! -r "$adc_default" ]]; then
 fi
 log "Auth: Vertex AI (project=$ANTHROPIC_VERTEX_PROJECT_ID region=$CLOUD_ML_REGION)"
 
+# Exported, not just set: the skill's shell snippets reference $RESULTS_DIR, so
+# it has to survive into the shells the agent spawns. The path is also passed in
+# the prompt, so a runtime that does not inherit the environment still works.
 RESULTS_DIR="${1:-${RESULTS_DIR:-/artifacts}}"
+export RESULTS_DIR
 if [[ ! -d "$RESULTS_DIR" ]]; then
   log "ERROR: results directory not found: $RESULTS_DIR"
   exit 2
