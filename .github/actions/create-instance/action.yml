@@ -117,12 +117,12 @@ runs:
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
         RETRY_DELAY_SECONDS: ${{ inputs.retry-delay-seconds }}
       run: |
-        if [[ ! "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
-          echo "::error::max-attempts must be a positive integer"
+        if [[ ! "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || [ "$MAX_ATTEMPTS" -gt 10 ]; then
+          echo "::error::max-attempts must be a positive integer (max 10)"
           exit 1
         fi
-        if [[ ! "$RETRY_DELAY_SECONDS" =~ ^(0|[1-9][0-9]*)$ ]]; then
-          echo "::error::retry-delay-seconds must be a non-negative integer"
+        if [[ ! "$RETRY_DELAY_SECONDS" =~ ^(0|[1-9][0-9]*)$ ]] || [ "$RETRY_DELAY_SECONDS" -gt 600 ]; then
+          echo "::error::retry-delay-seconds must be a non-negative integer (max 600)"
           exit 1
         fi
 
