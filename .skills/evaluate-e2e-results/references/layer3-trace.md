@@ -11,10 +11,10 @@ Use this layer when Layer 1 classified a failure provisionally but the `root_cau
 
 ## Finding the trace file
 
-Look in `$ARGUMENTS/traces/` for a zip file matching the test's suite name. The naming pattern is `{suite-name}_w{workerIndex}_trace.zip`.
+Look in `$RESULTS_DIR/traces/` for a zip file matching the test's suite name. The naming pattern is `{suite-name}_w{workerIndex}_trace.zip`.
 
 ```bash
-ls "$ARGUMENTS/traces/"
+ls "$RESULTS_DIR/traces/"
 ```
 
 Match by suite name substring — e.g., for a failure in "podman-machine-e2e" look for `podman-machine-e2e_w0_trace.zip`.
@@ -22,7 +22,7 @@ Match by suite name substring — e.g., for a failure in "podman-machine-e2e" lo
 ## Extracting the trace
 
 ```bash
-mkdir -p /tmp/trace-analysis && cd /tmp/trace-analysis && unzip -o "$ARGUMENTS/traces/{name}_trace.zip"
+mkdir -p /tmp/trace-analysis && cd /tmp/trace-analysis && unzip -o "$RESULTS_DIR/traces/{name}_trace.zip"
 ```
 
 The trace file is `trace.trace` — newline-delimited JSON, one event per line.

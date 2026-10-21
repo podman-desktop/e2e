@@ -7,7 +7,7 @@ This is the first and cheapest analysis layer. It classifies ~70% of failures wi
 For each failed test, check `result.attachments[]` for entries with `name: "error-context"`. The `path` field is an absolute CI path — rebase it to the local results directory:
 
 1. Extract the relative path after the last `output/` segment
-2. Prepend `$ARGUMENTS/` to get the local path
+2. Prepend `$RESULTS_DIR/` to get the local path
 3. Read the file
 
 The error-context.md contains:

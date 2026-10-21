@@ -4,7 +4,8 @@ description: >-
   Batch evaluation of Playwright E2E test failures from CI artifacts.
   Non-interactive, single-pass. Reads json-results.json, error-context.md,
   and trace files from a results directory. Classifies each failure and
-  outputs structured JSON. Designed for --print mode in CI pipelines.
+  outputs structured JSON. Designed for headless, single-turn agent runs
+  in CI pipelines.
   Use this skill whenever the user wants to evaluate, analyze, or triage
   E2E test results, Playwright test failures, or CI test artifacts —
   even if they don't say "evaluate" explicitly.
@@ -18,7 +19,9 @@ This skill powers the **pre-release test evaluation pipeline** for Podman Deskto
 
 ## Protocol
 
-This is a **non-interactive batch evaluation** running in `--print` mode inside a CI pipeline.
+This is a **non-interactive batch evaluation** running headlessly (one turn, no
+user present) inside a CI pipeline. Any agent runtime that can read files and
+run shell commands can execute it.
 
 **Rules:**
 - Never ask follow-up questions — work with what is available
@@ -26,7 +29,11 @@ This is a **non-interactive batch evaluation** running in `--print` mode inside 
 - Output **only** a single JSON object — no markdown fences, no prose, no preamble
 - If evidence is insufficient, express it in `confidence: uncertain` — do not guess
 
-The results directory path is provided as: `$ARGUMENTS`
+## Input
+
+The results directory is named in the request and is also exported to the shell
+as `$RESULTS_DIR`. Every command below uses `$RESULTS_DIR`; if the variable is
+unset in your shell, substitute the literal path from the request.
 
 ## Step 1: Parse json-results.json
 
@@ -35,7 +42,7 @@ Use python3 to extract stats, failures, and platform info (the file can be 2MB+)
 ```bash
 python3 -c "
 import json
-with open('$ARGUMENTS/json-results.json') as f:
+with open('$RESULTS_DIR/json-results.json') as f:
     data = json.load(f)
 stats = data.get('stats', {})
 print(json.dumps(stats, indent=2))
@@ -186,7 +193,7 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
 The bundled `scripts/slack_formatter.py` transforms evaluation JSON into a flat `{"text": "..."}` payload for a Slack Workflow Builder webhook trigger (not Block Kit).
 
 ```bash
-claude --print ... > /tmp/evaluation-raw.txt
+# <agent CLI, headless> ... > /tmp/evaluation-raw.txt
 cat /tmp/evaluation-raw.txt | python3 /path/to/slack_formatter.py \
   --pipeline-name "$PIPELINE_NAME" \
   --artifacts-url "$ARTIFACTS_URL" \
