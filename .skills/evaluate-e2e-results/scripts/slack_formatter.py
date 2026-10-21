@@ -17,7 +17,7 @@ import json
 import os
 import sys
 import argparse
-from itertools import islice
+from collections import Counter
 
 # Workflow Builder renders the variable as plain text — mrkdwn (*bold*, `code`,
 # <url|label>) is NOT parsed, so this formatter emits plain text only. Unicode
@@ -82,6 +82,37 @@ def _parse_pipeline(pipeline_name: str | None) -> tuple[str, str | None]:
             break
 
     return os_label, backend
+
+
+def _dedupe_failures(failures: list) -> list:
+    """Collapse repeated entries for the same test into one, keeping the count.
+
+    Playwright records one result per retry attempt. The skill is told to emit a
+    single entry per test, but if it reports each attempt instead, the same test
+    would be listed two or three times in the digest. Fold them here and keep
+    the highest attempt count seen, so the reader learns the test failed on
+    every retry — which is evidence against a flake.
+    """
+    occurrences = Counter()
+    first: dict[tuple, dict] = {}
+    ordered: list[dict] = []
+
+    for f in failures:
+        key = (f.get("test"), f.get("spec_file"), f.get("line"))
+        occurrences[key] += 1
+        if key not in first:
+            entry = dict(f)
+            first[key] = entry
+            ordered.append(entry)
+
+    for key, entry in first.items():
+        try:
+            declared = int(entry.get("attempts") or 1)
+        except (TypeError, ValueError):
+            declared = 1
+        entry["attempts"] = max(declared, occurrences[key])
+
+    return ordered
 
 
 def _group_failures(failures: list) -> dict:
@@ -156,7 +187,7 @@ def format_workflow_text(
 ) -> str:
     s = data.get("summary", {})
     p = data.get("platform", {})
-    failures = data.get("failures", [])
+    failures = _dedupe_failures(data.get("failures", []))
     skipped_analysis = data.get("skipped_analysis")
 
     failed = s.get("failed", 0)
@@ -166,7 +197,8 @@ def format_workflow_text(
     duration_s = s.get("duration_s", 0)
 
     os_label, backend = _parse_pipeline(pipeline_name)
-    suite_label = f"{os_label} E2E Tests"
+    # os_label is already "E2E" when the pipeline name says nothing about the OS.
+    suite_label = "E2E Tests" if os_label == "E2E" else f"{os_label} E2E Tests"
     if backend:
         suite_label += f" ({backend})"
 
@@ -246,6 +278,10 @@ def format_workflow_text(
                 spec = os.path.basename(f.get("spec_file", ""))
                 line_no = f.get("line", "")
                 loc = f"{spec}:{line_no}" if spec and line_no else spec
+                attempts = f.get("attempts", 1)
+                if attempts > 1:
+                    loc = f"{loc}  ·  failed on all {attempts} attempts" if loc \
+                        else f"failed on all {attempts} attempts"
                 lines.append(f"   Test:  {f.get('test', 'Unknown test')}")
                 if loc:
                     lines.append(f"          {loc}")
