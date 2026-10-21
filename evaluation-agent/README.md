@@ -1,6 +1,6 @@
 # Podman Desktop E2E evaluation agent
 
-A container image that runs the [`evaluate-e2e-results`](../.agents/skills/evaluate-e2e-results)
+A container image that runs the [`evaluate-e2e-results`](../.skills/evaluate-e2e-results)
 Claude Code skill **headlessly** to triage Podman Desktop Playwright E2E
 failures, and (optionally) posts the verdict to Slack.
 
@@ -51,7 +51,7 @@ needs the **Vertex AI User** role on the project.
 ## Build
 
 The build context is the **repository root** so the skill can be copied from
-`.agents/skills/`:
+`.skills/`:
 
 ```bash
 make oci-build          # podman build ... -f Containerfile ..

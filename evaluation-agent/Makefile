@@ -17,7 +17,7 @@ include tools/tools.mk
 
 # Build the container image.
 # NOTE: the build context is the repository root (..) so the Containerfile can
-# COPY the skill from .agents/skills/.
+# COPY the skill from .skills/.
 .PHONY: oci-build
 oci-build:
 	$(info    Building the image: $(IMG))

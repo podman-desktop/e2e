@@ -1,4 +1,4 @@
-# Build context MUST be the repository root so the `.agents/skills` COPY resolves:
+# Build context MUST be the repository root so the `.skills` COPY resolves:
 #   podman build -t <img> -f evaluation-agent/Containerfile .
 #
 # TODO(pin): pin the base image by digest (e.g. node:22-alpine@sha256:...) once a
@@ -21,7 +21,7 @@ RUN apk add --no-cache bash python3 unzip jq curl ca-certificates tini \
     && npm cache clean --force
 
 # Bake the skill read-only
-COPY .agents/skills/evaluate-e2e-results /opt/evaluation-agent/skills/evaluate-e2e-results
+COPY .skills/evaluate-e2e-results /opt/evaluation-agent/skills/evaluate-e2e-results
 
 COPY evaluation-agent/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
