@@ -5,7 +5,7 @@ Reads evaluation JSON from stdin, writes a flat {"<var>": "<text>"} payload to s
 suitable for a Slack Workflow Builder webhook trigger (not Block Kit).
 
 Usage:
-  claude --print ... | python3 slack_formatter.py | curl -X POST -H 'Content-type: application/json' -d @- "$WEBHOOK_URL"
+  <agent CLI, headless> ... | python3 slack_formatter.py | curl -X POST -H 'Content-type: application/json' -d @- "$WEBHOOK_URL"
   python3 slack_formatter.py --pipeline-name "pde2e-nightly-libkrun" --artifacts-url "https://..." < eval.json
 
 Environment variables (substitute for CLI args):
