@@ -53,16 +53,23 @@ def find_failures(suites, path=''):
         for spec in suite.get('specs', []):
             if not spec.get('ok', True):
                 for test in spec.get('tests', []):
-                    for result in test.get('results', []):
-                        if result.get('status') == 'failed':
-                            print(json.dumps({
-                                'test': spec.get('title'), 'suite': current,
-                                'file': spec.get('file'), 'line': spec.get('line'),
-                                'error': result.get('error',{}).get('message','')[:500],
-                                'workerIndex': result.get('workerIndex'),
-                                'duration': result.get('duration'),
-                                'attachments': result.get('attachments', []),
-                            }, indent=2))
+                    # Playwright appends one result per retry attempt. They are
+                    # the same failure, so emit ONE record and carry the attempt
+                    # count — reporting each attempt separately would list the
+                    # same test two or three times in the digest.
+                    failed = [r for r in test.get('results', []) if r.get('status') == 'failed']
+                    if not failed:
+                        continue
+                    last = failed[-1]
+                    print(json.dumps({
+                        'test': spec.get('title'), 'suite': current,
+                        'file': spec.get('file'), 'line': spec.get('line'),
+                        'error': last.get('error',{}).get('message','')[:500],
+                        'workerIndex': last.get('workerIndex'),
+                        'duration': last.get('duration'),
+                        'attempts': len(failed),
+                        'attachments': last.get('attachments', []),
+                    }, indent=2))
         if suite.get('suites'):
             find_failures(suite['suites'], current)
 
@@ -71,6 +78,10 @@ find_failures(data.get('suites', []))
 ```
 
 If `stats.unexpected === 0`, skip to Step 3 (skipped analysis) then output with empty `failures` array.
+
+**One entry per failing test** — never one per retry attempt. A test that failed
+on every retry is a single failure with `attempts: 3`, and that repetition is
+evidence the failure is deterministic rather than flaky.
 
 ## Step 2: Classify each failure — stop at the cheapest sufficient layer
 
@@ -122,6 +133,7 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
       "spec_file": "tests/playwright/src/specs/example.spec.ts",
       "line": 298,
       "duration_ms": 10006,
+      "attempts": 3,
       "error": "Short error message (first line only)",
       "classification": "regression | test_bug | flaky | infra | unknown",
       "confidence": "confirmed | likely | uncertain",
@@ -158,6 +170,9 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
 ### Field requirements
 
 - `failures[].error`: First line of error.message only — not the full stack trace
+- `failures[].attempts`: How many times the test ran and failed (1 when retries
+  are off). Each test appears **once** regardless of this number. Identical
+  failures across every retry argue against `flaky`.
 - `failures[].root_cause`: WHY the test failed, grounded in actual log/trace evidence. If Layer 1 shows WHAT failed but not WHY, use Layer 3. "Machine stayed OFF" is not enough — "WSL pipe unreachable, event stream ECONNRESET" is.
 
   **Write it to be skimmed.** This line is read in Slack by an engineer deciding
