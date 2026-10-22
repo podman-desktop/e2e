@@ -12,6 +12,16 @@ TKN_TAG ?= v${VERSION}
 IMG ?= ghcr.io/podman-desktop/evaluation-agent:${IMAGE_TAG}
 TKN_IMG ?= ghcr.io/podman-desktop/evaluation-agent-tkn:${TKN_TAG}
 
+# The task runs on an amd64 cluster, so pin the build arch: CI builds on
+# ubuntu-latest and gets it for free, while a build from an Apple Silicon
+# laptop would otherwise push an arm64 image that the cluster cannot run.
+PLATFORM ?= linux/amd64
+
+# Escape hatch for build-time flags the environment needs, e.g.
+# EXTRA_BUILD_ARGS="--dns 1.1.1.1" when the default resolver cannot reach
+# registry.npmjs.org.
+EXTRA_BUILD_ARGS ?=
+
 TOOLS_DIR := tools
 include tools/tools.mk
 
@@ -22,6 +32,7 @@ include tools/tools.mk
 oci-build:
 	$(info    Building the image: $(IMG))
 	${CONTAINER_MANAGER} build -t ${IMG} -f Containerfile \
+		--platform ${PLATFORM} ${EXTRA_BUILD_ARGS} \
 		--build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} ..
 
 # Push the container image (requires being logged into the registry).
