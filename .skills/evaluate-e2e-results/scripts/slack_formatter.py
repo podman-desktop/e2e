@@ -35,7 +35,14 @@ VERDICT = {
 # confidence -> hedge applied to the verdict label
 CONFIDENCE_PREFIX = {"confirmed": "", "likely": "LIKELY ", "uncertain": "POSSIBLY "}
 
-RULE = "─" * 44
+# analysis layer -> what the verdict was actually based on
+LAYER_BASIS = {1: "error context", 2: "app logs", 3: "trace analysis"}
+
+RULE = "─" * 30
+
+# Slack folds a long message behind "show more" and some workflow steps reject
+# an oversized variable outright. Stay comfortably under 4000 characters.
+MAX_TEXT_CHARS = int(os.environ.get("SLACK_MAX_CHARS") or 3500)
 
 BACKEND_TOKENS = {
     "applehv": "Apple HV",
@@ -98,7 +105,10 @@ def _dedupe_failures(failures: list) -> list:
     ordered: list[dict] = []
 
     for f in failures:
-        key = (f.get("test"), f.get("spec_file"), f.get("line"))
+        # Keyed on test + file, deliberately not on line: a retry can report a
+        # different failing line (a later assertion got further), and keying on
+        # it would let the same test through twice.
+        key = (f.get("test"), f.get("spec_file"))
         occurrences[key] += 1
         if key not in first:
             entry = dict(f)
@@ -148,10 +158,17 @@ def _triage(failures: list) -> tuple[str, list[str]]:
         return counts.get(key, 0)
 
     product = n("regression")
+    # "likely" is a hedge, and hedging a confirmed regression reads as a guess.
+    # Only apply it when nothing in the product-bug bucket is confirmed.
+    product_confirmed = sum(
+        1 for f in failures
+        if f.get("classification") == "regression" and f.get("confidence") == "confirmed"
+    )
 
     if product:
+        hedge = "" if product_confirmed else "likely "
         headline = (
-            f"{product} likely product bug{'s' if product != 1 else ''}"
+            f"{product} {hedge}product bug{'s' if product != 1 else ''}"
             " — review before release"
         )
     elif n("unknown"):
@@ -190,7 +207,10 @@ def format_workflow_text(
     failures = _dedupe_failures(data.get("failures", []))
     skipped_analysis = data.get("skipped_analysis")
 
-    failed = s.get("failed", 0)
+    # A header that says "all tests passed" above a list of failures destroys
+    # trust in the whole digest, so let the failures themselves win when the
+    # summary disagrees with them.
+    failed = s.get("failed", 0) or len(failures)
     total = s.get("total", 0)
     passed = s.get("passed", 0)
     skipped = s.get("skipped", 0)
@@ -257,56 +277,80 @@ def format_workflow_text(
             )
 
     # --- Failures grouped by title ---
+    # Each group is built as its own block so the length guard below can drop
+    # whole failures off the end instead of cutting one in half.
+    blocks: list[tuple[list[str], int]] = []
     if failures:
-        lines.append("")
         groups = _group_failures(failures)
 
         for idx, (group_key, group_failures) in enumerate(groups.items()):
+            block: list[str] = [""]
+            blocks.append((block, len(group_failures)))
             rep = group_failures[0]
             classification = rep.get("classification", "unknown")
             confidence = rep.get("confidence", "uncertain")
             icon, label, _meaning = VERDICT.get(classification, VERDICT["unknown"])
             hedge = CONFIDENCE_PREFIX.get(confidence, "POSSIBLY ")
 
-            lines.append(RULE)
+            block.append(RULE)
             title = group_key if rep.get("title") else "Unlabelled failure"
-            lines.append(f"{idx + 1}. {icon} {hedge}{label} — {title}")
-            lines.append("")
+            block.append(f"{idx + 1}. {icon} {hedge}{label} — {title}")
 
-            # Which tests this hit, with the shortest locator that still finds it.
+            # Which tests this hit. Test name and location go on one line:
+            # Slack renders this in a proportional font, so a wrapped line
+            # restarts at column 0 and any column alignment is lost anyway —
+            # fewer, shorter lines read better than aligned ones.
             for f in group_failures:
                 spec = os.path.basename(f.get("spec_file", ""))
                 line_no = f.get("line", "")
                 loc = f"{spec}:{line_no}" if spec and line_no else spec
+                parts = [f.get("test", "Unknown test")]
+                if loc:
+                    parts.append(loc)
                 attempts = f.get("attempts", 1)
                 if attempts > 1:
-                    loc = f"{loc}  ·  failed on all {attempts} attempts" if loc \
-                        else f"failed on all {attempts} attempts"
-                lines.append(f"   Test:  {f.get('test', 'Unknown test')}")
-                if loc:
-                    lines.append(f"          {loc}")
+                    parts.append(f"failed {attempts}/{attempts} attempts")
+                block.append("• " + "  ·  ".join(parts))
 
-            root_cause = _truncate(rep.get("root_cause", "No root cause determined"), 420)
-            lines.append(f"   Why:   {root_cause}")
+            root_cause = _truncate(rep.get("root_cause", "No root cause determined"), 320)
+            block.append(f"Why: {root_cause}")
 
-            action = _truncate(rep.get("recommended_action", ""), 260)
+            action = _truncate(rep.get("recommended_action", ""), 200)
             if action:
-                lines.append(f"   Next:  {action}")
+                block.append(f"Next: {action}")
 
             layer = rep.get("layer")
             if layer:
-                basis = "trace analysis" if layer >= 3 else "error context"
-                lines.append(f"   Basis: {basis} (layer {layer})")
-
-            lines.append("")
+                block.append(f"Basis: {LAYER_BASIS.get(layer, 'error context')} (layer {layer})")
 
     # --- Footer ---
+    foot: list[str] = []
+    # The evaluator caps how many failures it analyses. Saying so keeps the
+    # reader from treating the list above as the whole picture.
+    dropped = data.get("truncated_count", 0) if data.get("truncated") else 0
     if artifacts_url:
-        lines.append(f"🔗 Logs & artifacts: {artifacts_url}")
+        foot.append(f"🔗 Logs & artifacts: {artifacts_url}")
     if p.get("ci_url") and p.get("ci_url") != artifacts_url:
-        lines.append(f"🔗 CI run: {p['ci_url']}")
+        foot.append(f"🔗 CI run: {p['ci_url']}")
 
-    return "\n".join(lines).strip()
+    # --- Fit within the message limit ---
+    # Slack truncates a long message behind a "show more" fold, and the links in
+    # the footer are the one thing that must survive. Drop whole failure blocks
+    # from the end until the text fits, and say how many went missing — a digest
+    # that silently loses its last three failures is worse than one that admits
+    # it. Failures are already ordered by the evaluator, worst first.
+    head_text = "\n".join(lines)
+    omitted = dropped
+    while True:
+        notes = (
+            [f"⚠️ {omitted} further failure(s) not shown — see the full artifacts"]
+            if omitted else []
+        )
+        body = ["\n".join(b) for b, _ in blocks]
+        text = "\n".join([head_text] + body + [""] + notes + foot).strip()
+        if len(text) <= MAX_TEXT_CHARS or not blocks:
+            return text
+        omitted += blocks.pop()[1]
 
 
 def main():
