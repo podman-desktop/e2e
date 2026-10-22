@@ -5,7 +5,8 @@
 # Runs the runtime-agnostic `evaluate-e2e-results` skill (via Claude Code, the
 # agent runtime this image ships) non-interactively against a
 # results directory, prints the evaluation JSON to stdout, and (optionally) posts
-# a Slack Block Kit message. It only ever writes to /tmp and an ephemeral config
+# a plain-text digest to a Slack Workflow Builder trigger. It only ever writes to
+# /tmp and an ephemeral config
 # directory — the input results directory is treated as read-only.
 #
 # Usage:

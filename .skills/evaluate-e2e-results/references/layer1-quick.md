@@ -4,11 +4,13 @@ This is the first and cheapest analysis layer. It classifies ~70% of failures wi
 
 ## Finding error-context.md
 
-For each failed test, check `result.attachments[]` for entries with `name: "error-context"`. The `path` field is an absolute CI path — rebase it to the local results directory:
+Step 1 already resolved this: each failure record carries an `error_context`
+path pointing into `$RESULTS_DIR`. Read that file.
 
-1. Extract the relative path after the last `output/` segment
-2. Prepend `$RESULTS_DIR/` to get the local path
-3. Read the file
+If the field is `null`, the test produced no error-context attachment — that is
+a Layer 2 failure, not a missing file. If the path is non-null but absent from
+disk, the attachment did not survive artifact upload; fall back to Layer 2
+rather than hunting for it.
 
 The error-context.md contains:
 - `# Test info` — test name and source location
@@ -43,11 +45,16 @@ Apply these before reading error-context.md. Match against `result.error.message
 - A locator that doesn't match any element (`strict mode violation`)
 - Any shortcut-table pattern at `confirmed` confidence
 
-**Escalate to Layer 3 when** error-context.md tells you WHAT failed but not WHY:
+**Escalate when** error-context.md tells you WHAT failed but not WHY:
 - Status/state assertions (`toHaveText("RUNNING")` got `"OFF"`) — the state mismatch is clear, but what caused the wrong state isn't
 - Element not found/not visible — but the element should exist (navigation links, connection cards)
 - Timeouts on operations involving external systems (machine start, container ops, registry pulls)
 - Any `infra` or `regression` classification at `likely` or `uncertain` confidence
+
+Escalate to **Layer 2 first** (`layer2-logs.md`). Its log scan is one command
+for the whole run, and the app usually logged the cause — a fetch that was rate
+limited, a provider that was never running — while Layer 1 only saw the UI
+symptom. Go to Layer 3 for what the logs leave unexplained.
 
 ## Classification categories
 
@@ -57,7 +64,7 @@ Apply these before reading error-context.md. Match against `result.error.message
 | `test_bug` | Test code is wrong — bad locator, wrong assertion, stale page object, import error |
 | `flaky` | Timing-sensitive or non-deterministic — would likely pass on retry |
 | `infra` | CI environment issue — missing binary, network failure, provisioning error, storage corruption |
-| `unknown` | Insufficient evidence — escalate to Layer 3 |
+| `unknown` | Insufficient evidence — escalate to Layer 2, then Layer 3 |
 
 ## Confidence levels
 
