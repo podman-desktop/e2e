@@ -96,14 +96,22 @@ def find_failures(suites, path='', depth=0):
                 # the same failure, so emit ONE record and carry the attempt
                 # count — reporting each attempt separately would list the
                 # same test two or three times in the digest.
-                failed = [r for r in test.get('results', []) if r.get('status') == 'failed']
-                if not failed:
+                # A test Playwright counted as unexpected does not always have
+                # a result with status 'failed': a test that ran out of time
+                # reports 'timedOut', and one abandoned after maxFailures
+                # reports 'interrupted'. Matching only 'failed' would drop
+                # those tests, leaving a digest that counts failures it cannot
+                # list.
+                bad = [r for r in test.get('results', [])
+                       if r.get('status') in ('failed', 'timedOut', 'interrupted')]
+                if not bad:
                     continue
-                last = failed[-1]
+                last = bad[-1]
                 msg = ANSI.sub('', last.get('error', {}).get('message', ''))
                 print(json.dumps({
                     'test': spec.get('title'), 'suite': current,
                     'spec_file': slash(spec.get('file')), 'line': spec.get('line'),
+                    'status': last.get('status'),
                     'error': msg.split(chr(10))[0][:300],
                     'error_full': msg[:800],
                     'workerIndex': last.get('workerIndex'),
@@ -111,7 +119,7 @@ def find_failures(suites, path='', depth=0):
                     # worker's trace, which also holds the tests around it.
                     'start_time': last.get('startTime'),
                     'duration_ms': last.get('duration'),
-                    'attempts': len(failed),
+                    'attempts': len(bad),
                     'error_context': error_context(last.get('attachments', [])),
                 }, indent=2))
         find_failures(suite.get('suites', []), current, depth + 1)
@@ -121,8 +129,26 @@ find_failures(data.get('suites', []))
 ```
 
 The `summary` block it prints goes straight into the output — don't recompute
-it by hand. If `stats.unexpected == 0`, skip to Step 3 (skipped analysis) and
-output with an empty `failures` array.
+it by hand.
+
+If `stats.unexpected == 0`, check the report's top-level errors before calling
+the run clean:
+
+```bash
+python3 -c "
+import json, os
+data = json.load(open(os.environ['RESULTS_DIR'] + '/json-results.json'))
+print(json.dumps(data.get('errors', []), indent=2)[:2000])
+"
+```
+
+A config or `globalSetup` failure lands there and nowhere else, because it
+happens before any test exists to be counted — so the stats can read zero
+failures while the run never actually tested anything. The array is empty on a
+healthy run, which makes anything in it signal. Report those errors as
+`failures` (see `references/layer2-logs.md`) rather than sending an all-clear.
+Only when it is empty should you skip to Step 3 (skipped analysis) and output
+an empty `failures` array.
 
 Two things the command handles that are easy to get wrong by hand: Playwright
 colours its error messages with ANSI escapes, which turn into `[2m[31m` litter
@@ -150,7 +176,9 @@ Apply Layer 1 to every failure. After Layer 1, route each failure:
 
 | Outcome | Action |
 |---------|--------|
-| `test_bug` or `flaky` at any confidence | **Done** — record result, no deeper layer needed |
+| `test_bug` at any confidence | **Done** — record result, no deeper layer needed |
+| `flaky` with `attempts: 1` | **Done** |
+| `flaky` with `attempts > 1` | **Layer 2** — it failed the same way on every retry, which is the opposite of what a flake does. Let the logs confirm before the digest tells the reader to ignore it |
 | `regression` or `infra` at `confirmed` with a clear root_cause | **Done** |
 | No `error_context` path, or `workerIndex: -1` | **Layer 2** — the artifact does not exist, so json-results.json is the only evidence |
 | `regression` or `infra` at `likely` or `uncertain` | **Layer 2**, then Layer 3 if the logs explain nothing |
@@ -199,6 +227,7 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
       "line": 298,
       "duration_ms": 10006,
       "attempts": 3,
+      "status": "failed | timedOut | interrupted",
       "error": "Short error message (first line only)",
       "classification": "regression | test_bug | flaky | infra | unknown",
       "confidence": "confirmed | likely | uncertain",
@@ -213,6 +242,7 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
     "total_skipped": 50,
     "by_design": 42,
     "cascade": 8,
+    "unresolved": 0,
     "by_design_reasons": [
       {"reason": "Reason text from annotation", "count": 2, "spec_file": "..."}
     ],
@@ -245,6 +275,10 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
 - `failures[].attempts`: How many times the test ran and failed (1 when retries
   are off). Each test appears **once** regardless of this number. Identical
   failures across every retry argue against `flaky`.
+- `failures[].status`: The last result's Playwright status — `failed`,
+  `timedOut`, or `interrupted`. `interrupted` means the run was cut short
+  (usually `maxFailures`), so the test is not really a verdict on anything;
+  say so instead of classifying it.
 - `failures[].root_cause`: WHY the test failed, grounded in actual log/trace evidence. If Layer 1 shows WHAT failed but not WHY, go to Layer 2 and then Layer 3. "Machine stayed OFF" is not enough — "WSL pipe unreachable, event stream ECONNRESET" is.
 
   **Write it to be skimmed.** This line is read in Slack by an engineer deciding
@@ -276,7 +310,9 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
   the trace is `3`. The digest shows this as the basis of the verdict, so an
   inflated number makes a guess look investigated.
 - `failures[].title`: Assigned after all failures are classified. Identical for failures sharing root cause.
-- `skipped_analysis`: Always present when `summary.skipped > 0`.
+- `skipped_analysis`: Always present when `summary.skipped > 0`. `by_design`,
+  `cascade` and `unresolved` must sum to `total_skipped` — a skip you cannot
+  attribute belongs in `unresolved`, not in `cascade`.
 - `platform`: Fill only fields the artifacts actually support —
   `playwright_version` from `config.version`, plus whatever `config.metadata`
   carries (often just `actualWorkers`). The OS can be read off the runner paths
