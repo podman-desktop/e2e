@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SKILL_DIR=/etc/codex/skills/evaluate-e2e-results
+REPORT_SCHEMA=/etc/codex/evaluation-report.schema.json
 log() { printf '%s\n' "$*" >&2; }
 
 if [[ -n "${AGENT_MAX_BUDGET:-}${COST_OUT:-}" ]]; then
@@ -41,13 +42,14 @@ trap 'forward_signal HUP 129' HUP
 
 # The prompt explicitly selects the baked skill. Paths are supplied as data;
 # never interpolate artifact contents into shell commands.
-prompt="Use the evaluate-e2e-results skill at $SKILL_DIR/SKILL.md to analyze the read-only results directory named by RESULTS_DIR ($RESULTS_DIR). Return only the evaluation JSON. Reporting is handled by the caller; do not send notifications."
+prompt="Use the evaluate-e2e-results skill at $SKILL_DIR/SKILL.md to analyze the read-only results directory named by RESULTS_DIR ($RESULTS_DIR). Return the complete evaluation JSON matching the supplied output schema. Use null for unavailable optional platform fields and for skipped_analysis when no tests were skipped; use false and 0 for truncated and truncated_count when the report is not truncated. Reporting is handled by the caller; do not send notifications."
 log "Evaluating $RESULTS_DIR (model=${AGENT_MODEL:-gpt-6-luna}, timeout=${AGENT_TIMEOUT:-3m})"
 
 # Keep Slack credentials out of the agent environment. --json is the event
 # stream, while --output-last-message captures the final report separately.
 env -u SLACK_WEBHOOK_URL /usr/local/bin/codex-runner \
-  --json --output-last-message "$evaluation_dir/final.txt" "$prompt" \
+  --json --output-schema "$REPORT_SCHEMA" \
+  --output-last-message "$evaluation_dir/final.txt" "$prompt" \
   >"$evaluation_dir/events.jsonl" < /dev/null &
 agent_pid=$!
 set +e
@@ -89,25 +91,68 @@ if [[ ! -s "$evaluation_dir/final.txt" ]]; then
   exit 1
 fi
 
-# Preserve tolerance of fenced JSON, but validate the report before delivery.
+# Validate the structured response before delivery. Keep the old Claude
+# adapter's tolerance for a JSON object inside fences or explanatory text.
+# The schema requires optional keys; restore the skill's omission convention.
 python3 - "$evaluation_dir/final.txt" "$evaluation_dir/report.json" <<'PY'
 import json
 import sys
 
+raw = ""
 try:
     with open(sys.argv[1]) as stream:
-        raw = stream.read()
-    start = raw.find("{")
-    if start < 0:
-        raise ValueError("no JSON object")
-    report, _ = json.JSONDecoder().raw_decode(raw[start:])
+        raw = stream.read().strip()
+    decoder = json.JSONDecoder()
+    try:
+        report = json.loads(raw)
+    except json.JSONDecodeError:
+        report = None
+        start = raw.find("{")
+        attempts = 0
+        while start >= 0 and attempts < 128:
+            attempts += 1
+            try:
+                candidate, _ = decoder.raw_decode(raw[start:])
+            except json.JSONDecodeError:
+                candidate = None
+            if isinstance(candidate, dict) and isinstance(candidate.get("summary"), dict) and isinstance(candidate.get("failures"), list):
+                report = candidate
+                break
+            if report is None and isinstance(candidate, dict):
+                report = candidate
+            start = raw.find("{", start + 1)
+        if report is None:
+            raise ValueError("no JSON object in final response")
+    if not isinstance(report, dict):
+        raise ValueError(f"expected an object, got {type(report).__name__}")
     if not isinstance(report.get("summary"), dict) or not isinstance(report.get("failures"), list):
-        raise ValueError("expected a summary object and failures array")
+        keys = ", ".join(sorted(report)[:12])
+        raise ValueError(f"expected a summary object and failures array (keys: {keys})")
+    failed = report["summary"].get("failed")
+    skipped = report["summary"].get("skipped")
+    if not isinstance(failed, int) or isinstance(failed, bool) or failed < 0:
+        raise ValueError("summary.failed must be a non-negative integer")
+    if not isinstance(skipped, int) or isinstance(skipped, bool) or skipped < 0:
+        raise ValueError("summary.skipped must be a non-negative integer")
+    if failed > 0 and not report["failures"]:
+        raise ValueError("summary reports failures but the failures array is empty")
+    if skipped > 0 and not isinstance(report.get("skipped_analysis"), dict):
+        raise ValueError("summary reports skipped tests but skipped_analysis is missing")
+    if report.get("skipped_analysis") is None:
+        report.pop("skipped_analysis", None)
+    if isinstance(report.get("platform"), dict):
+        report["platform"] = {k: v for k, v in report["platform"].items() if v is not None}
+        if not report["platform"]:
+            del report["platform"]
+    if report.get("truncated") is False:
+        report.pop("truncated", None)
+        report.pop("truncated_count", None)
     with open(sys.argv[2], "w") as stream:
         json.dump(report, stream)
         stream.write("\n")
 except (OSError, ValueError, AttributeError) as error:
     print(f"ERROR: invalid evaluation JSON: {error}", file=sys.stderr)
+    print(f"Final response preview ({len(raw)} chars): {raw[:600]!r}", file=sys.stderr)
     sys.exit(1)
 PY
 

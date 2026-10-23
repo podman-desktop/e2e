@@ -51,8 +51,10 @@ The directory must contain `json-results.json` directly or in a
 directory containing the JSON report. The skill also reads available
 error contexts, buffered logs, and traces. The adapter emits one evaluation
 JSON object on stdout; diagnostics, the Codex thread ID, and token usage go to
-stderr. It validates the final report before delivery and fails on agent
-errors, timeout, missing output, or invalid JSON.
+stderr. Codex receives the bundled `report.schema.json` as its structured
+output contract. The adapter validates the final report before delivery,
+removes schema-only null fields, and fails on agent errors, timeout, missing
+output, or invalid JSON.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

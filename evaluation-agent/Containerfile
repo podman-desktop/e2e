@@ -9,6 +9,7 @@ USER 0
 # The build context is the repository root, so this bakes the skill into the
 # evaluation image. Its entrypoint points Codex at the copied SKILL.md.
 COPY .skills/evaluate-e2e-results /etc/codex/skills/evaluate-e2e-results
+COPY evaluation-agent/report.schema.json /etc/codex/evaluation-report.schema.json
 COPY --chmod=0755 evaluation-agent/entrypoint.sh /usr/local/bin/evaluate-e2e-results
 RUN chmod -R a+rX /etc/codex/skills
 USER 1001

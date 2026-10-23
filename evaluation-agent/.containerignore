@@ -2,5 +2,6 @@
 *
 !.skills
 !evaluation-agent/entrypoint.sh
+!evaluation-agent/report.schema.json
 __pycache__/
 *.pyc
