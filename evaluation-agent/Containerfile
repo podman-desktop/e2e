@@ -6,6 +6,8 @@ LABEL org.opencontainers.image.title="Podman Desktop E2E evaluation agent" \
       org.opencontainers.image.description="Headless Codex evaluation of Podman Desktop E2E artifacts"
 
 USER 0
+# The build context is the repository root, so this bakes the skill into the
+# evaluation image. Its entrypoint points Codex at the copied SKILL.md.
 COPY .skills/evaluate-e2e-results /etc/codex/skills/evaluate-e2e-results
 COPY --chmod=0755 evaluation-agent/entrypoint.sh /usr/local/bin/evaluate-e2e-results
 RUN chmod -R a+rX /etc/codex/skills
