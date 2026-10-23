@@ -90,10 +90,20 @@ OpenShift, use `emptyDir` volumes with the SCC's volume permissions. A writable
 home directory is not needed. Inject `CODEX_API_KEY` from a Secret in the
 consuming task.
 
-For a skill-specific image, extend this image and copy reviewed skills into
-`/etc/codex/skills/<name>/`. Task authors own skill invocation, result validation,
-and delivery. The generic runner imposes a time limit, not a dollar budget;
-Codex event usage reports tokens rather than a USD cost.
+For a skill-specific image, extend this image and copy the skill from the build
+context. For example, with the repository root as the build context:
+
+```Dockerfile
+ARG CODEX_RUNNER_IMAGE=localhost/codex-runner:v0.1.0
+FROM ${CODEX_RUNNER_IMAGE}
+COPY .skills/evaluate-e2e-results /etc/codex/skills/evaluate-e2e-results
+```
+
+The consuming image's entrypoint must direct Codex to use the skill (for
+example, by naming `/etc/codex/skills/evaluate-e2e-results/SKILL.md` in its
+prompt). Task authors own that invocation, result validation, and delivery.
+The generic runner imposes a time limit, not a dollar budget; Codex event
+usage reports tokens rather than a USD cost.
 
 See [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode),
 [skill discovery](https://learn.chatgpt.com/docs/build-skills), and
