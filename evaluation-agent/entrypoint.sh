@@ -10,8 +10,15 @@ if [[ -n "${AGENT_MAX_BUDGET:-}${COST_OUT:-}" ]]; then
   exit 2
 fi
 export RESULTS_DIR="${1:-${RESULTS_DIR:-/artifacts}}"
+# The e2e runner stores Playwright output beneath qe-results/podman-desktop,
+# while standalone runs may mount the Playwright directory directly.
+if [[ ! -r "$RESULTS_DIR/json-results.json" && -r "$RESULTS_DIR/podman-desktop/json-results.json" ]]; then
+  RESULTS_DIR="$RESULTS_DIR/podman-desktop"
+  export RESULTS_DIR
+  log "Using nested Playwright results: $RESULTS_DIR"
+fi
 if [[ ! -d "$RESULTS_DIR" || ! -r "$RESULTS_DIR/json-results.json" ]]; then
-  log "ERROR: results directory must contain a readable json-results.json: $RESULTS_DIR"
+  log "ERROR: results directory must contain a readable json-results.json (directly or under podman-desktop/): $RESULTS_DIR"
   exit 2
 fi
 RESULTS_DIR="$(cd -- "$RESULTS_DIR" && pwd -P)"

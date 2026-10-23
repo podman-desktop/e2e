@@ -46,7 +46,9 @@ podman run --rm --read-only --tmpfs /tmp:rw,nosuid,nodev \
   ghcr.io/podman-desktop/evaluation-agent:v0.1.0 /artifacts
 ```
 
-The directory must contain `json-results.json`. The skill also reads available
+The directory must contain `json-results.json` directly or in a
+`podman-desktop/` child, as produced by the e2e runner. The adapter selects the
+directory containing the JSON report. The skill also reads available
 error contexts, buffered logs, and traces. The adapter emits one evaluation
 JSON object on stdout; diagnostics, the Codex thread ID, and token usage go to
 stderr. It validates the final report before delivery and fails on agent
@@ -86,6 +88,8 @@ the UID assigned by OpenShift. Codex uses `workspace-write` sandboxing for its
 scratch directory. It does not automatically bypass the sandbox if the
 cluster disallows the required Linux features; verify this on the target
 cluster. A local image build is not an OpenShift execution test.
+The step sets `HOME=/tekton/home` so Tekton can copy registry credentials to its
+writable home volume instead of the UBI image's read-only home directory.
 
 Provision a Secret named `codex-api-key` with key `api-key` through your usual
 secret-management mechanism. Set the task's `api-key-secret` parameter to use a

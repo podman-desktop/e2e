@@ -83,6 +83,10 @@ spec:
     # Versions can be overridden; force a pull so an overridden tag is honored.
     imagePullPolicy: Always
     env:
+    # Tekton copies registry credentials into HOME before the step starts.
+    # The UBI image home is on the read-only root filesystem.
+    - name: HOME
+      value: /tekton/home
     - name: CODEX_API_KEY
       valueFrom:
         secretKeyRef:
