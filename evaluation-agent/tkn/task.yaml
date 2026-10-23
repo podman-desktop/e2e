@@ -15,7 +15,7 @@ metadata:
     tekton.dev/platforms: "linux/amd64"
 spec:
   description: >-
-    Runs a headless Claude Code agent (Google Vertex AI) to classify Podman
+    Runs a headless Codex agent (OpenAI API key) to classify Podman
     Desktop E2E test failures from a results directory and optionally posts the
     verdict to a Slack Workflow Builder trigger. Consumes the results produced by
     the e2e-runner task read-only — it never modifies the workspace.
@@ -23,11 +23,7 @@ spec:
   workspaces:
   - name: pipelines-data
     description: Shared workspace where the e2e-runner task stored the qe-results.
-  - name: gcp-credentials
-    description: >-
-      Secret mounted as a workspace, holding the Vertex service-account JSON
-      (default key: service-account.json). The service account needs the
-      "Vertex AI User" role on the project.
+    readOnly: true
 
   params:
   - name: image-repository
@@ -42,15 +38,10 @@ spec:
     description: subpath relative to workspace-resources-path where results are stored
     default: qe-results
 
-  # Vertex AI auth
-  - name: vertex-project-id
-    description: GCP project id hosting the Vertex AI models
-  - name: vertex-region
-    description: Vertex region (global recommended; some models lack quota in regional endpoints)
-    default: 'global'
-  - name: gcp-credentials-file
-    description: filename of the service-account JSON inside the gcp-credentials workspace
-    default: 'service-account.json'
+  # API key is injected only into the evaluation step, never a task parameter.
+  - name: api-key-secret
+    description: Secret containing the OpenAI API key under the api-key key
+    default: codex-api-key
 
   # Reporting
   - name: pipeline-name
@@ -63,20 +54,17 @@ spec:
     description: Variable name for the Slack Workflow Builder trigger payload
     default: 'text'
 
-  # Agent budget / guardrails
+  # Agent runtime
   - name: agent-model
     description: Model alias or id for the agent
-    default: 'claude-sonnet-5'
+    default: 'gpt-6-luna'
   - name: agent-timeout
     description: >-
       Wall-clock cap for the agent run (GNU timeout syntax). Keep this below the
       consuming pipelineTask's `timeout` — if Tekton kills the pod first, the
       entrypoint's timeout path (which logs a clear "agent timed out" message
       and exits 124) never runs and you lose the diagnostic.
-    default: '25m'
-  - name: agent-max-budget
-    description: Maximum USD to spend on API calls for the run
-    default: '5'
+    default: '3m'
   - name: ignore-errors
     description: >-
       When 'true' (default) a failed evaluation is logged but the task step still
@@ -84,10 +72,10 @@ spec:
     default: 'true'
 
   results:
-  - name: cost-usd
-    description: Estimated USD cost of the evaluation run
+  - name: token-usage
+    description: JSON token counts (input_tokens, cached_input_tokens, output_tokens), or {} if unavailable
   - name: session-id
-    description: Claude Code session id (for postmortem/debugging)
+    description: Codex thread id (for postmortem/debugging)
 
   steps:
   - name: evaluate
@@ -95,14 +83,11 @@ spec:
     # Versions can be overridden; force a pull so an overridden tag is honored.
     imagePullPolicy: Always
     env:
-    - name: CLAUDE_CODE_USE_VERTEX
-      value: "1"
-    - name: ANTHROPIC_VERTEX_PROJECT_ID
-      value: $(params.vertex-project-id)
-    - name: CLOUD_ML_REGION
-      value: $(params.vertex-region)
-    - name: GOOGLE_APPLICATION_CREDENTIALS
-      value: $(workspaces.gcp-credentials.path)/$(params.gcp-credentials-file)
+    - name: CODEX_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: $(params.api-key-secret)
+          key: api-key
     - name: SLACK_WEBHOOK_URL
       valueFrom:
         secretKeyRef:
@@ -119,35 +104,40 @@ spec:
       value: $(params.agent-model)
     - name: AGENT_TIMEOUT
       value: $(params.agent-timeout)
-    - name: AGENT_MAX_BUDGET
-      value: $(params.agent-max-budget)
+    - name: RESULTS_DIR
+      value: $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
+    - name: SESSION_OUT
+      value: $(results.session-id.path)
+    - name: USAGE_OUT
+      value: $(results.token-usage.path)
+    - name: IGNORE_ERRORS
+      value: $(params.ignore-errors)
+    volumeMounts:
+    - name: scratch
+      mountPath: /tmp
+    - name: codex-state
+      mountPath: /var/lib/codex-runner
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
     script: |
       #!/usr/bin/env bash
       set -uo pipefail
 
-      # Results directory produced by the e2e-runner task (read-only for us).
-      RESULTS_DIR="$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)"
-
-      # The entrypoint only writes to /tmp + its ephemeral config dir — the
-      # workspace is never modified. Route the small machine-readable outputs to
-      # Tekton result paths (the full JSON exceeds the Tekton result size limit,
-      # so it stays on stdout / goes to Slack). Pre-create the result files so
-      # unset results never leave the task in an error state.
-      : >"$(results.cost-usd.path)"
-      : >"$(results.session-id.path)"
-
-      COST_OUT="$(results.cost-usd.path)" \
-      SESSION_OUT="$(results.session-id.path)" \
-        /usr/local/bin/entrypoint.sh "${RESULTS_DIR}"
+      # Keep small metadata in Tekton results; the full report stays on stdout.
+      : >"$SESSION_OUT"
+      printf '{}' >"$USAGE_OUT"
+      /usr/local/bin/evaluate-e2e-results "$RESULTS_DIR"
       rc=$?
 
-      if [[ $rc -ne 0 ]]; then
-        if [[ "$(params.ignore-errors)" == "true" ]]; then
-          echo "WARNING: evaluation failed (rc=$rc); ignore-errors=true, continuing." >&2
-          exit 0
-        fi
-        exit $rc
+      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
+        echo "WARNING: evaluation failed (rc=$rc); ignore-errors=true, continuing." >&2
+        exit 0
       fi
+      exit "$rc"
 
     resources:
       requests:
@@ -156,3 +146,9 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "1"
+
+  volumes:
+  - name: scratch
+    emptyDir: {}
+  - name: codex-state
+    emptyDir: {}

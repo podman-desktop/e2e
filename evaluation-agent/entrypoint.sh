@@ -1,188 +1,121 @@
 #!/usr/bin/env bash
-#
-# Headless entrypoint for the Podman Desktop E2E evaluation agent.
-#
-# Runs the runtime-agnostic `evaluate-e2e-results` skill (via Claude Code, the
-# agent runtime this image ships) non-interactively against a
-# results directory, prints the evaluation JSON to stdout, and (optionally) posts
-# a plain-text digest to a Slack Workflow Builder trigger. It only ever writes to
-# /tmp and an ephemeral config
-# directory — the input results directory is treated as read-only.
-#
-# Usage:
-#   entrypoint.sh [RESULTS_DIR]
-#
-# Auth — Google Vertex AI (never bake secrets into the image):
-#   ANTHROPIC_VERTEX_PROJECT_ID     GCP project id (required).
-#   CLOUD_ML_REGION                 Vertex region, e.g. global (required).
-#   GOOGLE_APPLICATION_CREDENTIALS  Path to a mounted GCP service-account JSON
-#                       (or an application_default_credentials.json). A bare
-#                       `gcloud auth print-access-token` value is NOT usable.
-#   CLAUDE_CODE_USE_VERTEX          Forced to 1 by this script.
-#
-# Optional env:
-#   RESULTS_DIR         Results dir if not passed as $1 (default: /artifacts).
-#   AGENT_MODEL         Model alias/id            (default: claude-sonnet-5).
-#   AGENT_TIMEOUT       Wall-clock cap for the run (default: 30m).
-#   AGENT_MAX_BUDGET    Max USD spend on API calls (default: 5).
-#   SLACK_WEBHOOK_URL   If set, the digest is POSTed to this Slack Workflow
-#                       Builder trigger (…/triggers/…) as a flat text variable.
-#   SLACK_WORKFLOW_VAR  Variable name for the workflow-trigger payload
-#                       (default: text). Must match the workflow's webhook var.
-#   PIPELINE_NAME       Shown in the Slack header.
-#   ARTIFACTS_URL       Linked from the Slack footer.
-#   EVALUATION_OUT      If set, the evaluation JSON is also written to this path
-#                       (e.g. a Tekton result path).
-#   COST_OUT            If set, the run cost (USD) is written to this path.
-#   SESSION_OUT         If set, the session id is written to this path.
-#
+# Evaluation-specific adapter around the generic Codex runner.
 set -euo pipefail
 
-SKILL_DIR="/opt/evaluation-agent/skills/evaluate-e2e-results"
-
+SKILL_DIR=/etc/codex/skills/evaluate-e2e-results
 log() { printf '%s\n' "$*" >&2; }
 
-# --- Preconditions -----------------------------------------------------------
-# Auth provider: Google Vertex AI. Fail fast with a clear message if any of the
-# required config is missing.
-export CLAUDE_CODE_USE_VERTEX=1
-: "${ANTHROPIC_VERTEX_PROJECT_ID:?ANTHROPIC_VERTEX_PROJECT_ID is required for Vertex auth}"
-: "${CLOUD_ML_REGION:?CLOUD_ML_REGION is required for Vertex auth (e.g. global)}"
-# Vertex uses Google ADC: a service-account/ADC JSON via
-# GOOGLE_APPLICATION_CREDENTIALS, or the auto-discovered default ADC file.
-# A bare `gcloud auth print-access-token` value is NOT usable here.
-adc_default="${HOME:-/home/agent}/.config/gcloud/application_default_credentials.json"
-if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
-  [[ -r "$GOOGLE_APPLICATION_CREDENTIALS" ]] || {
-    log "ERROR: GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS is not a readable file (mount it into the container)"
-    exit 2
-  }
-elif [[ ! -r "$adc_default" ]]; then
-  log "ERROR: no Google credentials found. Set GOOGLE_APPLICATION_CREDENTIALS to a mounted service-account/ADC JSON, or mount an ADC file to $adc_default"
+if [[ -n "${AGENT_MAX_BUDGET:-}${COST_OUT:-}" ]]; then
+  log "ERROR: AGENT_MAX_BUDGET and COST_OUT are unsupported with Codex; use AGENT_TIMEOUT and USAGE_OUT"
   exit 2
 fi
-log "Auth: Vertex AI (project=$ANTHROPIC_VERTEX_PROJECT_ID region=$CLOUD_ML_REGION)"
-
-# Exported, not just set: the skill's shell snippets reference $RESULTS_DIR, so
-# it has to survive into the shells the agent spawns. The path is also passed in
-# the prompt, so a runtime that does not inherit the environment still works.
-RESULTS_DIR="${1:-${RESULTS_DIR:-/artifacts}}"
-export RESULTS_DIR
-if [[ ! -d "$RESULTS_DIR" ]]; then
-  log "ERROR: results directory not found: $RESULTS_DIR"
+export RESULTS_DIR="${1:-${RESULTS_DIR:-/artifacts}}"
+if [[ ! -d "$RESULTS_DIR" || ! -r "$RESULTS_DIR/json-results.json" ]]; then
+  log "ERROR: results directory must contain a readable json-results.json: $RESULTS_DIR"
   exit 2
 fi
+RESULTS_DIR="$(cd -- "$RESULTS_DIR" && pwd -P)"
 
-AGENT_MODEL="${AGENT_MODEL:-claude-sonnet-5}"
-AGENT_TIMEOUT="${AGENT_TIMEOUT:-30m}"
-AGENT_MAX_BUDGET="${AGENT_MAX_BUDGET:-5}"
+evaluation_dir="$(mktemp -d "${TMPDIR:-/tmp}/evaluation-agent.XXXXXXXX")"
+agent_pid=''
+trap 'rm -rf -- "$evaluation_dir"' EXIT
+forward_signal() {
+  local signal="$1" status="$2"
+  trap '' TERM INT HUP
+  if [[ -n "$agent_pid" ]]; then
+    kill -s "$signal" "$agent_pid" 2>/dev/null || true
+    wait "$agent_pid" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+trap 'forward_signal TERM 143' TERM
+trap 'forward_signal INT 130' INT
+trap 'forward_signal HUP 129' HUP
 
-# --- Ephemeral, per-run config dir -------------------------------------------
-# A fresh CLAUDE_CONFIG_DIR per run isolates session state so concurrent
-# containers never corrupt each other's ~/.claude, and no stale session exists
-# to trigger a resume prompt. --print is already non-interactive, so this is
-# belt-and-suspenders.
-CLAUDE_CONFIG_DIR="$(mktemp -d)"
-export CLAUDE_CONFIG_DIR
-trap 'rm -rf "$CLAUDE_CONFIG_DIR"' EXIT
+# The prompt explicitly selects the baked skill. Paths are supplied as data;
+# never interpolate artifact contents into shell commands.
+prompt="Use the evaluate-e2e-results skill at $SKILL_DIR/SKILL.md to analyze the read-only results directory named by RESULTS_DIR ($RESULTS_DIR). Return only the evaluation JSON. Reporting is handled by the caller; do not send notifications."
+log "Evaluating $RESULTS_DIR (model=${AGENT_MODEL:-gpt-6-luna}, timeout=${AGENT_TIMEOUT:-3m})"
 
-# Make the baked (read-only) skill discoverable as a personal skill.
-mkdir -p "$CLAUDE_CONFIG_DIR/skills"
-ln -s "$SKILL_DIR" "$CLAUDE_CONFIG_DIR/skills/evaluate-e2e-results"
-
-# --- Run the agent -----------------------------------------------------------
-# Read-only tool posture: allow only the tools the skill needs. With --print and
-# --permission-prompts none, anything not on the allowlist is denied outright
-# (never hangs waiting for approval). Container-level guards (non-root,
-# read-only mounts, no egress except the API) are the real boundary.
-OUT_FILE="$(mktemp)"
-trap 'rm -rf "$CLAUDE_CONFIG_DIR" "$OUT_FILE"' EXIT
-
-log "Evaluating results in: $RESULTS_DIR (model=$AGENT_MODEL, timeout=$AGENT_TIMEOUT, budget=\$$AGENT_MAX_BUDGET)"
-
+# Keep Slack credentials out of the agent environment. --json is the event
+# stream, while --output-last-message captures the final report separately.
+env -u SLACK_WEBHOOK_URL /usr/local/bin/codex-runner \
+  --json --output-last-message "$evaluation_dir/final.txt" "$prompt" \
+  >"$evaluation_dir/events.jsonl" < /dev/null &
+agent_pid=$!
 set +e
-timeout "$AGENT_TIMEOUT" claude --print "/evaluate-e2e-results $RESULTS_DIR" \
-  --output-format json \
-  --model "$AGENT_MODEL" \
-  --max-budget-usd "$AGENT_MAX_BUDGET" \
-  --permission-prompts none \
-  --allowedTools "Skill,Read,Glob,Grep,Bash" \
-  --add-dir "$RESULTS_DIR" \
-  --no-session-persistence \
-  >"$OUT_FILE"
+wait "$agent_pid"
 rc=$?
 set -e
+agent_pid=''
 
-if [[ $rc -eq 124 ]]; then
-  log "ERROR: agent timed out after $AGENT_TIMEOUT"
-  exit 124
+session_id=''
+usage='{}'
+events_valid=false
+if [[ -s "$evaluation_dir/events.jsonl" ]] && jq -se 'length > 0 and all(.[]; type == "object")' "$evaluation_dir/events.jsonl" >/dev/null 2>&1; then
+  events_valid=true
+  session_id="$(jq -sr '[.[] | select(.type == "thread.started") | .thread_id][0] // empty' "$evaluation_dir/events.jsonl")"
+  usage="$(jq -sc '
+    [.[] | select(.type == "turn.completed") | .usage | select(type == "object")]
+    | if length == 0 then {} else {
+        input_tokens: (map(.input_tokens // 0) | add),
+        cached_input_tokens: (map(.cached_input_tokens // 0) | add),
+        output_tokens: (map(.output_tokens // 0) | add)
+      } end' "$evaluation_dir/events.jsonl")"
 fi
+[[ -z "${SESSION_OUT:-}" ]] || printf '%s' "$session_id" >"$SESSION_OUT"
+[[ -z "${USAGE_OUT:-}" ]] || printf '%s' "$usage" >"$USAGE_OUT"
+log "session_id=$session_id token_usage=$usage"
+
 if [[ $rc -ne 0 ]]; then
-  log "ERROR: claude exited with code $rc"
-  cat "$OUT_FILE" >&2 || true
+  log "ERROR: evaluation agent failed (rc=$rc)"
   exit "$rc"
 fi
-
-# --- Postmortem metadata + error discipline ----------------------------------
-session_id="$(jq -r '.session_id // empty' "$OUT_FILE")"
-cost="$(jq -r '.total_cost_usd // empty' "$OUT_FILE")"
-is_error="$(jq -r '.is_error // false' "$OUT_FILE")"
-log "session_id=$session_id cost_usd=$cost is_error=$is_error"
-
-[[ -n "${SESSION_OUT:-}" ]] && printf '%s' "$session_id" >"$SESSION_OUT"
-[[ -n "${COST_OUT:-}" ]] && printf '%s' "$cost" >"$COST_OUT"
-
-if [[ "$is_error" == "true" ]]; then
-  log "ERROR: agent reported is_error=true"
-  cat "$OUT_FILE" >&2 || true
+if [[ "$events_valid" != true ]] || ! jq -se '
+  any(.[]; .type == "turn.completed") and all(.[]; .type != "turn.failed")
+  ' "$evaluation_dir/events.jsonl" >/dev/null; then
+  log "ERROR: Codex did not report a successfully completed turn"
+  exit 1
+fi
+if [[ ! -s "$evaluation_dir/final.txt" ]]; then
+  log "ERROR: Codex produced no final evaluation"
   exit 1
 fi
 
-# The skill's evaluation report is the .result field of the JSON envelope.
-# SKILL.md asks for bare JSON, but the model still wraps it in a ```json fence
-# often enough that we cannot rely on the instruction — decode the first JSON
-# value and discard any fence or prose around it.
-EVAL_FILE="$(mktemp)"
-trap 'rm -rf "$CLAUDE_CONFIG_DIR" "$OUT_FILE" "$EVAL_FILE"' EXIT
-jq -r '.result' "$OUT_FILE" \
-  | python3 -c '
-import json, sys
-raw = sys.stdin.read()
-start = raw.find("{")
-if start >= 0:
-    try:
-        obj, _ = json.JSONDecoder().raw_decode(raw[start:])
-        json.dump(obj, sys.stdout)
-        sys.exit(0)
-    except ValueError:
-        pass
-# Not decodable — pass the raw text through so the validation error below can
-# show what the agent actually produced.
-sys.stdout.write(raw)
-' >"$EVAL_FILE"
+# Preserve tolerance of fenced JSON, but validate the report before delivery.
+python3 - "$evaluation_dir/final.txt" "$evaluation_dir/report.json" <<'PY'
+import json
+import sys
 
-# Validate the skill produced parseable evaluation JSON before we act on it.
-if ! jq -e '.summary and (.failures | type == "array")' "$EVAL_FILE" >/dev/null 2>&1; then
-  log "ERROR: evaluation output is not valid evaluation JSON"
-  cat "$EVAL_FILE" >&2 || true
-  exit 1
-fi
+try:
+    with open(sys.argv[1]) as stream:
+        raw = stream.read()
+    start = raw.find("{")
+    if start < 0:
+        raise ValueError("no JSON object")
+    report, _ = json.JSONDecoder().raw_decode(raw[start:])
+    if not isinstance(report.get("summary"), dict) or not isinstance(report.get("failures"), list):
+        raise ValueError("expected a summary object and failures array")
+    with open(sys.argv[2], "w") as stream:
+        json.dump(report, stream)
+        stream.write("\n")
+except (OSError, ValueError, AttributeError) as error:
+    print(f"ERROR: invalid evaluation JSON: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
 
-# --- Optional Slack post -----------------------------------------------------
-# The org's only usable delivery channel is a Slack Workflow Builder trigger
-# (…/triggers/…), which reads flat variables — not Block Kit. The formatter
-# collapses the report into a single text variable (default name: text).
+# Emit/persist the report even if subsequent Slack delivery fails. The webhook
+# response must never contaminate the single JSON object written to stdout.
+[[ -z "${EVALUATION_OUT:-}" ]] || cat "$evaluation_dir/report.json" >"$EVALUATION_OUT"
+cat "$evaluation_dir/report.json"
 if [[ -n "${SLACK_WEBHOOK_URL:-}" ]]; then
-  log "Posting evaluation to Slack (workflow trigger, var=${SLACK_WORKFLOW_VAR:-text})..."
+  log "Posting evaluation to Slack..."
   python3 "$SKILL_DIR/scripts/slack_formatter.py" \
     --pipeline-name "${PIPELINE_NAME:-}" \
     --artifacts-url "${ARTIFACTS_URL:-}" \
     --workflow-var "${SLACK_WORKFLOW_VAR:-text}" \
-    <"$EVAL_FILE" \
-    | curl -sS --fail -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+    <"$evaluation_dir/report.json" \
+    | curl -sS --fail --connect-timeout 10 --max-time 30 --output /dev/null \
+      -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
   log "Slack post complete."
 fi
-
-# --- Emit the evaluation JSON ------------------------------------------------
-[[ -n "${EVALUATION_OUT:-}" ]] && cat "$EVAL_FILE" >"$EVALUATION_OUT"
-cat "$EVAL_FILE"

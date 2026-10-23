@@ -93,15 +93,11 @@ jobs:
             sleep 1
           }
 
-      # Build context is the repository root so the Containerfile can COPY the
-      # skill from .skills/.
+      # Build the generic runtime locally, then add the evaluation skill.
       - name: Build image
         run: |
-          podman build -t ${{ env.IMAGE }}:v$VERSION \
-            -f evaluation-agent/Containerfile \
-            --label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} \
-            --label org.opencontainers.image.revision=${{ github.sha }} \
-            --label org.opencontainers.image.version=$VERSION .
+          make -C evaluation-agent oci-build VERSION="$VERSION" IMG=${{ env.IMAGE }}:v$VERSION \
+            EXTRA_BUILD_ARGS="--label org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }} --label org.opencontainers.image.revision=${{ github.sha }} --label org.opencontainers.image.version=$VERSION"
 
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

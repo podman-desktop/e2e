@@ -1,6 +1,6 @@
 VERSION ?= 0.1.0
 CONTAINER_MANAGER ?= podman
-CLAUDE_CODE_VERSION ?= 2.1.263
+CODEX_CLI_VERSION ?= 0.164.0
 
 # IMAGE_TAG is the agent image tag the *bundled task* defaults to; TKN_TAG is
 # the tag of the bundle itself. They move together for a release. The nightly
@@ -11,6 +11,7 @@ TKN_TAG ?= v${VERSION}
 
 IMG ?= ghcr.io/podman-desktop/evaluation-agent:${IMAGE_TAG}
 TKN_IMG ?= ghcr.io/podman-desktop/evaluation-agent-tkn:${TKN_TAG}
+RUNNER_IMG ?= localhost/codex-runner:${IMAGE_TAG}
 
 # The task runs on an amd64 cluster, so pin the build arch: CI builds on
 # ubuntu-latest and gets it for free, while a build from an Apple Silicon
@@ -31,9 +32,12 @@ include tools/tools.mk
 .PHONY: oci-build
 oci-build:
 	$(info    Building the image: $(IMG))
-	${CONTAINER_MANAGER} build -t ${IMG} -f Containerfile \
+	$(MAKE) -C ../codex-runner oci-build IMG=$(RUNNER_IMG) \
+		CONTAINER_MANAGER=$(CONTAINER_MANAGER) PLATFORM=$(PLATFORM) \
+		CODEX_CLI_VERSION=$(CODEX_CLI_VERSION) EXTRA_BUILD_ARGS="$(EXTRA_BUILD_ARGS)"
+	${CONTAINER_MANAGER} build -t ${IMG} -f Containerfile --ignorefile .containerignore \
 		--platform ${PLATFORM} ${EXTRA_BUILD_ARGS} \
-		--build-arg CLAUDE_CODE_VERSION=${CLAUDE_CODE_VERSION} ..
+		--build-arg CODEX_RUNNER_IMAGE=${RUNNER_IMG} ..
 
 # Push the container image (requires being logged into the registry).
 .PHONY: oci-push

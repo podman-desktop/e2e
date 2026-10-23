@@ -13,6 +13,8 @@ Environment variables (substitute for CLI args):
   PIPELINE_NAME       — pipeline identifier (used to parse OS + backend)
   SLACK_WORKFLOW_VAR  — payload key (default: "text")
 """
+from __future__ import annotations
+
 import json
 import os
 import sys

@@ -21,6 +21,7 @@ on:
     branches: [main]
     paths:
       - 'evaluation-agent/**'
+      - 'codex-runner/**'
       - '.skills/**'
       - '.github/workflows/evaluation-agent-pr.yaml'
 
@@ -48,11 +49,10 @@ jobs:
             sleep 1
           }
 
-      # Build context is the repository root so the Containerfile can COPY the
-      # skill from .skills/.
+      # Build the generic runtime locally, then add the evaluation skill.
       - name: Build image
         run: |
-          podman build -t ${{ env.IMAGE }}:pr -f evaluation-agent/Containerfile .
+          make -C evaluation-agent oci-build IMG=${{ env.IMAGE }}:pr
 
       - name: Scan image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

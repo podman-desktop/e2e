@@ -1,141 +1,149 @@
 # Podman Desktop E2E evaluation agent
 
-A container image that runs the [`evaluate-e2e-results`](../.skills/evaluate-e2e-results)
-Claude Code skill **headlessly** to triage Podman Desktop Playwright E2E
-failures, and (optionally) posts the verdict to Slack.
-
-It is designed to run as a Tekton task **after** the `e2e-runner` task, reading
-the `qe-results` the runner wrote to the shared workspace. The results directory
-is treated as **read-only** — the agent only writes to `/tmp` and an ephemeral
-config directory.
-
-## What it does
-
-1. Invokes `claude --print` against a results directory with the
-   `evaluate-e2e-results` skill, authenticating to **Google Vertex AI**.
-2. Captures the evaluation JSON, logs the session id + cost, fails on error.
-3. If `SLACK_WEBHOOK_URL` is set, formats the result with the skill's
-   `slack_formatter.py` and POSTs a flat text digest to a Slack **Workflow
-   Builder trigger** (`https://hooks.slack.com/triggers/…`).
-4. Prints the evaluation JSON to stdout.
-
-## Inputs
-
-The results directory must contain the Playwright artifacts produced by
-`e2e-runner` (`json-results.json`, `junit-results.xml`,
-`{slug}/error-context.md`, `traces/*_trace.zip`).
-
-## Environment
-
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `ANTHROPIC_VERTEX_PROJECT_ID` | yes | — | GCP project id hosting the Vertex AI models |
-| `CLOUD_ML_REGION` | yes | — | Vertex region (`global` recommended; some models lack quota in regional endpoints) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | yes | — | Path to a mounted GCP service-account/ADC JSON (a bare access token is **not** usable) |
-| `RESULTS_DIR` | no | `/artifacts` | Results dir if not passed as `$1` |
-| `AGENT_MODEL` | no | `claude-sonnet-5` | Model alias/id |
-| `AGENT_TIMEOUT` | no | `30m` | Wall-clock cap (`timeout` syntax) |
-| `AGENT_MAX_BUDGET` | no | `5` | Max USD spend on API calls |
-| `SLACK_WEBHOOK_URL` | no | — | If set, the digest is POSTed to this Slack Workflow Builder trigger |
-| `SLACK_WORKFLOW_VAR` | no | `text` | Variable name for the trigger payload; must match the workflow's webhook variable |
-| `PIPELINE_NAME` | no | — | Slack header label |
-| `ARTIFACTS_URL` | no | — | Slack footer link |
-| `COST_OUT` / `SESSION_OUT` | no | — | Write outputs to these paths (used for Tekton results) |
-
-**Auth:** the agent uses Google Vertex AI (`CLAUDE_CODE_USE_VERTEX=1` is set by
-the entrypoint). Provide `ANTHROPIC_VERTEX_PROJECT_ID`, `CLOUD_ML_REGION`, and a
-mounted service-account/ADC JSON via `GOOGLE_APPLICATION_CREDENTIALS`. A bare
-`gcloud auth print-access-token` value is **not** usable. The service account
-needs the **Vertex AI User** role on the project.
+The complete evaluation template: a Codex-based image with the
+[`evaluate-e2e-results`](../.skills/evaluate-e2e-results) skill baked in, a
+[Tekton task](tkn/task.yaml), and optional Slack Workflow Builder reporting.
+The image extends the [generic Codex runner](../codex-runner), which contains
+no skill or reporting logic.
 
 ## Build
 
-The build context is the **repository root** so the skill can be copied from
-`.skills/`:
+From the repository root:
 
 ```bash
-make oci-build          # podman build ... -f Containerfile ..
-make oci-push           # push the image
-make tkn-push           # push the tekton task bundle
+make -C evaluation-agent oci-build
+# Optional publishing, after registry authentication:
+make -C evaluation-agent oci-push
+make -C evaluation-agent tkn-push
 ```
 
-`make tkn-push` rewrites the task's `image-version` default to `IMAGE_TAG`
-(default `v${VERSION}`) so a versioned bundle pins the matching agent image.
-The nightly job overrides it: `make tkn-push IMAGE_TAG=nightly TKN_TAG=nightly`.
+The build first creates `localhost/codex-runner:v0.1.0`, then adds the skill and
+evaluation adapter. Neither image needs to have been published beforehand.
+The final image defaults to `ghcr.io/podman-desktop/evaluation-agent:v0.1.0`.
+Override `IMG` and `RUNNER_IMG` for local tags. `PLATFORM=linux/amd64` is the
+default even on Apple Silicon; `PLATFORM=linux/arm64` is available for native
+local development. Both stages use the same pinned `CODEX_CLI_VERSION`.
 
-On an Apple Silicon host, pass `--platform linux/amd64` — the Tekton nodes are
-amd64, and an arm64 image fails at exec time with `exec format error`.
+The evaluation build uses the repository root as its context and explicitly
+selects `evaluation-agent/.containerignore`. It does not impose exclusions on
+other images in this repository.
+
+`make tkn-push` pins the bundled task's image version to `IMAGE_TAG`
+(default `v${VERSION}`). The existing nightly workflow uses
+`IMAGE_TAG=nightly TKN_TAG=nightly`. The bundle installer currently targets a
+Linux AMD64 build host, as used by the publishing workflows.
 
 ## Run locally
 
-Mount the results **read-only** and pass the mount path as the argument:
+Provide `CODEX_API_KEY` in the calling environment and mount artifacts read-only:
 
 ```bash
-podman run --rm \
-  -e CLAUDE_CODE_USE_VERTEX=1 \
-  -e ANTHROPIC_VERTEX_PROJECT_ID="$PROJECT_ID" \
-  -e CLOUD_ML_REGION=global \
-  -e GOOGLE_APPLICATION_CREDENTIALS=/creds/service-account.json \
-  -v "$PWD/service-account.json:/creds/service-account.json:ro" \
+podman run --rm --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  --tmpfs /var/lib/codex-runner:rw,nosuid,nodev,mode=0770 \
+  --cap-drop=all --security-opt=no-new-privileges \
+  -e CODEX_API_KEY \
   -v "$PWD/results:/artifacts:ro" \
-  ghcr.io/podman-desktop/evaluation-agent:nightly /artifacts
+  ghcr.io/podman-desktop/evaluation-agent:v0.1.0 /artifacts
 ```
 
-Add `-e SLACK_WEBHOOK_URL -e PIPELINE_NAME -e ARTIFACTS_URL` to also post to Slack.
+The directory must contain `json-results.json`. The skill also reads available
+error contexts, buffered logs, and traces. The adapter emits one evaluation
+JSON object on stdout; diagnostics, the Codex thread ID, and token usage go to
+stderr. It validates the final report before delivery and fails on agent
+errors, timeout, missing output, or invalid JSON.
 
-## Tekton
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CODEX_API_KEY` | Required | OpenAI API key injected at runtime |
+| `RESULTS_DIR` | `/artifacts` | Artifact directory; the positional argument takes precedence |
+| `AGENT_MODEL` | `gpt-6-luna` | Runtime model selection |
+| `AGENT_TIMEOUT` | `3m` | Agent deadline, configurable at runtime |
+| `SLACK_WEBHOOK_URL` | Unset | Optional Slack Workflow Builder trigger |
+| `SLACK_WORKFLOW_VAR` | `text` | Webhook payload variable |
+| `PIPELINE_NAME` | Empty | Slack header label |
+| `ARTIFACTS_URL` | Empty | Link to full artifacts |
+| `EVALUATION_OUT` | Unset | Optional writable path for the full report |
+| `SESSION_OUT` | Unset | Optional writable path for the Codex thread ID |
+| `USAGE_OUT` | Unset | Optional writable path for token usage JSON |
 
-The task `evaluate-e2e-results` (see [`tkn/task.yaml`](tkn/task.yaml)) consumes a
-`pipelines-data` workspace and a `gcp-credentials` workspace (the Vertex
-service-account JSON), and exposes `cost-usd` and `session-id` results. The full
-evaluation JSON is intentionally **not** a Tekton result (it exceeds the result
-size limit) — it stays on the task's stdout and is delivered to Slack.
+Model and timeout overrides work without rebuilding the image. Codex progress
+is captured as JSONL separately from the final message. Token usage contains
+`input_tokens`, `cached_input_tokens`, and `output_tokens`, or `{}` when no usage
+was reported. Cached tokens are part of input tokens, not additional tokens.
 
-It expects:
+If configured, Slack delivery uses the existing skill formatter. The webhook
+credential is removed from the agent environment. The report is emitted and
+saved before delivery, so a webhook failure does not discard the report. A
+webhook failure still returns a nonzero status; each request is limited to 30
+seconds, with a 10-second connection timeout.
 
-- workspace `gcp-credentials` — a secret holding the service-account JSON
-  (default key `service-account.json`)
-- secret `slack-webhook` with key `url` (optional) — the published Workflow
-  Builder trigger URL
+## OpenShift Pipelines
+
+The task reads `pipelines-data` as a **read-only workspace**. It uses writable
+`emptyDir` volumes at `/tmp` and `/var/lib/codex-runner`, a read-only root
+filesystem, no added capabilities, and
+the UID assigned by OpenShift. Codex uses `workspace-write` sandboxing for its
+scratch directory. It does not automatically bypass the sandbox if the
+cluster disallows the required Linux features; verify this on the target
+cluster. A local image build is not an OpenShift execution test.
+
+Provision a Secret named `codex-api-key` with key `api-key` through your usual
+secret-management mechanism. Set the task's `api-key-secret` parameter to use a
+different Secret. The optional existing `slack-webhook` Secret uses key `url`.
+Neither credential belongs in task parameters, source control, or images.
+
+The task exposes `session-id` (Codex thread ID) and `token-usage` (small JSON).
+The full evaluation stays on stdout because it can exceed Tekton result size
+limits. For standalone container runs, use `EVALUATION_OUT` to save it.
+`ignore-errors=true` preserves the existing best-effort behavior; set it to
+`false` when checking the integration so failures fail the TaskRun.
+
+After applying `tkn/task.yaml` and publishing your image, adapt this example:
 
 ```yaml
 apiVersion: tekton.dev/v1beta1
 kind: TaskRun
 metadata:
-  name: evaluate-e2e-results-run
+  generateName: evaluate-e2e-results-
 spec:
   taskRef:
-    resolver: bundles
-    params:
-    - name: bundle
-      value: ghcr.io/podman-desktop/evaluation-agent-tkn:v0.1.0
-    - name: name
-      value: evaluate-e2e-results
-    - name: kind
-      value: task
+    name: evaluate-e2e-results
+  timeout: 4m
   params:
+  - name: image-repository
+    value: ghcr.io/podman-desktop/evaluation-agent
+  - name: image-version
+    value: v0.1.0
   - name: workspace-resources-path
-    value: <same path used by the e2e-runner run>
-  - name: vertex-project-id
-    value: "<gcp-project-id>"
-  - name: pipeline-name
-    value: "pd-e2e-podman macOS applehv"
+    value: <same path used by e2e-runner>
+  - name: agent-model
+    value: gpt-6-luna
+  - name: agent-timeout
+    value: 3m
+  - name: ignore-errors
+    value: 'false'
   workspaces:
   - name: pipelines-data
     persistentVolumeClaim:
       claimName: pipelines-data
-  - name: gcp-credentials
-    secret:
-      secretName: gcp-credentials
 ```
 
-## Security notes
+Keep the enclosing task timeout above the agent's three-minute default to allow
+shutdown and reporting. The runner sends SIGTERM at the deadline and SIGKILL
+five seconds later if necessary. Timeout normally returns 124; forced shutdown
+can return 137. The task propagates failures unless `ignore-errors=true`.
 
-- Runs as a non-root user; the skill is baked read-only and cannot be overwritten.
-- Fresh `CLAUDE_CONFIG_DIR` per run — no cross-run session-state corruption, no
-  resume prompt to hang on.
-- Read-only tool allowlist (`Skill,Read,Glob,Grep,Bash`) with non-interactive
-  permission handling; no secrets baked into the image.
-- Wall-clock `timeout` + `--max-budget-usd` guard against stuck runs and runaway
-  cost; exit codes and the `is_error` field are checked, and the session id +
-  cost are logged for postmortem.
+## Migration from the Claude POC
+
+- Vertex/GCP settings and the credentials workspace are replaced by
+  `CODEX_API_KEY` and the API-key Secret.
+- The default model is `gpt-6-luna`; the default agent timeout is `3m`.
+- The Claude output envelope is replaced by Codex events and final-message
+  capture. `session-id` now identifies a Codex thread.
+- `agent-max-budget`, `AGENT_MAX_BUDGET`, `cost-usd`, and `COST_OUT` have no
+  supported Codex equivalent. The adapter rejects the obsolete environment
+  settings instead of silently suggesting a dollar budget is enforced.
+  `token-usage`/`USAGE_OUT` replace cost reporting; they are not USD estimates.
+- Approval prompts are disabled. The old tool allowlist is replaced by Codex
+  sandboxing and read-only artifact mounts; Bash alone never enforced
+  read-only access.

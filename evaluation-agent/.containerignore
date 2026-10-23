@@ -1,0 +1,6 @@
+# Used explicitly with the repository-root build context by this Makefile.
+*
+!.skills
+!evaluation-agent/entrypoint.sh
+__pycache__/
+*.pyc
