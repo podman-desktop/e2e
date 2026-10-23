@@ -20,9 +20,16 @@ renderer output captured during that test. On a Podman Desktop run these lines
 carry the extension logs, which is where provider, registry, and network
 problems surface first.
 
+A chunk is either `{"text": "..."}` or, when the process wrote raw bytes,
+`{"buffer": "<base64>"}`. **Both carry log lines and the buffer ones are not
+rare** — on a Podman Desktop run they are where the podman CLI's own stderr
+ends up, so a scan that reads only `text` misses lines like
+`Error: unable to start "podman-machine-default": already running` entirely and
+reports a failure as unexplained.
+
 ```bash
 python3 -c "
-import json, re, os
+import json, re, os, base64
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 KEYWORDS = ['error', 'fail', 'cannot', 'unable', 'refused', 'timeout', 'denied',
     'econn', 'enoent', 'etimedout', 'crash', 'rate limit', 'unauthorized',
@@ -31,16 +38,24 @@ RD = os.environ['RESULTS_DIR']
 data = json.load(open(RD + '/json-results.json'))
 seen = set()
 
+def chunk_text(chunk):
+    if chunk.get('text') is not None:
+        return chunk['text']
+    buf = chunk.get('buffer')
+    if not buf:
+        return ''
+    return base64.b64decode(buf).decode('utf-8', 'replace')
+
 def walk(suites):
     for suite in suites:
         for spec in suite.get('specs', []):
             if spec.get('ok', True): continue
             for test in spec.get('tests', []):
                 for r in test.get('results', []):
-                    if r.get('status') != 'failed': continue
+                    if r.get('status') not in ('failed', 'timedOut', 'interrupted'): continue
                     print('=== ' + str(spec.get('title')))
                     for chunk in r.get('stdout', []) + r.get('stderr', []):
-                        text = ANSI.sub('', chunk.get('text', '')).strip()
+                        text = ANSI.sub('', chunk_text(chunk)).strip()
                         low = text.lower()
                         if not any(k in low for k in KEYWORDS): continue
                         # The same provider warning repeats dozens of times per
@@ -64,6 +79,7 @@ explain nothing. What *is* signal:
 | `API rate limit exceeded for <ip>` | GitHub API throttling the runner. Extension version checks fail, so setup screens never populate → `infra` |
 | `socket hang up` / `ECONNRESET` / `Error when handling events` | The event stream to the podman socket dropped → `infra` |
 | `no running provider for the matching container` | The machine is not up — pair it with whatever the test asserted |
+| `machine "podman-machine-default" already exists` / `already running` | A previous test left a machine behind, so this test's setup was a no-op and it ran against the wrong state → usually `test_bug` (missing cleanup) or `infra` |
 | `Error: Failed to execute command: spawn <app binary> ENOENT` | The app under test is missing, not an optional CLI → `infra` |
 | An unhandled exception from `packages/main` or an extension | App-side defect → `regression` |
 
@@ -98,7 +114,7 @@ def walk(suites):
             if spec.get('ok', True): continue
             for test in spec.get('tests', []):
                 for r in test.get('results', []):
-                    if r.get('status') != 'failed': continue
+                    if r.get('status') not in ('failed', 'timedOut', 'interrupted'): continue
                     err = r.get('error', {})
                     print('=== ' + str(spec.get('title')))
                     print(ANSI.sub('', err.get('message', ''))[:1200])

@@ -26,7 +26,8 @@ Apply these before reading error-context.md. Match against `result.error.message
 | `ReferenceError: Cannot access '...' before initialization` | `test_bug` | `confirmed` | Circular dependency in test code |
 | `SyntaxError` in test file | `test_bug` | `confirmed` | Test code doesn't parse |
 | `TypeError: Cannot read properties of undefined` in test file | `test_bug` | `confirmed` | Test code runtime error |
-| `expect(locator).toBeVisible() failed` with timeout ≤ 10s | `flaky` | `likely` | Short timeout, element may appear later |
+| `expect(locator).toBeVisible() failed` with timeout ≤ 10s, `attempts: 1` | `flaky` | `likely` | Short timeout — the element may simply have needed longer |
+| the same, but failing on every retry (`attempts > 1`) | `unknown` | `uncertain` | An element that never appears in three independent runs is not slow; the timeout length says nothing here |
 | `expect(locator).toBeVisible() failed` with timeout > 30s | `regression` | `likely` | Long timeout — element probably never renders |
 | `expect(locator).toHaveText()` actual vs expected mismatch | `regression` | `likely` | App produces different text than expected |
 | `strict mode violation: ... resolved to N elements` | `test_bug` | `likely` | Locator is too broad |
@@ -50,6 +51,10 @@ Apply these before reading error-context.md. Match against `result.error.message
 - Element not found/not visible — but the element should exist (navigation links, connection cards)
 - Timeouts on operations involving external systems (machine start, container ops, registry pulls)
 - Any `infra` or `regression` classification at `likely` or `uncertain` confidence
+- A `flaky` verdict on a test with `attempts > 1`. A flake is something that
+  passes on retry; a test that failed identically three times did not flake,
+  and "timing-sensitive, not a product problem" is the most expensive wrong
+  answer this skill can give — it tells a release reader to look away.
 
 Escalate to **Layer 2 first** (`layer2-logs.md`). Its log scan is one command
 for the whole run, and the app usually logged the cause — a fetch that was rate
@@ -100,21 +105,41 @@ These appear in normal test runs and do not indicate failures:
 
 Traverse the suite hierarchy to categorize every skipped test.
 
-### Two kinds of skips
+### Three kinds of skips
 
-1. **By-design skips** — `test.annotations[]` has an entry with `type: "skip"` and a `description` explaining why (e.g., `"Certificate sync via podman machine ssh hangs on Windows CI runners"`). Intentional platform exclusions.
+1. **By-design skips** — `test.annotations[]` has an entry with `type: "skip"`
+   or `type: "fixme"`, usually with a `description` explaining why (e.g.,
+   `"Certificate sync via podman machine ssh hangs on Windows CI runners"`).
+   Intentional exclusions.
 
-2. **Cascade skips** — `test.annotations[]` is empty, but a prior test in the same `test.describe.serial` block failed. Playwright auto-skips remaining tests. These represent hidden coverage loss.
+2. **Cascade skips** — a test inside a `test.describe.serial` block that never
+   ran because an earlier test in that block failed. These are hidden coverage
+   loss and belong next to the failure that caused them.
+
+3. **Unresolved skips** — a skip with no annotation explaining it and no failed
+   predecessor to blame. Normally zero.
 
 ### Detection
 
+Playwright records serial mode as an annotation, so both halves of a cascade
+are things you can check rather than infer:
+
 ```
-For each skipped test (result.status === "skipped"):
-  if test.annotations[] has entry with type === "skip":
-    → by_design skip, reason = annotation.description
+For each skipped test:
+  if annotations has type "skip" or "fixme":
+    → by_design, reason = annotation.description
+  elif annotations has type "serial" AND an earlier test in the same suite failed:
+    → cascade, caused by that failure
   else:
-    → cascade skip, find the failed test in the same parent suite
+    → unresolved
 ```
+
+Keep the third branch. An empty annotation list is not evidence of a cascade —
+a run that hit `maxFailures` abandons every test it never reached, and those
+have nothing to do with any particular failure. Blaming them on the nearest
+failed test invents a causal link an engineer will then go chase. The counts
+must still sum to `total_skipped`, so report `unresolved` rather than folding
+it into one of the other two.
 
 ### What to report
 

@@ -1,5 +1,9 @@
 {
   "skill_name": "evaluate-e2e-results",
+  "fixtures": {
+    "note": "These cases run against real CI artifact bundles, which are tens of MB and are not committed. Download the results archive from a pde2e Windows nightly pipeline run, extract it, and point the prompt at the extracted results/podman-desktop directory. The paths below are one maintainer's local copies — substitute your own.",
+    "expected_layout": "<bundle>/results/podman-desktop/{json-results.json,traces/,<per-test output dirs>}"
+  },
   "evals": [
     {
       "id": 1,
@@ -44,6 +48,10 @@
           "description": "skipped_analysis object is present with total_skipped, by_design, cascade fields"
         },
         {
+          "name": "skip buckets are evidence-based and sum to the total",
+          "description": "by_design=46, cascade=17, unresolved=0 — by_design is the count of skipped tests carrying a skip/fixme annotation, cascade the serial-annotated ones with a failed predecessor, and the three sum to total_skipped (63)"
+        },
+        {
           "name": "no markdown fences in output",
           "description": "output does not contain ```json or ``` wrappers"
         }
@@ -74,6 +82,14 @@
         {
           "name": "rate-limit cause found from logs",
           "description": "at least one failure cites the GitHub API rate limit (or the podman provider error) from result stdout/stderr and reports layer 2"
+        },
+        {
+          "name": "skip buckets are evidence-based and sum to the total",
+          "description": "by_design=48, cascade=17, unresolved=0, summing to total_skipped=65"
+        },
+        {
+          "name": "buffer-only log evidence is read",
+          "description": "the 'Setup Podman push notification is present' failure cites the podman CLI stderr ('machine \"podman-machine-default\" already exists' or 'already running'), which the report stores only as base64 'buffer' chunks — a scan that reads just the 'text' field cannot see it"
         },
         {
           "name": "root_cause stays within the length limit",

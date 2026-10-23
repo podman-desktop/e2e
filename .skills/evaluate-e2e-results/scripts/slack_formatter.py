@@ -105,10 +105,12 @@ def _dedupe_failures(failures: list) -> list:
     ordered: list[dict] = []
 
     for f in failures:
-        # Keyed on test + file, deliberately not on line: a retry can report a
-        # different failing line (a later assertion got further), and keying on
-        # it would let the same test through twice.
-        key = (f.get("test"), f.get("spec_file"))
+        # Keyed on the test's identity — title, describe path, file — and
+        # deliberately not on line: a retry can report a different failing line
+        # (a later assertion got further), and keying on it would let the same
+        # test through twice. The describe path is in the key because `test`
+        # holds the bare title, which two suites in one file can share.
+        key = (f.get("test"), f.get("suite"), f.get("spec_file"))
         occurrences[key] += 1
         if key not in first:
             entry = dict(f)
@@ -214,6 +216,7 @@ def format_workflow_text(
     total = s.get("total", 0)
     passed = s.get("passed", 0)
     skipped = s.get("skipped", 0)
+    flaky = s.get("flaky", 0)
     duration_s = s.get("duration_s", 0)
 
     os_label, backend = _parse_pipeline(pipeline_name)
@@ -225,10 +228,18 @@ def format_workflow_text(
     lines = []
 
     # --- Header ---
-    if failed == 0:
+    # "all 319 tests passed" above a stats line reading "63 skipped" is a false
+    # claim, and these suites skip 60+ tests on a normal night. Only call it a
+    # clean sweep when nothing was held back.
+    if failed:
+        lines.append(f"🚨 {suite_label} — {failed} failure{'s' if failed != 1 else ''}")
+    elif skipped and (passed + flaky):
+        lines.append(f"✅ {suite_label} — {passed + flaky} passed, {skipped} skipped")
+    elif passed + flaky:
         lines.append(f"✅ {suite_label} — all {total} tests passed")
     else:
-        lines.append(f"🚨 {suite_label} — {failed} failure{'s' if failed != 1 else ''}")
+        # Nothing failed and nothing ran: a setup collapse, not a success.
+        lines.append(f"⚠️ {suite_label} — no tests ran to completion")
     if pipeline_name:
         lines.append(pipeline_name)
 
