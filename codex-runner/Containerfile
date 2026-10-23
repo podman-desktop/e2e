@@ -1,0 +1,34 @@
+# Build context: codex-runner/ (no repository files or skills are included).
+FROM registry.access.redhat.com/ubi9/nodejs-22-minimal@sha256:254080e3c058143c592f708e4ca78691449349fc79f03ee678c717aa4b6222b6
+
+LABEL org.opencontainers.image.title="Podman Desktop Codex runner" \
+      org.opencontainers.image.description="Generic headless Codex runtime for CI agents" \
+      org.opencontainers.image.source="https://github.com/podman-desktop/e2e" \
+      org.opencontainers.image.vendor="Red Hat" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+USER 0
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+      --disablerepo='*' --enablerepo=ubi-9-baseos-rpms --enablerepo=ubi-9-appstream-rpms \
+      bash python3 git-core jq unzip curl-minimal ca-certificates coreutils-single \
+    && microdnf clean all
+
+ARG CODEX_CLI_VERSION=0.164.0
+RUN npm install --global --prefix /usr/local "@openai/codex@${CODEX_CLI_VERSION}" \
+    && npm cache clean --force \
+    && mkdir -p /var/lib/codex-runner \
+    && chmod 0770 /var/lib/codex-runner \
+    && runtime_check_dir="$(mktemp -d /var/lib/codex-runner/check.XXXXXXXX)" \
+    && env CODEX_HOME="$runtime_check_dir" codex --version \
+    && rm -rf "$runtime_check_dir"
+
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/codex-runner
+
+ENV AGENT_MODEL=gpt-6-luna \
+    AGENT_TIMEOUT=3m
+
+# The state directory is writable by OpenShift's root group; no passwd entry
+# or writable home is required. Installed tools remain root-owned.
+USER 1001
+WORKDIR /tmp
+ENTRYPOINT ["/usr/local/bin/codex-runner"]
