@@ -1,0 +1,84 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: post-evaluation-to-slack
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/displayName: "Post E2E evaluation to Slack"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Posts a bounded evaluation digest to a Slack Workflow Builder webhook.
+    This TaskRun receives no Codex API key or Playwright workspace.
+  params:
+  - name: image-repository
+    description: Evaluation image containing Python and curl
+    default: ghcr.io/podman-desktop/evaluation-agent
+  - name: image-version
+    description: Evaluation image version
+    default: 'nightly'
+  - name: text
+    description: Bounded digest from evaluate-e2e-results.results.slack-text
+  - name: workflow-var
+    description: Slack Workflow Builder variable name
+    default: text
+  - name: webhook-secret
+    description: Secret containing the Slack Workflow Builder webhook under the url key
+    default: slack-webhook
+  - name: ignore-errors
+    description: When true, log delivery failures without failing the PipelineRun
+    default: 'true'
+  steps:
+  - name: post
+    image: $(params.image-repository):$(params.image-version)
+    imagePullPolicy: Always
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: SLACK_WEBHOOK_URL
+      valueFrom:
+        secretKeyRef:
+          name: $(params.webhook-secret)
+          key: url
+    - name: SLACK_TEXT
+      value: $(params.text)
+    - name: SLACK_WORKFLOW_VAR
+      value: $(params.workflow-var)
+    - name: IGNORE_ERRORS
+      value: $(params.ignore-errors)
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    script: |
+      #!/usr/bin/env bash
+      set -uo pipefail
+      if [[ -z "$SLACK_TEXT" ]]; then
+        echo 'ERROR: Slack digest is empty' >&2
+        exit 2
+      fi
+
+      set +e
+      env -u SLACK_WEBHOOK_URL python3 -c 'import json, os; print(json.dumps({os.environ["SLACK_WORKFLOW_VAR"]: os.environ["SLACK_TEXT"]}, ensure_ascii=False))' \
+        | curl -sS --fail --connect-timeout 10 --max-time 30 --output /dev/null \
+            -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+      rc=$?
+      set -e
+      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
+        echo "WARNING: Slack delivery failed (rc=$rc); ignore-errors=true, continuing." >&2
+        exit 0
+      fi
+      exit "$rc"
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"

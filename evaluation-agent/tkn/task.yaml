@@ -1,0 +1,160 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: evaluate-e2e-results
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, ai, evaluation
+    tekton.dev/displayName: "Podman Desktop E2E result evaluation"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Runs a headless Codex agent (OpenAI API key) to classify Podman
+    Desktop E2E test failures from a results directory. Produces a bounded Slack
+    digest for a separate reporting TaskRun. Consumes the results produced by
+    the e2e-runner task read-only — it never modifies the workspace.
+
+  workspaces:
+  - name: pipelines-data
+    description: Shared workspace where the e2e-runner task stored the qe-results.
+    readOnly: true
+
+  params:
+  - name: image-repository
+    description: 'evaluation-agent image repository (no tag), ie: ghcr.io/podman-desktop/evaluation-agent'
+    default: 'ghcr.io/podman-desktop/evaluation-agent'
+  - name: image-version
+    description: 'evaluation-agent image version, ie: v0.1.2 or nightly'
+    default: 'nightly'
+  - name: workspace-resources-path
+    description: path on workspace to find the results (same as the e2e-runner run)
+  - name: workspace-qe-subpath
+    description: subpath relative to workspace-resources-path where results are stored
+    default: qe-results
+
+  # API key is injected only into the evaluation step, never a task parameter.
+  - name: api-key-secret
+    description: Secret containing the OpenAI API key under the api-key key
+    default: codex-api-key
+
+  # Reporting
+  - name: pipeline-name
+    description: Pipeline identifier shown in the Slack header
+    default: ''
+  - name: artifacts-url
+    description: Link to the full artifacts, shown in the Slack footer
+    default: ''
+
+  # Agent runtime
+  - name: agent-model
+    description: Model alias or id for the agent
+    default: 'gpt-6-luna'
+  - name: agent-timeout
+    description: >-
+      Wall-clock cap for the agent run (GNU timeout syntax). Keep this below the
+      consuming pipelineTask's `timeout` — if Tekton kills the pod first, the
+      entrypoint's timeout path (which logs a clear "agent timed out" message
+      and exits 124) never runs and you lose the diagnostic.
+    default: '3m'
+  - name: agent-sandbox
+    description: >-
+      Codex command sandbox. Use danger-full-access only when this Task runs in
+      a hardened pod that is the intended execution boundary; this is explicit
+      and does not change the generic runner's workspace-write default.
+    default: 'workspace-write'
+  - name: ignore-errors
+    description: >-
+      When 'true' (default) a failed evaluation is logged but the task step still
+      succeeds, so a triage hiccup never fails the PipelineRun.
+    default: 'true'
+
+  results:
+  - name: token-usage
+    description: JSON token counts (input_tokens, cached_input_tokens, output_tokens), or {} if unavailable
+  - name: session-id
+    description: Codex thread id (for postmortem/debugging)
+  - name: slack-text
+    description: Bounded UTF-8 digest for a separate Slack TaskRun; SKIP after an ignored evaluation failure
+
+  steps:
+  - name: evaluate
+    image: $(params.image-repository):$(params.image-version)
+    # Versions can be overridden; force a pull so an overridden tag is honored.
+    imagePullPolicy: Always
+    env:
+    # Tekton copies registry credentials into HOME before the step starts.
+    # The UBI image home is on the read-only root filesystem.
+    - name: HOME
+      value: /tekton/home
+    - name: CODEX_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: $(params.api-key-secret)
+          key: api-key
+    - name: PIPELINE_NAME
+      value: $(params.pipeline-name)
+    - name: ARTIFACTS_URL
+      value: $(params.artifacts-url)
+    - name: AGENT_MODEL
+      value: $(params.agent-model)
+    - name: AGENT_TIMEOUT
+      value: $(params.agent-timeout)
+    - name: AGENT_SANDBOX
+      value: $(params.agent-sandbox)
+    - name: RESULTS_DIR
+      value: $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
+    - name: SESSION_OUT
+      value: $(results.session-id.path)
+    - name: USAGE_OUT
+      value: $(results.token-usage.path)
+    - name: SLACK_TEXT_OUT
+      value: $(results.slack-text.path)
+    - name: IGNORE_ERRORS
+      value: $(params.ignore-errors)
+    volumeMounts:
+    - name: scratch
+      mountPath: /tmp
+    - name: codex-state
+      mountPath: /var/lib/codex-runner
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    script: |
+      #!/usr/bin/env bash
+      set -uo pipefail
+
+      # Keep small metadata in Tekton results; the full report stays on stdout.
+      : >"$SESSION_OUT"
+      printf '{}' >"$USAGE_OUT"
+      printf 'SKIP' >"$SLACK_TEXT_OUT"
+      /usr/local/bin/evaluate-e2e-results "$RESULTS_DIR"
+      rc=$?
+
+      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
+        echo "WARNING: evaluation failed (rc=$rc); ignore-errors=true, continuing." >&2
+        exit 0
+      fi
+      exit "$rc"
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1"
+
+  volumes:
+  - name: scratch
+    emptyDir: {}
+  - name: codex-state
+    emptyDir: {}
