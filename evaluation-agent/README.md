@@ -115,9 +115,9 @@ oc apply -n <namespace> -f evaluation-agent/tkn/serviceaccount.yaml
 Give `evaluate-results` this account through the PipelineRun's
 `taskRunSpecs`; the account and that task's pod template disable automatic API
 token mounting. Do not attach unrelated Secrets or permissions to this account.
-The pipeline binds the evaluation task's workspace with a task-specific
-`subPath` of `<run-id>/qe-results`, and passes `.` for both results-path
-parameters. The evaluation pod therefore mounts only that run's results
+The corresponding `qe-platform` pipeline binds the evaluation task's workspace
+with a task-specific `subPath` of `<run-id>/qe-results`, and passes `.` for both
+results-path parameters. The evaluation pod therefore mounts only that run's results
 directory, not the entire shared PVC or the sibling host key. The directory
 must already exist when the evaluation task starts. Other pipeline tasks retain
 their original workspace bindings. This narrows the evaluation pod's mount;
