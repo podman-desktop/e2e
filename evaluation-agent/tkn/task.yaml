@@ -65,6 +65,12 @@ spec:
       entrypoint's timeout path (which logs a clear "agent timed out" message
       and exits 124) never runs and you lose the diagnostic.
     default: '3m'
+  - name: agent-sandbox
+    description: >-
+      Codex command sandbox. Use danger-full-access only when this Task runs in
+      a hardened pod that is the intended execution boundary; this is explicit
+      and does not change the generic runner's workspace-write default.
+    default: 'workspace-write'
   - name: ignore-errors
     description: >-
       When 'true' (default) a failed evaluation is logged but the task step still
@@ -108,6 +114,8 @@ spec:
       value: $(params.agent-model)
     - name: AGENT_TIMEOUT
       value: $(params.agent-timeout)
+    - name: AGENT_SANDBOX
+      value: $(params.agent-sandbox)
     - name: RESULTS_DIR
       value: $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
     - name: SESSION_OUT

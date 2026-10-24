@@ -64,6 +64,7 @@ an agent response that did not inspect the artifacts cannot be posted to Slack.
 | `RESULTS_DIR` | `/artifacts` | Artifact directory; the positional argument takes precedence |
 | `AGENT_MODEL` | `gpt-6-luna` | Runtime model selection |
 | `AGENT_TIMEOUT` | `3m` | Agent deadline, configurable at runtime |
+| `AGENT_SANDBOX` | `workspace-write` | Codex command sandbox; explicitly set `danger-full-access` only when the hardened container is the execution boundary |
 | `SLACK_WEBHOOK_URL` | Unset | Optional Slack Workflow Builder trigger |
 | `SLACK_WORKFLOW_VAR` | `text` | Webhook payload variable |
 | `PIPELINE_NAME` | Empty | Slack header label |
@@ -87,17 +88,20 @@ seconds, with a 10-second connection timeout.
 
 The task reads `pipelines-data` as a **read-only workspace**. It uses writable
 `emptyDir` volumes at `/tmp` and `/var/lib/codex-runner`, a read-only root
-filesystem, no added capabilities, and
-the UID assigned by OpenShift. Codex uses `workspace-write` sandboxing for its
-scratch directory. Before calling the model, the adapter runs a credential-free
-`codex sandbox -P :workspace` command probe. Codex's Linux sandbox needs to
-create an inner user namespace; a restrictive cluster policy can deny this even
-though the container itself starts normally. In that case the step reports a
-clear sandbox error and sends no evaluation or Slack message. It does not
-automatically bypass the sandbox. A local image build is not an OpenShift
-execution test. With `ignore-errors=true`, Tekton still marks such an evaluation
-step successful after logging the failure; use `false` while validating the
-cluster integration.
+filesystem, no added capabilities, and the UID assigned by OpenShift. The
+default `workspace-write` mode runs a credential-free
+`codex sandbox -P :workspace` probe before calling the model. A cluster that denies Codex's inner
+user namespace fails this probe and sends no evaluation or Slack message.
+For the existing Claude-style pod boundary, explicitly set the task parameter
+`agent-sandbox: danger-full-access`. This skips only Codex's inner sandbox; the
+task's read-only artifact workspace, read-only root filesystem, non-root UID,
+dropped capabilities, and no privilege escalation still apply. Commands run by
+Codex can then access anything available inside the evaluation pod, including
+its API key, so keep its service account and mounted credentials minimal and
+restrict pod egress as appropriate. There is no automatic sandbox downgrade.
+A local image build is not an OpenShift execution test. With
+`ignore-errors=true`, Tekton still marks a failed evaluation step successful;
+use `false` while validating the cluster integration.
 The step sets `HOME=/tekton/home` so Tekton can copy registry credentials to its
 writable home volume instead of the UBI image's read-only home directory.
 

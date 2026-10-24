@@ -50,32 +50,44 @@ trap 'forward_signal HUP 129' HUP
 # The skill requires shell commands to read Playwright artifacts. In hardened
 # containers Codex can complete a turn even when its inner sandbox never starts
 # a command, so check that boundary before calling the model or posting Slack.
+agent_sandbox="${AGENT_SANDBOX:-workspace-write}"
+case "$agent_sandbox" in
+  workspace-write|danger-full-access) ;;
+  *)
+    log "ERROR: AGENT_SANDBOX must be workspace-write or danger-full-access"
+    exit 2
+    ;;
+esac
 state_root="${AGENT_STATE_DIR:-/var/lib/codex-runner}"
 if [[ ! -d "$state_root" || ! -w "$state_root" ]]; then
   log "ERROR: Codex state directory is not writable: $state_root"
   exit 2
 fi
-probe_dir="$(mktemp -d "$state_root/probe.XXXXXXXX")"
-mkdir -p "$probe_dir/config" "$probe_dir/cache" "$probe_dir/work"
-if ! env CODEX_HOME="$probe_dir/config" XDG_CACHE_HOME="$probe_dir/cache" \
-  codex sandbox -P :workspace -C "$probe_dir/work" -- /bin/true \
-  >"$evaluation_dir/sandbox-probe.log" 2>&1; then
-  log "ERROR: Codex workspace-write sandbox cannot start commands in this container"
-  sed -n '1,12p' "$evaluation_dir/sandbox-probe.log" >&2
-  exit 1
+if [[ "$agent_sandbox" == workspace-write ]]; then
+  probe_dir="$(mktemp -d "$state_root/probe.XXXXXXXX")"
+  mkdir -p "$probe_dir/config" "$probe_dir/cache" "$probe_dir/work"
+  if ! env CODEX_HOME="$probe_dir/config" XDG_CACHE_HOME="$probe_dir/cache" \
+    codex sandbox -P :workspace -C "$probe_dir/work" -- /bin/true \
+    >"$evaluation_dir/sandbox-probe.log" 2>&1; then
+    log "ERROR: Codex workspace-write sandbox cannot start commands in this container"
+    sed -n '1,12p' "$evaluation_dir/sandbox-probe.log" >&2
+    exit 1
+  fi
+  rm -rf -- "$probe_dir"
+  probe_dir=''
+else
+  log "Codex inner sandbox disabled explicitly; the hardened container is the execution boundary"
 fi
-rm -rf -- "$probe_dir"
-probe_dir=''
 
 # The prompt explicitly selects the baked skill. Paths are supplied as data;
 # never interpolate artifact contents into shell commands.
 prompt="Use the evaluate-e2e-results skill at $SKILL_DIR/SKILL.md to analyze the read-only results directory named by RESULTS_DIR ($RESULTS_DIR). Return the complete evaluation JSON matching the supplied output schema. Use null for unavailable optional platform fields and for skipped_analysis when no tests were skipped; use false and 0 for truncated and truncated_count when the report is not truncated. Reporting is handled by the caller; do not send notifications."
-log "Evaluating $RESULTS_DIR (model=${AGENT_MODEL:-gpt-6-luna}, timeout=${AGENT_TIMEOUT:-3m})"
+log "Evaluating $RESULTS_DIR (model=${AGENT_MODEL:-gpt-6-luna}, timeout=${AGENT_TIMEOUT:-3m}, sandbox=$agent_sandbox)"
 
 # Keep Slack credentials out of the agent environment. --json is the event
 # stream, while --output-last-message captures the final report separately.
 env -u SLACK_WEBHOOK_URL /usr/local/bin/codex-runner \
-  --json --output-schema "$REPORT_SCHEMA" \
+  --sandbox "$agent_sandbox" --json --output-schema "$REPORT_SCHEMA" \
   --output-last-message "$evaluation_dir/final.txt" "$prompt" \
   >"$evaluation_dir/events.jsonl" < /dev/null &
 agent_pid=$!
