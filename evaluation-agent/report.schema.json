@@ -27,15 +27,15 @@
           "line": { "type": ["integer", "null"] },
           "duration_ms": { "type": ["number", "null"] },
           "attempts": { "type": "integer" },
-          "status": { "type": "string" },
+          "status": { "type": "string", "enum": ["failed", "timedOut", "interrupted"] },
           "error": { "type": "string" },
-          "classification": { "type": "string" },
-          "confidence": { "type": "string" },
+          "classification": { "type": "string", "enum": ["regression", "test_bug", "flaky", "infra", "unknown"] },
+          "confidence": { "type": "string", "enum": ["confirmed", "likely", "uncertain"] },
           "title": { "type": "string" },
           "root_cause": { "type": "string" },
           "evidence": { "type": "array", "items": { "type": "string" } },
           "recommended_action": { "type": "string" },
-          "layer": { "type": "integer" }
+          "layer": { "type": "integer", "enum": [1, 2, 3] }
         },
         "required": ["test", "suite", "spec_file", "line", "duration_ms", "attempts", "status", "error", "classification", "confidence", "title", "root_cause", "evidence", "recommended_action", "layer"]
       }

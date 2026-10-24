@@ -156,7 +156,10 @@ def _triage(failures: list) -> tuple[str, list[str]]:
     """Return (headline verdict, per-bucket breakdown lines)."""
     counts: dict[str, int] = {}
     for f in failures:
-        counts[f.get("classification", "unknown")] = counts.get(f.get("classification", "unknown"), 0) + 1
+        classification = f.get("classification")
+        if not isinstance(classification, str) or classification not in VERDICT:
+            classification = "unknown"
+        counts[classification] = counts.get(classification, 0) + 1
 
     def n(key: str) -> int:
         return counts.get(key, 0)

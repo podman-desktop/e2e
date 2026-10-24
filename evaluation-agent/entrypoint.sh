@@ -26,7 +26,14 @@ RESULTS_DIR="$(cd -- "$RESULTS_DIR" && pwd -P)"
 
 evaluation_dir="$(mktemp -d "${TMPDIR:-/tmp}/evaluation-agent.XXXXXXXX")"
 agent_pid=''
-trap 'rm -rf -- "$evaluation_dir"' EXIT
+probe_dir=''
+cleanup() {
+  rm -rf -- "$evaluation_dir"
+  if [[ -n "$probe_dir" ]]; then
+    rm -rf -- "$probe_dir"
+  fi
+}
+trap cleanup EXIT
 forward_signal() {
   local signal="$1" status="$2"
   trap '' TERM INT HUP
@@ -39,6 +46,26 @@ forward_signal() {
 trap 'forward_signal TERM 143' TERM
 trap 'forward_signal INT 130' INT
 trap 'forward_signal HUP 129' HUP
+
+# The skill requires shell commands to read Playwright artifacts. In hardened
+# containers Codex can complete a turn even when its inner sandbox never starts
+# a command, so check that boundary before calling the model or posting Slack.
+state_root="${AGENT_STATE_DIR:-/var/lib/codex-runner}"
+if [[ ! -d "$state_root" || ! -w "$state_root" ]]; then
+  log "ERROR: Codex state directory is not writable: $state_root"
+  exit 2
+fi
+probe_dir="$(mktemp -d "$state_root/probe.XXXXXXXX")"
+mkdir -p "$probe_dir/config" "$probe_dir/cache" "$probe_dir/work"
+if ! env CODEX_HOME="$probe_dir/config" XDG_CACHE_HOME="$probe_dir/cache" \
+  codex sandbox -P :workspace -C "$probe_dir/work" -- /bin/true \
+  >"$evaluation_dir/sandbox-probe.log" 2>&1; then
+  log "ERROR: Codex workspace-write sandbox cannot start commands in this container"
+  sed -n '1,12p' "$evaluation_dir/sandbox-probe.log" >&2
+  exit 1
+fi
+rm -rf -- "$probe_dir"
+probe_dir=''
 
 # The prompt explicitly selects the baked skill. Paths are supplied as data;
 # never interpolate artifact contents into shell commands.
@@ -86,6 +113,13 @@ if [[ "$events_valid" != true ]] || ! jq -se '
   log "ERROR: Codex did not report a successfully completed turn"
   exit 1
 fi
+if ! jq -se '
+  any(.[]; .type == "item.completed" and .item.type == "command_execution"
+       and .item.exit_code == 0)
+  ' "$evaluation_dir/events.jsonl" >/dev/null; then
+  log "ERROR: Codex completed without a successful command execution; evaluation inputs were not inspected"
+  exit 1
+fi
 if [[ ! -s "$evaluation_dir/final.txt" ]]; then
   log "ERROR: Codex produced no final evaluation"
   exit 1
@@ -94,7 +128,7 @@ fi
 # Validate the structured response before delivery. Keep the old Claude
 # adapter's tolerance for a JSON object inside fences or explanatory text.
 # The schema requires optional keys; restore the skill's omission convention.
-python3 - "$evaluation_dir/final.txt" "$evaluation_dir/report.json" <<'PY'
+python3 - "$evaluation_dir/final.txt" "$evaluation_dir/report.json" "$RESULTS_DIR/json-results.json" <<'PY'
 import json
 import sys
 
@@ -138,6 +172,28 @@ try:
         raise ValueError("summary reports failures but the failures array is empty")
     if skipped > 0 and not isinstance(report.get("skipped_analysis"), dict):
         raise ValueError("summary reports skipped tests but skipped_analysis is missing")
+    with open(sys.argv[3]) as stream:
+        source = json.load(stream)
+    stats = source.get("stats")
+    if not isinstance(stats, dict):
+        raise ValueError("Playwright results lack a stats object")
+    expected = {
+        "passed": stats.get("expected", 0),
+        "failed": stats.get("unexpected", 0),
+        "skipped": stats.get("skipped", 0),
+        "flaky": stats.get("flaky", 0),
+    }
+    expected["total"] = sum(expected.values())
+    for key, value in expected.items():
+        if report["summary"].get(key) != value:
+            raise ValueError(f"summary.{key} does not match json-results.json stats")
+    duration = report["summary"].get("duration_s")
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or abs(duration - round(stats.get("duration", 0) / 1000, 2)) > 0.02:
+        raise ValueError("summary.duration_s does not match json-results.json stats")
+    allowed_classifications = {"regression", "test_bug", "flaky", "infra", "unknown"}
+    for index, failure in enumerate(report["failures"]):
+        if not isinstance(failure, dict) or failure.get("classification") not in allowed_classifications:
+            raise ValueError(f"failures[{index}].classification is unsupported")
     if report.get("skipped_analysis") is None:
         report.pop("skipped_analysis", None)
     if isinstance(report.get("platform"), dict):
@@ -150,7 +206,7 @@ try:
     with open(sys.argv[2], "w") as stream:
         json.dump(report, stream)
         stream.write("\n")
-except (OSError, ValueError, AttributeError) as error:
+except (OSError, ValueError, TypeError, AttributeError) as error:
     print(f"ERROR: invalid evaluation JSON: {error}", file=sys.stderr)
     print(f"Final response preview ({len(raw)} chars): {raw[:600]!r}", file=sys.stderr)
     sys.exit(1)

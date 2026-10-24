@@ -54,7 +54,9 @@ JSON object on stdout; diagnostics, the Codex thread ID, and token usage go to
 stderr. Codex receives the bundled `report.schema.json` as its structured
 output contract. The adapter validates the final report before delivery,
 removes schema-only null fields, and fails on agent errors, timeout, missing
-output, or invalid JSON.
+output, or invalid JSON. It also requires a successful shell command in the
+Codex event stream and verifies summary counts against Playwright's own stats;
+an agent response that did not inspect the artifacts cannot be posted to Slack.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -87,9 +89,15 @@ The task reads `pipelines-data` as a **read-only workspace**. It uses writable
 `emptyDir` volumes at `/tmp` and `/var/lib/codex-runner`, a read-only root
 filesystem, no added capabilities, and
 the UID assigned by OpenShift. Codex uses `workspace-write` sandboxing for its
-scratch directory. It does not automatically bypass the sandbox if the
-cluster disallows the required Linux features; verify this on the target
-cluster. A local image build is not an OpenShift execution test.
+scratch directory. Before calling the model, the adapter runs a credential-free
+`codex sandbox -P :workspace` command probe. Codex's Linux sandbox needs to
+create an inner user namespace; a restrictive cluster policy can deny this even
+though the container itself starts normally. In that case the step reports a
+clear sandbox error and sends no evaluation or Slack message. It does not
+automatically bypass the sandbox. A local image build is not an OpenShift
+execution test. With `ignore-errors=true`, Tekton still marks such an evaluation
+step successful after logging the failure; use `false` while validating the
+cluster integration.
 The step sets `HOME=/tekton/home` so Tekton can copy registry credentials to its
 writable home volume instead of the UBI image's read-only home directory.
 
