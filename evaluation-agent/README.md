@@ -105,6 +105,24 @@ use `false` while validating the cluster integration.
 The step sets `HOME=/tekton/home` so Tekton can copy registry credentials to its
 writable home volume instead of the UBI image's read-only home directory.
 
+Apply the dedicated [evaluation ServiceAccount](tkn/serviceaccount.yaml) in the
+PipelineRun namespace before running the sample pipeline:
+
+```bash
+oc apply -n <namespace> -f evaluation-agent/tkn/serviceaccount.yaml
+```
+
+Give `evaluate-results` this account through the PipelineRun's
+`taskRunSpecs`; the account and that task's pod template disable automatic API
+token mounting. Do not attach unrelated Secrets or permissions to this account.
+The pipeline binds the evaluation task's workspace with a task-specific
+`subPath` of `<run-id>/qe-results`, and passes `.` for both results-path
+parameters. The evaluation pod therefore mounts only that run's results
+directory, not the entire shared PVC or the sibling host key. The directory
+must already exist when the evaluation task starts. Other pipeline tasks retain
+their original workspace bindings. This narrows the evaluation pod's mount;
+it does not change access granted to other pods in the namespace.
+
 Provision a Secret named `codex-api-key` with key `api-key` through your usual
 secret-management mechanism. Set the task's `api-key-secret` parameter to use a
 different Secret. The optional existing `slack-webhook` Secret uses key `url`.
@@ -126,6 +144,9 @@ metadata:
 spec:
   taskRef:
     name: evaluate-e2e-results
+  serviceAccountName: evaluation-agent
+  podTemplate:
+    automountServiceAccountToken: false
   timeout: 4m
   params:
   - name: image-repository
@@ -133,7 +154,9 @@ spec:
   - name: image-version
     value: v0.1.0
   - name: workspace-resources-path
-    value: <same path used by e2e-runner>
+    value: .
+  - name: workspace-qe-subpath
+    value: .
   - name: agent-model
     value: gpt-6-luna
   - name: agent-timeout
@@ -142,6 +165,7 @@ spec:
     value: 'false'
   workspaces:
   - name: pipelines-data
+    subPath: <run-id>/qe-results
     persistentVolumeClaim:
       claimName: pipelines-data
 ```
