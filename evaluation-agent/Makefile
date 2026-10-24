@@ -1,4 +1,4 @@
-VERSION ?= 0.1.0
+VERSION ?= 0.1.2
 CONTAINER_MANAGER ?= podman
 CODEX_CLI_VERSION ?= 0.164.0
 
@@ -46,13 +46,16 @@ oci-push:
 	${CONTAINER_MANAGER} push ${IMG}
 
 # Create the tekton task bundle.
-# The task's `image-version` default is rewritten to IMAGE_TAG so a versioned
+# Both task image-version defaults are rewritten to IMAGE_TAG so a versioned
 # bundle pins the matching agent image instead of floating on `nightly`.
 .PHONY: tkn-push
 tkn-push: install-out-of-tree-tools
 	$(info    Pushing the tekton task image: $(TKN_IMG) (image-version=$(IMAGE_TAG)))
 	@mkdir -p out
 	@sed -e "s|^\( *default: *\)'nightly'|\1'$(IMAGE_TAG)'|" tkn/task.yaml >out/task.yaml
+	@sed -e "s|^\( *default: *\)'nightly'|\1'$(IMAGE_TAG)'|" tkn/slack-task.yaml >out/slack-task.yaml
 	@grep -q "default: '$(IMAGE_TAG)'" out/task.yaml \
 		|| { echo "ERROR: failed to pin image-version in tkn/task.yaml" >&2; exit 1; }
-	$(TOOLS_BINDIR)/tkn bundle push $(TKN_IMG) -f out/task.yaml
+	@grep -q "default: '$(IMAGE_TAG)'" out/slack-task.yaml \
+		|| { echo "ERROR: failed to pin image-version in tkn/slack-task.yaml" >&2; exit 1; }
+	$(TOOLS_BINDIR)/tkn bundle push $(TKN_IMG) -f out/task.yaml -f out/slack-task.yaml

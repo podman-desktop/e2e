@@ -49,7 +49,7 @@ trap 'forward_signal HUP 129' HUP
 
 # The skill requires shell commands to read Playwright artifacts. In hardened
 # containers Codex can complete a turn even when its inner sandbox never starts
-# a command, so check that boundary before calling the model or posting Slack.
+# a command, so check that boundary before calling the model.
 agent_sandbox="${AGENT_SANDBOX:-workspace-write}"
 case "$agent_sandbox" in
   workspace-write|danger-full-access) ;;
@@ -84,9 +84,8 @@ fi
 prompt="Use the evaluate-e2e-results skill at $SKILL_DIR/SKILL.md to analyze the read-only results directory named by RESULTS_DIR ($RESULTS_DIR). Return the complete evaluation JSON matching the supplied output schema. Use null for unavailable optional platform fields and for skipped_analysis when no tests were skipped; use false and 0 for truncated and truncated_count when the report is not truncated. Reporting is handled by the caller; do not send notifications."
 log "Evaluating $RESULTS_DIR (model=${AGENT_MODEL:-gpt-6-luna}, timeout=${AGENT_TIMEOUT:-3m}, sandbox=$agent_sandbox)"
 
-# Keep Slack credentials out of the agent environment. --json is the event
-# stream, while --output-last-message captures the final report separately.
-env -u SLACK_WEBHOOK_URL /usr/local/bin/codex-runner \
+# --json is the event stream; --output-last-message captures the final report.
+/usr/local/bin/codex-runner \
   --sandbox "$agent_sandbox" --json --output-schema "$REPORT_SCHEMA" \
   --output-last-message "$evaluation_dir/final.txt" "$prompt" \
   >"$evaluation_dir/events.jsonl" < /dev/null &
@@ -224,18 +223,15 @@ except (OSError, ValueError, TypeError, AttributeError) as error:
     sys.exit(1)
 PY
 
-# Emit/persist the report even if subsequent Slack delivery fails. The webhook
-# response must never contaminate the single JSON object written to stdout.
+# Emit the full report. A bounded digest may be handed to a separate Slack
+# TaskRun, but this pod never receives a Slack credential or sends a webhook.
 [[ -z "${EVALUATION_OUT:-}" ]] || cat "$evaluation_dir/report.json" >"$EVALUATION_OUT"
 cat "$evaluation_dir/report.json"
-if [[ -n "${SLACK_WEBHOOK_URL:-}" ]]; then
-  log "Posting evaluation to Slack..."
-  python3 "$SKILL_DIR/scripts/slack_formatter.py" \
+if [[ -n "${SLACK_TEXT_OUT:-}" ]]; then
+  python3 "$SKILL_DIR/scripts/slack_formatter.py" --text-only --max-bytes 2048 \
     --pipeline-name "${PIPELINE_NAME:-}" \
     --artifacts-url "${ARTIFACTS_URL:-}" \
-    --workflow-var "${SLACK_WORKFLOW_VAR:-text}" \
     <"$evaluation_dir/report.json" \
-    | curl -sS --fail --connect-timeout 10 --max-time 30 --output /dev/null \
-      -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
-  log "Slack post complete."
+    >"$evaluation_dir/slack-text"
+  cat "$evaluation_dir/slack-text" >"$SLACK_TEXT_OUT"
 fi

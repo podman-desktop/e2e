@@ -1,5 +1,5 @@
 # make oci-build builds this base locally first; no published runner is needed.
-ARG CODEX_RUNNER_IMAGE=localhost/codex-runner:v0.1.0
+ARG CODEX_RUNNER_IMAGE=localhost/codex-runner:v0.1.2
 FROM ${CODEX_RUNNER_IMAGE}
 
 LABEL org.opencontainers.image.title="Podman Desktop E2E evaluation agent" \

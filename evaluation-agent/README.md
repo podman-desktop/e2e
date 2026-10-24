@@ -2,7 +2,8 @@
 
 The complete evaluation template: a Codex-based image with the
 [`evaluate-e2e-results`](../.skills/evaluate-e2e-results) skill baked in, a
-[Tekton task](tkn/task.yaml), and optional Slack Workflow Builder reporting.
+[Tekton evaluation task](tkn/task.yaml), and a separate optional
+[Slack delivery task](tkn/slack-task.yaml).
 The image extends the [generic Codex runner](../codex-runner), which contains
 no skill or reporting logic.
 
@@ -17,9 +18,9 @@ make -C evaluation-agent oci-push
 make -C evaluation-agent tkn-push
 ```
 
-The build first creates `localhost/codex-runner:v0.1.0`, then adds the skill and
+The build first creates `localhost/codex-runner:v0.1.2`, then adds the skill and
 evaluation adapter. Neither image needs to have been published beforehand.
-The final image defaults to `ghcr.io/podman-desktop/evaluation-agent:v0.1.0`.
+The final image defaults to `ghcr.io/podman-desktop/evaluation-agent:v0.1.2`.
 Override `IMG` and `RUNNER_IMG` for local tags. `PLATFORM=linux/amd64` is the
 default even on Apple Silicon; `PLATFORM=linux/arm64` is available for native
 local development. Both stages use the same pinned `CODEX_CLI_VERSION`.
@@ -28,7 +29,7 @@ The evaluation build uses the repository root as its context and explicitly
 selects `evaluation-agent/.containerignore`. It does not impose exclusions on
 other images in this repository.
 
-`make tkn-push` pins the bundled task's image version to `IMAGE_TAG`
+`make tkn-push` bundles both tasks and pins their image versions to `IMAGE_TAG`
 (default `v${VERSION}`). The existing nightly workflow uses
 `IMAGE_TAG=nightly TKN_TAG=nightly`. The bundle installer currently targets a
 Linux AMD64 build host, as used by the publishing workflows.
@@ -43,7 +44,7 @@ podman run --rm --read-only --tmpfs /tmp:rw,nosuid,nodev \
   --cap-drop=all --security-opt=no-new-privileges \
   -e CODEX_API_KEY \
   -v "$PWD/results:/artifacts:ro" \
-  ghcr.io/podman-desktop/evaluation-agent:v0.1.0 /artifacts
+  ghcr.io/podman-desktop/evaluation-agent:v0.1.2 /artifacts
 ```
 
 The directory must contain `json-results.json` directly or in a
@@ -52,11 +53,11 @@ directory containing the JSON report. The skill also reads available
 error contexts, buffered logs, and traces. The adapter emits one evaluation
 JSON object on stdout; diagnostics, the Codex thread ID, and token usage go to
 stderr. Codex receives the bundled `report.schema.json` as its structured
-output contract. The adapter validates the final report before delivery,
+output contract. The adapter validates the final report before formatting,
 removes schema-only null fields, and fails on agent errors, timeout, missing
 output, or invalid JSON. It also requires a successful shell command in the
 Codex event stream and verifies summary counts against Playwright's own stats;
-an agent response that did not inspect the artifacts cannot be posted to Slack.
+an agent response that did not inspect the artifacts cannot produce a Slack digest.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -65,24 +66,23 @@ an agent response that did not inspect the artifacts cannot be posted to Slack.
 | `AGENT_MODEL` | `gpt-6-luna` | Runtime model selection |
 | `AGENT_TIMEOUT` | `3m` | Agent deadline, configurable at runtime |
 | `AGENT_SANDBOX` | `workspace-write` | Codex command sandbox; explicitly set `danger-full-access` only when the hardened container is the execution boundary |
-| `SLACK_WEBHOOK_URL` | Unset | Optional Slack Workflow Builder trigger |
-| `SLACK_WORKFLOW_VAR` | `text` | Webhook payload variable |
 | `PIPELINE_NAME` | Empty | Slack header label |
 | `ARTIFACTS_URL` | Empty | Link to full artifacts |
 | `EVALUATION_OUT` | Unset | Optional writable path for the full report |
 | `SESSION_OUT` | Unset | Optional writable path for the Codex thread ID |
 | `USAGE_OUT` | Unset | Optional writable path for token usage JSON |
+| `SLACK_TEXT_OUT` | Unset | Optional writable path for a digest capped at 2048 UTF-8 bytes |
 
 Model and timeout overrides work without rebuilding the image. Codex progress
 is captured as JSONL separately from the final message. Token usage contains
 `input_tokens`, `cached_input_tokens`, and `output_tokens`, or `{}` when no usage
 was reported. Cached tokens are part of input tokens, not additional tokens.
 
-If configured, Slack delivery uses the existing skill formatter. The webhook
-credential is removed from the agent environment. The report is emitted and
-saved before delivery, so a webhook failure does not discard the report. A
-webhook failure still returns a nonzero status; each request is limited to 30
-seconds, with a 10-second connection timeout.
+The evaluation TaskRun never receives the Slack webhook. When
+`SLACK_TEXT_OUT` is set, it writes a bounded digest to that file after validating
+the report. The separate Slack task receives only that digest and its webhook
+Secret; it has no artifact workspace or Codex API key. It sends the digest with
+a 30-second request limit and a 10-second connection timeout.
 
 ## OpenShift Pipelines
 
@@ -106,10 +106,12 @@ The step sets `HOME=/tekton/home` so Tekton can copy registry credentials to its
 writable home volume instead of the UBI image's read-only home directory.
 
 Apply the dedicated [evaluation ServiceAccount](tkn/serviceaccount.yaml) in the
-PipelineRun namespace before running the sample pipeline:
+PipelineRun namespace before running the sample pipeline. If Slack delivery is
+enabled, apply the separate [Slack ServiceAccount](tkn/slack-serviceaccount.yaml):
 
 ```bash
 oc apply -n <namespace> -f evaluation-agent/tkn/serviceaccount.yaml
+oc apply -n <namespace> -f evaluation-agent/tkn/slack-serviceaccount.yaml
 ```
 
 Give `evaluate-results` this account through the PipelineRun's
@@ -124,17 +126,23 @@ their original workspace bindings. This narrows the evaluation pod's mount;
 it does not change access granted to other pods in the namespace.
 
 Provision a Secret named `codex-api-key` with key `api-key` through your usual
-secret-management mechanism. Set the task's `api-key-secret` parameter to use a
-different Secret. The optional existing `slack-webhook` Secret uses key `url`.
-Neither credential belongs in task parameters, source control, or images.
+secret-management mechanism. Set the evaluation task's `api-key-secret`
+parameter to use a different Secret. The Slack task reads its own
+`slack-webhook` Secret with key `url`, only when explicitly enabled in the
+PipelineRun. Neither credential belongs in task parameters, source control, or
+images. Use distinct egress policies: the evaluation pod needs only the model
+API, while the Slack pod needs only its webhook endpoint.
 
-The task exposes `session-id` (Codex thread ID) and `token-usage` (small JSON).
-The full evaluation stays on stdout because it can exceed Tekton result size
-limits. For standalone container runs, use `EVALUATION_OUT` to save it.
+The evaluation task exposes `session-id` (Codex thread ID), `token-usage`
+(small JSON), and `slack-text` (at most 2048 UTF-8 bytes, or `SKIP` after an
+ignored failure). The full evaluation
+stays on stdout because it can exceed Tekton result size limits. For standalone
+container runs, use `EVALUATION_OUT` to save it.
 `ignore-errors=true` preserves the existing best-effort behavior; set it to
 `false` when checking the integration so failures fail the TaskRun.
 
-After applying `tkn/task.yaml` and publishing your image, adapt this example:
+After applying both `tkn/task.yaml` and `tkn/slack-task.yaml` and publishing your
+image, adapt this standalone evaluation example:
 
 ```yaml
 apiVersion: tekton.dev/v1beta1
@@ -152,7 +160,7 @@ spec:
   - name: image-repository
     value: ghcr.io/podman-desktop/evaluation-agent
   - name: image-version
-    value: v0.1.0
+    value: v0.1.2
   - name: workspace-resources-path
     value: .
   - name: workspace-qe-subpath
@@ -182,6 +190,9 @@ can return 137. The task propagates failures unless `ignore-errors=true`.
 - The default model is `gpt-6-luna`; the default agent timeout is `3m`.
 - The Claude output envelope is replaced by Codex events and final-message
   capture. `session-id` now identifies a Codex thread.
+- Slack delivery runs in a separate TaskRun with its own Secret and no model
+  credentials or artifact workspace. The evaluation TaskRun passes only a
+  bounded digest through a Tekton result.
 - `agent-max-budget`, `AGENT_MAX_BUDGET`, `cost-usd`, and `COST_OUT` have no
   supported Codex equivalent. The adapter rejects the obsolete environment
   settings instead of silently suggesting a dollar budget is enforced.

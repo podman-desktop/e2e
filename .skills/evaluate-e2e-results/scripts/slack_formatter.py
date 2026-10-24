@@ -5,7 +5,7 @@ Reads evaluation JSON from stdin, writes a flat {"<var>": "<text>"} payload to s
 suitable for a Slack Workflow Builder webhook trigger (not Block Kit).
 
 Usage:
-  <agent CLI, headless> ... | python3 slack_formatter.py | curl -X POST -H 'Content-type: application/json' -d @- "$WEBHOOK_URL"
+  python3 slack_formatter.py --text-only --max-bytes 2048 < eval.json > digest.txt
   python3 slack_formatter.py --pipeline-name "pde2e-nightly-libkrun" --artifacts-url "https://..." < eval.json
 
 Environment variables (substitute for CLI args):
@@ -208,6 +208,7 @@ def format_workflow_text(
     data: dict,
     artifacts_url: str | None = None,
     pipeline_name: str | None = None,
+    max_bytes: int | None = None,
 ) -> str:
     s = data.get("summary", {})
     p = data.get("platform", {})
@@ -364,8 +365,20 @@ def format_workflow_text(
         )
         body = ["\n".join(b) for b, _ in blocks]
         text = "\n".join([head_text] + body + [""] + notes + foot).strip()
-        if len(text) <= MAX_TEXT_CHARS or not blocks:
-            return text
+        fits_bytes = max_bytes is None or len(text.encode("utf-8")) <= max_bytes
+        if (len(text) <= MAX_TEXT_CHARS and fits_bytes) or not blocks:
+            if fits_bytes:
+                return text
+            # Exceptionally long metadata can fill the result without any
+            # failure blocks. Preserve the artifacts link when possible.
+            marker = "\n⚠️ Digest shortened; see full artifacts"
+            link = next((line for line in reversed(foot) if line.startswith("🔗 Logs & artifacts:")), "")
+            suffix = marker + ("\n" + link if link else "")
+            if len(suffix.encode("utf-8")) > max_bytes // 2:
+                suffix = marker
+            budget = max_bytes - len(suffix.encode("utf-8"))
+            prefix = text.encode("utf-8")[:budget].decode("utf-8", errors="ignore").rstrip()
+            return prefix + suffix
         omitted += blocks.pop()[1]
 
 
@@ -374,7 +387,11 @@ def main():
     parser.add_argument("--artifacts-url", default=None, help="URL to full test artifacts")
     parser.add_argument("--pipeline-name", default=None, help="Pipeline name (used to parse OS + backend)")
     parser.add_argument("--workflow-var", default=None, help="Payload key name (default: 'text')")
+    parser.add_argument("--text-only", action="store_true", help="Write only digest text for a separate Slack Task")
+    parser.add_argument("--max-bytes", type=int, default=None, help="Maximum UTF-8 bytes of digest text")
     args = parser.parse_args()
+    if args.max_bytes is not None and args.max_bytes < 256:
+        parser.error("--max-bytes must be at least 256")
 
     artifacts_url = args.artifacts_url or os.environ.get("ARTIFACTS_URL")
     pipeline_name = args.pipeline_name or os.environ.get("PIPELINE_NAME")
@@ -383,8 +400,14 @@ def main():
     raw = sys.stdin.read()
     data = extract_json(raw)
 
-    text = format_workflow_text(data, artifacts_url, pipeline_name)
-    print(json.dumps({workflow_var: text}, ensure_ascii=False))
+    text = format_workflow_text(data, artifacts_url, pipeline_name, args.max_bytes)
+    if args.text_only:
+        # Kubernetes cannot put NUL or other non-printable controls in an env
+        # var. Newlines and tabs are meaningful in the Slack digest.
+        text = "".join(ch for ch in text if ch >= " " or ch in "\n\t")
+        print(text, end="")
+    else:
+        print(json.dumps({workflow_var: text}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

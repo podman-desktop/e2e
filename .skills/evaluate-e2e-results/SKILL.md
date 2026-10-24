@@ -324,14 +324,18 @@ Output **only** a single valid JSON object. No markdown fences, no preamble. Mus
 
 ## Slack formatting (post-processing step)
 
-The bundled `scripts/slack_formatter.py` transforms evaluation JSON into a flat `{"text": "..."}` payload for a Slack Workflow Builder webhook trigger (not Block Kit).
+The bundled `scripts/slack_formatter.py` transforms evaluation JSON into a flat
+`{"text": "..."}` payload for a Slack Workflow Builder webhook trigger (not
+Block Kit). In OpenShift Pipelines, the evaluation task emits a bounded text
+digest as a Tekton result, and a separate Slack task holds the webhook Secret
+and sends it. The evaluation pod never receives the webhook.
 
 ```bash
 # <agent CLI, headless> ... > /tmp/evaluation-raw.txt
-cat /tmp/evaluation-raw.txt | python3 /path/to/slack_formatter.py \
+python3 /path/to/slack_formatter.py --text-only --max-bytes 2048 \
   --pipeline-name "$PIPELINE_NAME" \
   --artifacts-url "$ARTIFACTS_URL" \
-  | curl -X POST -H 'Content-type: application/json' -d @- "$SLACK_WEBHOOK_URL"
+  </tmp/evaluation-raw.txt >/tmp/slack-digest.txt
 ```
 
 Environment variables `ARTIFACTS_URL`, `PIPELINE_NAME`, `SLACK_WORKFLOW_VAR` can substitute for CLI args.
