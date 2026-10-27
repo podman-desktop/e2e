@@ -7,8 +7,9 @@ E2E failures. It reads the Playwright results of a run (`json-results.json`,
 produces:
 
 - the full JSON report (schema: `task/output.schema.json`) in the step log;
-- a plain-text digest (≤1500 characters) in the `summary` result, which
-  `tkn/slack-task.yaml` posts to a Slack Workflow Builder trigger.
+- a plain-text digest in the `summary` result, which `tkn/slack-task.yaml`
+  posts to a Slack Workflow Builder trigger. It lists as many failures as fit
+  in 2600 characters and the 3072-byte result limit, and says how many it left out.
 
 ## Layout
 
@@ -32,7 +33,9 @@ The output schema checks the report's shape. `post.sh` checks that it describes
   `skipped > 0`.
 
 Then it removes the null fields that the schema requires and the skill omits, and
-runs the skill's `scripts/slack_formatter.py` to make the digest.
+runs the skill's `scripts/slack_formatter.py` to make the digest. The formatter
+limits characters and the result limit is in bytes, so `post.sh` tries 2600
+characters first and steps down until the digest fits in 3072 bytes.
 
 ## Pipeline wiring
 
