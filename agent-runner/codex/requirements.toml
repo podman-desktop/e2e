@@ -1,0 +1,42 @@
+# Enforced Codex policy for every agent bundle built on agent-runner.
+# This is the highest-precedence config layer: user config, profiles and
+# `-c` flags cannot loosen it. See README.md "Security model".
+
+# Headless only: nothing may wait for an approval that nobody gives.
+allowed_approval_policies = ["never"]
+
+# Only "disabled" web search is allowed.
+allowed_web_search_modes = []
+
+# Present but empty: every MCP server is disabled.
+[mcp_servers]
+
+# Forbidden command prefixes. Codex has no default-deny, so this is a
+# blocklist: it stops honest mistakes and naive prompt injection. The pod
+# boundary (read-only rootfs, no SA token, read-only inputs) is what holds when
+# it is bypassed. Most of these binaries are also absent from the image.
+[rules]
+prefix_rules = [
+  # Network clients
+  { pattern = [{ token = "curl" }], decision = "forbidden", justification = "No network access from agent commands." },
+  { pattern = [{ token = "wget" }], decision = "forbidden", justification = "No network access from agent commands." },
+  { pattern = [{ token = "nc" }], decision = "forbidden", justification = "No network access from agent commands." },
+  { pattern = [{ token = "ncat" }], decision = "forbidden", justification = "No network access from agent commands." },
+  { pattern = [{ token = "ssh" }], decision = "forbidden", justification = "No remote access from agent commands." },
+  { pattern = [{ token = "scp" }], decision = "forbidden", justification = "No remote access from agent commands." },
+  { pattern = [{ token = "rsync" }], decision = "forbidden", justification = "No remote access from agent commands." },
+  { pattern = [{ token = "python3" }, { token = "-m" }, { token = "http.server" }], decision = "forbidden", justification = "No servers from agent commands." },
+  # Source control and package managers
+  { pattern = [{ token = "git" }], decision = "forbidden", justification = "Agents work on artifacts, not repositories." },
+  { pattern = [{ token = "pip" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "pip3" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "python3" }, { token = "-m" }, { token = "pip" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "npm" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "npx" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "microdnf" }], decision = "forbidden", justification = "No package installs at runtime." },
+  { pattern = [{ token = "dnf" }], decision = "forbidden", justification = "No package installs at runtime." },
+  # Environment dumps (the API key lives in the Codex process environment)
+  { pattern = [{ token = "env" }], decision = "forbidden", justification = "Do not dump the environment." },
+  { pattern = [{ token = "printenv" }], decision = "forbidden", justification = "Do not dump the environment." },
+  { pattern = [{ token = "cat" }, { token = "/proc/self/environ" }], decision = "forbidden", justification = "Do not dump the environment." },
+]
