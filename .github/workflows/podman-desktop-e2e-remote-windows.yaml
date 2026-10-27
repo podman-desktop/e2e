@@ -1,5 +1,5 @@
 name: PD Podman-Remote E2E Nightly
-run-name: PD E2E Podman Remote ${{ inputs.podman_version || 'latest' }} ${{ inputs.podman_provider == 'hyperv' && 'HyperV' || 'WSL' }} Production mode
+run-name: PD E2E Podman Remote WSL - Podman ${{ inputs.podman_version || 'latest' }}
 
 on:
   schedule:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       pd_repo_options:
-        default: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
-        description: 'Podman Desktop Extension repo, fork and branch'
+        default: 'FORK=podman-desktop,BRANCH=main'
+        description: 'Podman Desktop fork and branch'
         type: string
         required: true
       npm_target:
@@ -18,204 +18,124 @@ on:
         required: true
       podman_version:
         default: 'latest'
-        description: 'Podman version (use "latest" to auto-fetch latest release, or specify version like "v5.6.1")'
-        type: string
-        required: true
-      podman_desktop_url:
-        description: 'podman desktop testing-prerelease setup-exe url'
+        description: 'Podman version to install (e.g. "latest" or "v5.6.1")'
         type: string
         required: false
-      podman_options:
-        default: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
-        description: 'Podman machine configuration options, no spaces'
-        type: 'string'
-        required: true
-      podman_provider:
-        type: choice
-        description: 'Podman virtualization provider, default is wsl, alternative hyperv'
-        options:
-        - wsl
-        - hyperv
-        required: true
       env_vars:
         default: 'ELECTRON_ENABLE_INSPECT=true'
-        description: 'Env. Variables passed into target machine, ie: VAR1=xxx,VAR2=true,VAR3=15,VAR4="Pass me along"'
-        type: 'string'
-        required: true
-      e2e_runner_version:
-        description: 'ghcr.io/podman-desktop/e2e-runner tag (blank = vars.E2E_RUNNER_VERSION, or type nightly)'
+        description: 'Env. Variables passed to the test run, ie: VAR1=xxx,VAR2=true'
         type: 'string'
         required: false
-      mapt_params:
-        description: |
-          **Create instance (leave empty to use repo secrets/variables)**
-
-          **Format:** IMAGE=xxx;VERSION_TAG=xxx;CPUS=xxx;MEMORY=xxx;EXCLUDED_REGIONS=xxx
-
-          **Example:**
-            IMAGE=quay.io/redhat-developer/mapt;VERSION_TAG=v0.9.8;CPUS=4;MEMORY=32;EXCLUDED_REGIONS="westindia,centralindia,southindia,australiacentral,australiacentral2,australiaeast,australiasoutheast,southafricanorth,southafricawest"
-        required: false
-        type: string
 
 jobs:
   windows:
-    name: ${{ matrix.windows-version }} - ${{ matrix.windows-featurepack }}
+    name: Windows Remote E2E
     timeout-minutes: 90
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        windows-version: ['11']
-        windows-featurepack: ['25h2-ent']
+    runs-on: windows-2025
+    permissions:
+      contents: read
 
     steps:
-    - name: Get Latest Podman Desktop testing prerelease
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        tag=$(curl --request GET \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "https://api.github.com/repos/podman-desktop/testing-prereleases/tags?pages=1" | jq -r '.[0].name')
-        echo "Tag: $tag"
-        # releaes id
-        id=$(curl --request GET \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/tags/$tag" | jq -r '.id')
-        echo "Release ID: $id"
-        # list assets with setup-x64.exe suffix
-        url=$(curl --request GET \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: Bearer ${{ env.GH_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "https://api.github.com/repos/podman-desktop/testing-prereleases/releases/$id/assets" | jq -r '.[] | select (.name | test("setup-x64.exe$") and (contains("airgap") | not))' | jq -r '.browser_download_url')
-        echo "Podman Desktop testing prerelease url: ${url}"
-        echo "DEFAULT_PD_URL=${url}" >> $GITHUB_ENV
-
-    - name: Fetch latest Podman version
-      id: fetch-podman
-      uses: redhat-actions/podman-install/.github/actions/fetch-latest-podman-version-windows@aea6ff44f2a4a82da13d22061ce73443a125925d
-      with:
-        version_input: ${{ github.event.inputs.podman_version || 'latest' }}
-        file_type: 'msi'
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-
     - name: Set the default env. variables
+      shell: bash
       env:
+        DEFAULT_PD_REPO_OPTIONS: 'FORK=podman-desktop,BRANCH=main'
         DEFAULT_NPM_TARGET: 'test:e2e:remote:run'
-        DEFAULT_PODMAN_PROVIDER: 'wsl'
-        DEFAULT_PODMAN_OPTIONS: 'INIT=0,START=0,ROOTFUL=0,NETWORKING=0'
-        DEFAULT_PD_REPO_OPTIONS: 'REPO=podman-desktop,FORK=podman-desktop,BRANCH=main'
         DEFAULT_ENV_VARS: 'ELECTRON_ENABLE_INSPECT=true'
       run: |
-        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "PODMAN_PROVIDER=${{ github.event.inputs.podman_provider || env.DEFAULT_PODMAN_PROVIDER }}" >> $GITHUB_ENV
-        echo "PODMAN_URL=${{ steps.fetch-podman.outputs.download_url }}" >> $GITHUB_ENV
-        echo "PD_URL=${{ github.event.inputs.podman_desktop_url || env.DEFAULT_PD_URL }}" >> $GITHUB_ENV
-        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
-        echo "${{ github.event.inputs.podman_options || env.DEFAULT_PODMAN_OPTIONS }}" | awk -F ',' \
-         '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PODMAN_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
-        '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "PD_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-        echo "E2E_RUNNER_VERSION=${{ github.event.inputs.e2e_runner_version || vars.E2E_RUNNER_VERSION }}" >> $GITHUB_ENV
+          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" | awk -F ',' \
+          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
-        # For mapt_params, use repo variables directly if input is empty
-        if [ -n "${{ github.event.inputs.mapt_params }}" ]; then
-          mapt_params="${{ github.event.inputs.mapt_params }}"
-        else
-          mapt_params="IMAGE=${{ vars.MAPT_IMAGE }};VERSION_TAG=${{ vars.MAPT_VERSION_TAG }};CPUS=${{ vars.MAPT_CPUS }};MEMORY=${{ vars.MAPT_MEMORY }};EXCLUDED_REGIONS=\"${{ vars.MAPT_EXCLUDED_REGIONS }}\""
-        fi
-        echo "$mapt_params" | awk -F ';' '{for (i=1; i<=NF; i++) {split($i, kv, "="); print "MAPT_"kv[1]"="kv[2]}}' >> $GITHUB_ENV
-
-    - name: Create instance
-      uses: podman-desktop/e2e/.github/actions/create-instance@main
+    - name: Checkout Podman Desktop
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        mapt-image: ${{ env.MAPT_IMAGE || '' }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
-        windows-version: ${{ matrix.windows-version }}
-        windows-featurepack: ${{ matrix.windows-featurepack }}
-        cpus: ${{ env.MAPT_CPUS || '' }}
-        memory: ${{ env.MAPT_MEMORY || '' }}
-        excluded-regions: ${{ env.MAPT_EXCLUDED_REGIONS || '' }}
-        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
-        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
-        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
+        repository: ${{ env.FORK }}/podman-desktop
+        ref: ${{ env.BRANCH }}
+        persist-credentials: false
 
-    - name: Check instance system info
-      uses: podman-desktop/e2e/.github/actions/instance-system-info@main
-
-    - name: Emulate X session
-      uses: podman-desktop/e2e/.github/actions/emulate-x-session@main
-
-    - name: Run Podman Desktop Playwright E2E tests
-      uses: podman-desktop/e2e/.github/actions/run-playwright-test@main
+    - name: Checkout E2E repo
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        e2e-runner-tag: ${{ env.E2E_RUNNER_VERSION }}
-        podman-download-url: ${{ env.PODMAN_URL }}
-        podman-desktop-url: ${{ env.PD_URL }}
-        fork-repo: ${{ env.PD_FORK }}
-        branch-name: ${{ env.PD_BRANCH }}
-        npm-target: ${{ env.NPM_TARGET }}
-        podman-init: ${{ env.PODMAN_INIT }}
-        rootful: ${{ env.PODMAN_ROOTFUL }}
-        podman-start: ${{ env.PODMAN_START }}
-        user-networking: ${{ env.PODMAN_NETWORKING }}
-        podman-provider: ${{ env.PODMAN_PROVIDER }}
-        env-vars: ${{ env.ENV_VARS }}
-        script-path: 'remote_machine.ps1'
-        ci-bot-token: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
+        repository: podman-desktop/e2e
+        path: e2e
+        persist-credentials: false
+
+    - name: Install Podman Desktop
+      id: podman-desktop-install
+      uses: podman-desktop/gh-extensions-actions/.github/actions/podman-desktop-install@e59cd52b942e8dfcc187293c5d8e9f3831c7ac0c # v0.11.0
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      with:
+        run_install: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'pnpm'
+
+    - name: Install npm dependencies
+      run: pnpm install
+
+    - name: Install Podman
+      id: podman-install
+      uses: redhat-actions/podman-install@4a5b244246ee7d71f896e53bbde9d98a503ddb9b # v0.3.0
+      with:
+        podman-version-input: ${{ github.event.inputs.podman_version || 'latest' }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Podman remote machine connection
+      shell: pwsh
+      run: |
+        & "${{ github.workspace }}/e2e/e2e-runner/lib/windows/scripts/remote_machine.ps1"
+        if ($LASTEXITCODE -ne 0) { throw "remote_machine.ps1 failed with exit code $LASTEXITCODE" }
+
+    - name: Run Podman Remote E2E tests
+      shell: pwsh
+      env:
+        PODMANDESKTOP_CI_BOT_TOKEN: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
+        PODMAN_DESKTOP_BINARY: ${{ steps.podman-desktop-install.outputs.binary }}
+        DEBUGGING_PORT: 9222
+      run: |
+        Write-Host "Running: pnpm ${{ env.NPM_TARGET }}"
+        Write-Host "Binary: $env:PODMAN_DESKTOP_BINARY"
+        pnpm ${{ env.NPM_TARGET }}
 
     - name: Create json file with workflow run attributes
       if: always()
       uses: podman-desktop/e2e/.github/actions/generate-test-attributes@053dd9e2e4511c412dcaa835d884eec303797ed6
       with:
         filename: workflow-run-attributes.json
-        runs-on-gh-runner: false
-        os: windows
-        os-version: ${{ matrix.windows-version }}
-        architecture: x86_64
-        podman-provider: ${{ env.PODMAN_PROVIDER }}
-        podman-version: ${{ steps.fetch-podman.outputs.version }}
-
-    - name: Destroy instance
-      if: always()
-      uses: podman-desktop/e2e/.github/actions/destroy-instance@main
-      with:
-        mapt-image: ${{ env.MAPT_IMAGE || '' }}
-        mapt-version: ${{ env.MAPT_VERSION_TAG || '' }}
-        arm-tenant-id: ${{ secrets.ARM_TENANT_ID }}
-        arm-subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-        arm-client-id: ${{ secrets.ARM_CLIENT_ID }}
-        arm-client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
-
-    - name: Generate Infrastructure Bug Report
-      if: failure()
-      uses: podman-desktop/e2e/.github/actions/generate-infra-report@main
+        runs-on-gh-runner: true
+        podman-version: ${{ steps.podman-install.outputs.podman-version }}
+        podman-provider: wsl
 
     - name: Publish Test Report
       uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
-      if: always() # always run even if the previous step fails
+      if: always()
       with:
         fail_on_failure: true
         annotate_only: true
         include_passed: true
         detailed_summary: true
-        require_tests:  true
+        require_tests: true
         report_paths: '**/*results.xml'
 
     - name: Upload test artifacts
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       if: always()
       with:
-        name: win-${{ matrix.windows-version }}${{ matrix.windows-featurepack }}
+        name: windows-remote-e2e
         path: |
-          results/*
+          ./tests/**/output/
+          !./tests/**/traces/raw
           **/workflow-run-attributes.json
-          **/junit-infra-failure-report.xml
 
     - name: Notify Slack
       if: always()
@@ -224,5 +144,5 @@ jobs:
       with:
         webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
         status: ${{ job.status }}
-        workflow-name: "${{ github.workflow }} (Windows ${{ matrix.windows-version }} ${{ matrix.windows-featurepack }})"
-        branch: ${{ env.PD_BRANCH }}
+        workflow-name: "${{ github.workflow }}"
+        branch: ${{ env.BRANCH }}
