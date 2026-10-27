@@ -34,7 +34,8 @@ Runtime environment:
 | `INPUT_DIR` | — (required) | Directory the agent works on (read-only mount). |
 | `CODEX_API_KEY` | — (required) | OpenAI API key. See [Secrets](#secrets). |
 | `AGENT_MODEL` | `gpt-6-luna` | Model alias or id. |
-| `AGENT_TIMEOUT` | `5m` | Hard wall-clock limit (GNU `timeout` syntax). |
+| `AGENT_REASONING_EFFORT` | `high` | Model reasoning effort: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Higher costs more tokens and time. |
+| `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit (GNU `timeout` syntax). Keep it below the pipelineTask timeout (15m in the examples). |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
