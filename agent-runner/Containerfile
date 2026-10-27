@@ -1,0 +1,54 @@
+# Universal base for headless Codex agents on CI.
+# It carries no skill or task: a bundle image adds those (see README.md).
+FROM registry.access.redhat.com/ubi9/nodejs-22-minimal@sha256:254080e3c058143c592f708e4ca78691449349fc79f03ee678c717aa4b6222b6
+
+LABEL org.opencontainers.image.title="Podman Desktop agent runner" \
+      org.opencontainers.image.description="Hardened headless Codex runtime for CI agent bundles" \
+      org.opencontainers.image.url="https://github.com/podman-desktop/e2e" \
+      org.opencontainers.image.vendor="Red Hat" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+USER 0
+
+# Only what skills need to read artifacts. No curl, git or ssh: every tool left
+# in the image is a tool a prompt-injected agent can use. Skills call python3
+# and need 3.10+, so python3 on PATH is 3.11 (the UBI 9 default is 3.9).
+RUN microdnf install -y --nodocs --setopt=install_weak_deps=0 \
+      bash coreutils-single findutils jq python3.11 unzip ca-certificates \
+    && microdnf clean all \
+    && ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+
+ARG CODEX_CLI_VERSION=0.164.0
+RUN npm install --global --prefix /usr/local "@openai/codex@${CODEX_CLI_VERSION}" \
+    && npm cache clean --force \
+    && rm -rf /root/.npm
+
+# Drop installers and network clients after the build so the agent cannot
+# fetch or install anything at runtime. Node itself stays: Codex needs it.
+RUN rm -rf /usr/bin/microdnf /usr/bin/dnf /usr/bin/curl /usr/bin/wget \
+      /usr/bin/npm /usr/bin/npx /usr/local/bin/npm /usr/local/bin/npx \
+      "$(dirname "$(readlink -f "$(command -v node)")")/../lib/node_modules/npm"
+
+# Codex admin layer: root-owned and read-only for the agent.
+#   requirements.toml   enforced policy, nothing can loosen it
+#   managed_config.toml defaults that override user config and -c flags
+#   skills/             admin skill location, filled by bundles
+COPY codex/requirements.toml codex/managed_config.toml /etc/codex/
+RUN mkdir -p /etc/codex/skills /opt/agent/task /var/lib/agent-runner \
+    && chmod -R a+rX,go-w /etc/codex /opt/agent \
+    && chgrp 0 /var/lib/agent-runner && chmod 0770 /var/lib/agent-runner
+
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/agent-runner
+
+# A fixed PATH without the base image's app-root npm directories.
+ENV PATH=/usr/local/bin:/usr/bin:/bin \
+    AGENT_MODEL=gpt-6-luna \
+    AGENT_TIMEOUT=5m \
+    AGENT_STATE_DIR=/var/lib/agent-runner \
+    AGENT_TASK_DIR=/opt/agent/task
+
+# OpenShift runs the container with an arbitrary UID in group 0; the state
+# directory is group-writable for that reason. No home directory is needed.
+USER 1001
+WORKDIR /tmp
+ENTRYPOINT ["/usr/local/bin/agent-runner"]
