@@ -80,6 +80,10 @@ tasks:
 - name: evaluate-results
   runAfter: [podman-desktop-runner]
   timeout: 15m
+  # Tekton substitutes a result in subPath only when a param or when
+  # expression of this task also uses it.
+  when:
+  - {input: $(tasks.correlate.results.workspace-resources-path), operator: notin, values: [""]}
   taskRef:
     resolver: bundles
     params:
@@ -101,6 +105,8 @@ And the PipelineRun binds the token-less ServiceAccount (`tkn/serviceaccount.yam
 to that task only:
 
 ```yaml
+apiVersion: tekton.dev/v1
+kind: PipelineRun
 spec:
   taskRunSpecs:
   - pipelineTaskName: evaluate-results
@@ -108,6 +114,11 @@ spec:
     podTemplate:
       automountServiceAccountToken: false
 ```
+
+In a `tekton.dev/v1beta1` PipelineRun the fields are `taskServiceAccountName`
+and `taskPodTemplate`. The API silently drops the v1 names there, and the task
+then runs as `pipeline` with its token mounted. Check the pod's
+`spec.serviceAccountName` after the first run.
 
 ### Secrets
 
