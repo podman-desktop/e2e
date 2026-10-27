@@ -47,6 +47,9 @@ but never the model key or the results:
 - name: evaluate-results
   runAfter: [podman-desktop-runner]
   timeout: 15m
+  # Makes Tekton resolve the result used in subPath below.
+  when:
+  - {input: $(tasks.correlate.results.workspace-resources-path), operator: notin, values: [""]}
   taskRef:
     resolver: bundles
     params:
