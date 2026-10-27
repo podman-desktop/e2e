@@ -37,12 +37,21 @@ if [[ -n "$problems" ]]; then
 fi
 
 # The schema needs every key; the skill's convention is to omit unknown ones.
-# Keep the digest well under the Tekton result limit.
-jq '
+evaluation="$(jq '
   if .skipped_analysis == null then del(.skipped_analysis) else . end
   | .platform |= with_entries(select(.value != null))
   | if .platform == {} then del(.platform) else . end
   | if .truncated == false then del(.truncated, .truncated_count) else . end
-' "$report" \
-  | SLACK_MAX_CHARS=1500 python3 "$formatter" \
-  | jq -r '.text' >"$AGENT_SUMMARY_FILE"
+' "$report")"
+
+# Show as many failures as fit. The formatter drops whole failures to meet a
+# character limit, but the Tekton result is capped in bytes and the text may
+# be multi-byte, so step the limit down until the digest fits.
+max_bytes="${AGENT_SUMMARY_MAX_BYTES:-3072}"
+for max_chars in 2600 2000 1500 1000; do
+  SLACK_MAX_CHARS="$max_chars" python3 "$formatter" <<<"$evaluation" \
+    | jq -r '.text' >"$AGENT_SUMMARY_FILE"
+  (( $(wc -c <"$AGENT_SUMMARY_FILE") <= max_bytes )) && exit 0
+done
+echo "ERROR: the digest is over $max_bytes bytes even at $max_chars characters" >&2
+exit 1
