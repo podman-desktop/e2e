@@ -1,0 +1,136 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-agent
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, ai, agent
+    tekton.dev/displayName: "Run a headless agent bundle"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Runs a headless Codex agent bundle (an image built FROM agent-runner) over
+    a read-only input directory. The full JSON report goes to the step log; a
+    short summary, if the bundle produces one, goes to the `summary` result.
+    Run it with the agent-runner ServiceAccount (no API token), see README.md.
+
+  workspaces:
+  - name: input
+    description: >-
+      Input the agent reads. Bind it with a subPath that holds only this run's
+      data, e.g. the e2e-runner results of this PipelineRun.
+    readOnly: true
+
+  params:
+  - name: image
+    description: 'Agent bundle image, ie: ghcr.io/podman-desktop/evaluation-agent:v0.2.0'
+  - name: input-path
+    description: Path inside the input workspace the agent works on
+    default: '.'
+
+  # The API key is injected from a Secret into this step only, never a param.
+  - name: api-key-secret
+    description: Secret holding a dedicated, spend-limited OpenAI project key under the api-key key
+    default: codex-api-key
+
+  - name: agent-model
+    description: Model alias or id
+    default: 'gpt-6-luna'
+  - name: agent-timeout
+    description: >-
+      Wall-clock cap for the agent (GNU timeout syntax). Keep it well below the
+      pipelineTask timeout so the agent stops cleanly and logs why.
+    default: '5m'
+
+  # Run metadata for bundles that link back to the run (e.g. a Slack digest).
+  - name: pipeline-name
+    description: Pipeline identifier, exported as PIPELINE_NAME
+    default: ''
+  - name: artifacts-url
+    description: Link to the full artifacts, exported as ARTIFACTS_URL
+    default: ''
+
+  - name: ignore-errors
+    description: >-
+      When 'true' (default) an agent failure is logged and the step still
+      succeeds with summary SKIP: the agent is advisory and must never fail the
+      PipelineRun.
+    default: 'true'
+
+  results:
+  - name: summary
+    description: Bounded summary from the bundle post-check (at most 3072 bytes), or SKIP
+
+  steps:
+  - name: run
+    image: $(params.image)
+    imagePullPolicy: Always
+    env:
+    # Tekton writes registry credentials into HOME; the image rootfs is read-only.
+    - name: HOME
+      value: /tekton/home
+    - name: CODEX_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: $(params.api-key-secret)
+          key: api-key
+    - name: INPUT_DIR
+      value: $(workspaces.input.path)/$(params.input-path)
+    - name: AGENT_MODEL
+      value: $(params.agent-model)
+    - name: AGENT_TIMEOUT
+      value: $(params.agent-timeout)
+    - name: AGENT_SUMMARY_OUT
+      value: $(results.summary.path)
+    - name: PIPELINE_NAME
+      value: $(params.pipeline-name)
+    - name: ARTIFACTS_URL
+      value: $(params.artifacts-url)
+    - name: IGNORE_ERRORS
+      value: $(params.ignore-errors)
+    # Compatible with restricted-v2: no fixed UID, the SCC assigns one.
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: agent-state
+      mountPath: /var/lib/agent-runner
+    script: |
+      #!/usr/bin/env bash
+      set -uo pipefail
+      /usr/local/bin/agent-runner
+      rc=$?
+      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
+        echo "WARNING: agent failed (rc=$rc); ignore-errors=true, continuing." >&2
+        printf 'SKIP' >"$AGENT_SUMMARY_OUT"
+        exit 0
+      fi
+      exit "$rc"
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1"
+
+  volumes:
+  - name: tmp
+    emptyDir:
+      sizeLimit: 1Gi
+  - name: agent-state
+    emptyDir:
+      sizeLimit: 256Mi
