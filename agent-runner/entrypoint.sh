@@ -13,7 +13,8 @@ die() { log "ERROR: $2"; exit "$1"; }
 task_dir="${AGENT_TASK_DIR:-/opt/agent/task}"
 state_root="${AGENT_STATE_DIR:-/var/lib/agent-runner}"
 model="${AGENT_MODEL:-gpt-6-luna}"
-agent_timeout="${AGENT_TIMEOUT:-5m}"
+effort="${AGENT_REASONING_EFFORT:-high}"
+agent_timeout="${AGENT_TIMEOUT:-12m}"
 summary_out="${AGENT_SUMMARY_OUT:-}"
 summary_max_bytes="${AGENT_SUMMARY_MAX_BYTES:-3072}"
 input_dir="${INPUT_DIR:-${1:-}}"
@@ -29,6 +30,8 @@ input_dir="${INPUT_DIR:-${1:-}}"
 # GNU timeout treats 0 as "no limit", so require a non-zero duration.
 [[ "$agent_timeout" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$agent_timeout" =~ [1-9] ]] \
   || die 2 "AGENT_TIMEOUT must be a positive duration, e.g. 5m"
+[[ "$effort" =~ ^(none|minimal|low|medium|high|xhigh)$ ]] \
+  || die 2 "AGENT_REASONING_EFFORT must be one of none|minimal|low|medium|high|xhigh"
 [[ -d "$state_root" && -w "$state_root" ]] \
   || die 2 "mount a writable directory at AGENT_STATE_DIR ($state_root)"
 
@@ -56,11 +59,12 @@ prompt="${prompt//'{{INPUT_DIR}}'/$input_dir}"
 model_toml="$(jq -Rn --arg m "$model" '$m')"
 report="$run_dir/report.json"
 
-log "agent-runner: model=$model timeout=$agent_timeout input=$input_dir"
+log "agent-runner: model=$model effort=$effort timeout=$agent_timeout input=$input_dir"
 cd "$run_dir/work"
 env CODEX_HOME="$run_dir/home" XDG_CACHE_HOME="$run_dir/cache" \
   timeout --signal=TERM --kill-after=10s "$agent_timeout" \
-  codex exec -c "model=$model_toml" --ephemeral --skip-git-repo-check \
+  codex exec -c "model=$model_toml" -c "model_reasoning_effort=\"$effort\"" \
+    --ephemeral --skip-git-repo-check \
     --output-schema "$task_dir/output.schema.json" \
     --output-last-message "$report" "$prompt" </dev/null &
 agent_pid=$!

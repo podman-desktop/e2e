@@ -43,7 +43,8 @@ COPY --chmod=0755 entrypoint.sh /usr/local/bin/agent-runner
 # A fixed PATH without the base image's app-root npm directories.
 ENV PATH=/usr/local/bin:/usr/bin:/bin \
     AGENT_MODEL=gpt-6-luna \
-    AGENT_TIMEOUT=5m \
+    AGENT_REASONING_EFFORT=high \
+    AGENT_TIMEOUT=12m \
     AGENT_STATE_DIR=/var/lib/agent-runner \
     AGENT_TASK_DIR=/opt/agent/task
 
