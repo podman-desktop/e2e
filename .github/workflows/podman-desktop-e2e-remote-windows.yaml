@@ -34,7 +34,6 @@ jobs:
     runs-on: windows-2025
     permissions:
       contents: read
-      checks: write
 
     steps:
     - name: Set the default env. variables
@@ -47,7 +46,8 @@ jobs:
         echo "${{ github.event.inputs.pd_repo_options || env.DEFAULT_PD_REPO_OPTIONS }}" | awk -F ',' \
           '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
         echo "NPM_TARGET=${{ github.event.inputs.npm_target || env.DEFAULT_NPM_TARGET }}" >> $GITHUB_ENV
-        echo "ENV_VARS=${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" >> $GITHUB_ENV
+        echo "${{ github.event.inputs.env_vars || env.DEFAULT_ENV_VARS }}" | awk -F ',' \
+          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
 
     - name: Checkout Podman Desktop
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +55,19 @@ jobs:
         repository: ${{ env.FORK }}/podman-desktop
         ref: ${{ env.BRANCH }}
         persist-credentials: false
+
+    - name: Checkout E2E repo
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: podman-desktop/e2e
+        path: e2e
+        persist-credentials: false
+
+    - name: Install Podman Desktop
+      id: podman-desktop-install
+      uses: podman-desktop/gh-extensions-actions/.github/actions/podman-desktop-install@e59cd52b942e8dfcc187293c5d8e9f3831c7ac0c # v0.11.0
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Install pnpm
       uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -80,80 +93,13 @@ jobs:
     - name: Setup Podman remote machine connection
       shell: pwsh
       run: |
-        $podmanMachine = "podman-machine"
-        $remoteMachine = "remote-machine"
-
-        Write-Host "Initializing podman machine '$podmanMachine'..."
-        podman machine init --now $podmanMachine
-        if ($LASTEXITCODE -ne 0) { throw "podman machine init failed" }
-
-        Write-Host "Podman machine status:"
-        podman machine ls --format json
-
-        Write-Host "Pulling test image onto the machine..."
-        podman pull ghcr.io/podmandesktop-ci/alpine-remote
-        if ($LASTEXITCODE -ne 0) { throw "podman pull failed" }
-
-        podman images
-        podman image exists ghcr.io/podmandesktop-ci/alpine-remote
-        if ($LASTEXITCODE -ne 0) {
-          throw "alpine-remote image is not present on the machine"
-        }
-        Write-Host "alpine-remote image is present on the machine"
-
-        # Get the default system connection details before removing them
-        $json = podman system connection ls --format json | ConvertFrom-Json
-        $uri = $null
-        $identity = $null
-        foreach ($item in $json) {
-          if ($item.Default -match "True") {
-            $uri = $item.URI
-            $identity = $item.Identity
-          }
-        }
-        if (-not $uri -or -not $identity) {
-          throw "Could not find default podman system connection"
-        }
-        Write-Host "Default connection - URI: $uri, Identity: $identity"
-
-        # Remove the default connections so PD does not see them at startup
-        podman system connection rm $podmanMachine
-        podman system connection rm "$podmanMachine-root"
-
-        # Wipe container configuration so PD starts with a clean slate
-        Remove-Item -Recurse -Force "$env:APPDATA\containers\*" -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force "$env:USERPROFILE\.config\containers" -ErrorAction SilentlyContinue
-
-        # Create the remote-machine connection that the test expects
-        podman system connection add $remoteMachine --identity "$identity" "$uri"
-        if ($LASTEXITCODE -ne 0) { throw "podman system connection add failed" }
-
-        Write-Host "Final connection list:"
-        podman system connection ls --format json
-
-    - name: Build Podman Desktop for production
-      shell: pwsh
-      env:
-        ELECTRON_ENABLE_INSPECT: true
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        pnpm compile:current --win nsis
-        $runnerArch = $env:RUNNER_ARCH
-        $unpackedPath = if ($runnerArch -eq 'ARM64') { "dist/win-arm64-unpacked" } else { "dist/win-unpacked" }
-        $path = (Join-Path $unpackedPath "Podman Desktop.exe" | Resolve-Path).ProviderPath
-        Write-Host "Podman Desktop binary: $path"
-        echo "PODMAN_DESKTOP_BINARY=$path" >> $env:GITHUB_ENV
-
-    - name: Export custom env vars
-      shell: bash
-      run: |
-        echo "${{ env.ENV_VARS }}" | awk -F ',' \
-          '{for (i=1; i<=NF; i++) {split($i, kv, "="); print kv[1]"="kv[2]}}' >> $GITHUB_ENV
+        & "${{ github.workspace }}/e2e/e2e-runner/lib/windows/scripts/remote_machine.ps1"
 
     - name: Run Podman Remote E2E tests
       shell: pwsh
       env:
         PODMANDESKTOP_CI_BOT_TOKEN: ${{ secrets.PODMANDESKTOP_CI_BOT_TOKEN }}
+        PODMAN_DESKTOP_BINARY: ${{ steps.podman-desktop-install.outputs.binary }}
       run: |
         Write-Host "Running: pnpm ${{ env.NPM_TARGET }}"
         Write-Host "Binary: $env:PODMAN_DESKTOP_BINARY"
