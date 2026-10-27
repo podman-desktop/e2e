@@ -94,6 +94,7 @@ jobs:
       shell: pwsh
       run: |
         & "${{ github.workspace }}/e2e/e2e-runner/lib/windows/scripts/remote_machine.ps1"
+        if ($LASTEXITCODE -ne 0) { throw "remote_machine.ps1 failed with exit code $LASTEXITCODE" }
 
     - name: Run Podman Remote E2E tests
       shell: pwsh

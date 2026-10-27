@@ -12,10 +12,8 @@ podman pull ghcr.io/podmandesktop-ci/alpine-remote
 
 podman images
 
-podman image exists podmandesktop-ci/alpine-remote; $?
-
-$commandOut = $(podman image exists podmandesktop-ci/alpine-remote; $?)
-if ( $commandOut -eq $false) {
+podman image exists ghcr.io/podmandesktop-ci/alpine-remote
+if ($LASTEXITCODE -ne 0) {
     write-host "Image is not present on the machine"
     exit 1
 } else {
