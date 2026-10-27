@@ -1,0 +1,95 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: post-evaluation-to-slack
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, slack
+    tekton.dev/displayName: "Post E2E evaluation to Slack"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Posts the evaluation digest (run-agent's `summary` result) to a Slack
+    Workflow Builder trigger as one flat text variable. This TaskRun gets the
+    Slack secret only: no model API key, no workspace, no model-run code.
+
+  params:
+  - name: image
+    description: Any image with python3; the agent-runner base is used by default
+    default: 'ghcr.io/podman-desktop/agent-runner:v0.1.0'
+  - name: text
+    description: Digest text, ie $(tasks.evaluate-results.results.summary)
+  - name: workflow-var
+    description: Slack Workflow Builder variable name
+    default: text
+  - name: webhook-secret
+    description: Secret holding the Workflow Builder trigger URL under the url key
+    default: slack-webhook
+  - name: ignore-errors
+    description: When 'true' (default) a delivery failure is logged and does not fail the PipelineRun
+    default: 'true'
+
+  steps:
+  - name: post
+    image: $(params.image)
+    imagePullPolicy: Always
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: SLACK_WEBHOOK_URL
+      valueFrom:
+        secretKeyRef:
+          name: $(params.webhook-secret)
+          key: url
+    - name: SLACK_TEXT
+      value: $(params.text)
+    - name: SLACK_WORKFLOW_VAR
+      value: $(params.workflow-var)
+    - name: IGNORE_ERRORS
+      value: $(params.ignore-errors)
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    # The image has no curl by design, so post with the Python stdlib.
+    script: |
+      #!/usr/bin/env bash
+      set -uo pipefail
+      python3 - <<'PY'
+      import json, os, sys, urllib.request
+
+      url = os.environ["SLACK_WEBHOOK_URL"]
+      text = os.environ["SLACK_TEXT"]
+      if not url.startswith("https://"):
+          sys.exit("ERROR: the webhook URL must use https")
+      if not text or text == "SKIP":
+          sys.exit("ERROR: no digest to post")
+      body = json.dumps({os.environ["SLACK_WORKFLOW_VAR"]: text}, ensure_ascii=False).encode()
+      request = urllib.request.Request(
+          url, data=body, method="POST", headers={"Content-Type": "application/json"})
+      with urllib.request.urlopen(request, timeout=30) as response:
+          print(f"Slack responded {response.status}")
+      PY
+      rc=$?
+      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
+        echo "WARNING: Slack delivery failed (rc=$rc); ignore-errors=true, continuing." >&2
+        exit 0
+      fi
+      exit "$rc"
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
