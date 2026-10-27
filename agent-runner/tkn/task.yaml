@@ -42,11 +42,15 @@ spec:
   - name: agent-model
     description: Model alias or id
     default: 'gpt-6-luna'
+  - name: agent-reasoning-effort
+    description: Model reasoning effort, one of none, minimal, low, medium, high, xhigh
+    default: 'high'
   - name: agent-timeout
     description: >-
       Wall-clock cap for the agent (GNU timeout syntax). Keep it well below the
-      pipelineTask timeout so the agent stops cleanly and logs why.
-    default: '5m'
+      pipelineTask timeout (15m in the README) so the agent stops cleanly and
+      logs why. High reasoning effort needs several minutes.
+    default: '12m'
 
   # Run metadata for bundles that link back to the run (e.g. a Slack digest).
   - name: pipeline-name
@@ -84,6 +88,8 @@ spec:
       value: $(workspaces.input.path)/$(params.input-path)
     - name: AGENT_MODEL
       value: $(params.agent-model)
+    - name: AGENT_REASONING_EFFORT
+      value: $(params.agent-reasoning-effort)
     - name: AGENT_TIMEOUT
       value: $(params.agent-timeout)
     - name: AGENT_SUMMARY_OUT
