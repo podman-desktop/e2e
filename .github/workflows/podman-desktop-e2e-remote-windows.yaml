@@ -1,5 +1,5 @@
 name: PD Podman-Remote E2E Nightly
-run-name: PD E2E Podman Remote WSL ${{ inputs.podman_version || 'latest' }} (${{ inputs.pd_repo_options || 'main' }})
+run-name: PD E2E Podman Remote WSL - Podman ${{ inputs.podman_version || 'latest' }}
 
 on:
   schedule:
