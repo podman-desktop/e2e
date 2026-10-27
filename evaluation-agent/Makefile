@@ -25,12 +25,14 @@ oci-build:
 		${EXTRA_BUILD_ARGS} ..
 
 # Build the agent-runner base locally first, then this bundle on top of it.
+# --pull=never: for a --platform build podman otherwise re-pulls a registry
+# base tag and silently builds on the published image, not the one just built.
 .PHONY: oci-build-all
 oci-build-all:
 	$(MAKE) -C ../agent-runner oci-build IMG=$(AGENT_RUNNER_IMAGE) \
 		CONTAINER_MANAGER=$(CONTAINER_MANAGER) PLATFORM=$(PLATFORM) \
 		EXTRA_BUILD_ARGS="$(EXTRA_BUILD_ARGS)"
-	$(MAKE) oci-build
+	$(MAKE) oci-build EXTRA_BUILD_ARGS="--pull=never $(EXTRA_BUILD_ARGS)"
 
 # Push the container image # requires user to be logged into a registry
 .PHONY: oci-push
