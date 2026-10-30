@@ -15,23 +15,26 @@ metadata:
     tekton.dev/platforms: "linux/amd64"
 spec:
   description: >-
-    Runs a headless Codex agent bundle (an image built FROM agent-runner) over
-    a read-only input directory. The full JSON report goes to the step log; a
-    short summary, if the bundle produces one, goes to the `summary` result.
-    Run it with the agent-runner ServiceAccount (no API token), see README.md.
+    Runs a headless Codex agent bundle (an image built FROM agent-runner),
+    optionally over a read-only input directory. The full JSON report goes to
+    the step log; a short summary, if the bundle produces one, goes to the
+    `summary` result. Run it with the agent-runner ServiceAccount (no API
+    token), see README.md.
 
   workspaces:
   - name: input
     description: >-
-      Input the agent reads. Bind it with a subPath that holds only this run's
-      data, e.g. the e2e-runner results of this PipelineRun.
+      Optional input the agent reads. Bind it with a subPath that holds only
+      this run's data, e.g. the e2e-runner results of this PipelineRun. Leave
+      it unbound for a job that needs no input data.
     readOnly: true
+    optional: true
 
   params:
   - name: image
     description: 'Agent bundle image, ie: ghcr.io/podman-desktop/evaluation-agent:v0.2.0'
   - name: input-path
-    description: Path inside the input workspace the agent works on
+    description: Path inside the input workspace the agent works on; ignored without it
     default: '.'
 
   # The API key is injected from a Secret into this step only, never a param.
@@ -60,12 +63,6 @@ spec:
     description: Link to the full artifacts, exported as ARTIFACTS_URL
     default: ''
 
-  - name: ignore-errors
-    description: >-
-      When 'true' (default) an agent failure is logged and the step still
-      succeeds with summary SKIP: the agent is advisory and must never fail the
-      PipelineRun.
-    default: 'true'
 
   results:
   - name: summary
@@ -75,6 +72,10 @@ spec:
   - name: run
     image: $(params.image)
     imagePullPolicy: Always
+    # The agent is advisory: a failure is recorded as the step's exit code and
+    # never fails the PipelineRun. The entrypoint writes summary SKIP before
+    # anything can fail, so `when` expressions on the result keep working.
+    onError: continue
     env:
     # Tekton writes registry credentials into HOME; the image rootfs is read-only.
     - name: HOME
@@ -84,8 +85,13 @@ spec:
         secretKeyRef:
           name: $(params.api-key-secret)
           key: api-key
-    - name: INPUT_DIR
-      value: $(workspaces.input.path)/$(params.input-path)
+    # The script sets INPUT_DIR only when the input workspace is bound.
+    - name: INPUT_BOUND
+      value: $(workspaces.input.bound)
+    - name: INPUT_ROOT
+      value: $(workspaces.input.path)
+    - name: INPUT_PATH
+      value: $(params.input-path)
     - name: AGENT_MODEL
       value: $(params.agent-model)
     - name: AGENT_REASONING_EFFORT
@@ -98,8 +104,6 @@ spec:
       value: $(params.pipeline-name)
     - name: ARTIFACTS_URL
       value: $(params.artifacts-url)
-    - name: IGNORE_ERRORS
-      value: $(params.ignore-errors)
     # Compatible with restricted-v2: no fixed UID, the SCC assigns one.
     securityContext:
       runAsNonRoot: true
@@ -116,15 +120,12 @@ spec:
       mountPath: /var/lib/agent-runner
     script: |
       #!/usr/bin/env bash
-      set -uo pipefail
-      /usr/local/bin/agent-runner
-      rc=$?
-      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
-        echo "WARNING: agent failed (rc=$rc); ignore-errors=true, continuing." >&2
-        printf 'SKIP' >"$AGENT_SUMMARY_OUT"
-        exit 0
+      set -u
+      if [[ "$INPUT_BOUND" == "true" ]]; then
+        export INPUT_DIR="$INPUT_ROOT/$INPUT_PATH"
       fi
-      exit "$rc"
+      # exec: Tekton's TERM reaches the entrypoint, which stops the agent.
+      exec /usr/local/bin/agent-runner
     resources:
       requests:
         memory: "256Mi"

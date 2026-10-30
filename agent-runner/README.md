@@ -22,32 +22,36 @@ hardening or Tekton YAML to review.
 
 | Path in the bundle image | Required | Purpose |
 |---|---|---|
-| `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path. Name the skill explicitly (`$skill-name`). |
+| `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path; a prompt that uses it needs an input. Name the skill explicitly (`$skill-name`). |
 | `/opt/agent/task/output.schema.json` | yes | JSON schema the final answer must match (`codex exec --output-schema`). |
-| `/opt/agent/task/post.sh` | no | Bundle-specific checks, run as `post.sh <report.json> <input-dir>`. Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
+| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
 | `/etc/codex/skills/<name>/` | no | Skills, in Codex's admin skill location (root-owned, read-only). |
 
 Runtime environment:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `INPUT_DIR` | — (required) | Directory the agent works on (read-only mount). |
+| `INPUT_DIR` | — | Optional directory the agent works on (read-only mount). Leave it unset for a job that needs no input data. |
 | `CODEX_API_KEY` | — (required) | OpenAI API key. See [Secrets](#secrets). |
 | `AGENT_MODEL` | `gpt-6-luna` | Model alias or id. |
 | `AGENT_REASONING_EFFORT` | `high` | Model reasoning effort: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Higher costs more tokens and time. |
-| `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit (GNU `timeout` syntax). Keep it below the pipelineTask timeout (15m in the examples). |
+| `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit for the agent (GNU `timeout` syntax). |
+| `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples): a TaskRun killed by that timeout fails despite `onError: continue`. |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
 
-Flow: validate the configuration → create a fresh Codex home for this run →
+Flow: validate the configuration (an `INPUT_DIR`, when set, must be readable)
+→ create a fresh Codex home for this run →
 `codex exec --ephemeral --output-schema … -o report.json` under `timeout` → check
 the answer is a JSON object → print it to the log → run `post.sh` → publish the
 summary.
 
 Exit codes: `2` bad configuration, `124` timeout, any other non-zero is an agent
-or post-check failure. In Tekton, `ignore-errors=true` (default) turns every
-failure into a warning with summary `SKIP`.
+or post-check failure. Every failure leaves summary `SKIP`. In Tekton the
+`run-agent` step has `onError: continue`: the exit code is recorded on the step
+and the TaskRun still succeeds, so the advisory agent never fails the
+PipelineRun.
 
 ## Adding a bundle
 
@@ -101,8 +105,23 @@ tasks:
     subPath: $(tasks.correlate.results.workspace-resources-path)/qe-results
 ```
 
-And the PipelineRun binds the token-less ServiceAccount (`tkn/serviceaccount.yaml`)
-to that task only:
+The `input` workspace is optional. A job that needs no input data leaves it
+unbound, along with `input-path` and the `when` expression, and the agent then
+has no PVC mounted at all.
+
+The task runs under its own ServiceAccount, which the namespace that runs the
+pipeline creates. It holds no RoleBindings and mounts no token, so a
+prompt-injected agent cannot use the Kubernetes API:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-runner
+automountServiceAccountToken: false
+```
+
+The PipelineRun binds it to that task only:
 
 ```yaml
 apiVersion: tekton.dev/v1
@@ -131,8 +150,15 @@ most that limit and can be rotated without touching anything else:
 oc create secret generic codex-api-key --from-literal=api-key="$OPENAI_PROJECT_KEY"
 ```
 
-No other credential is ever given to the agent pod. Reporting (Slack, etc.)
-runs in a separate Task that gets the bounded `summary` result, not the model key.
+Don't give the agent pod any other credential. Reporting (Slack, etc.) runs in
+a separate Task that gets the bounded `summary` result, not the model key.
+
+One exception is outside the Task's control: Tekton copies docker-type secrets
+linked to the ServiceAccount into `/tekton/creds-secrets` and the step's `HOME`
+(`/tekton/home`), where the agent can read them. On OpenShift every
+ServiceAccount gets such an image-pull secret for the internal registry. Link no
+other secrets to `agent-runner`, and treat that pull secret as readable by the
+agent.
 
 ## Security model
 
@@ -140,7 +166,8 @@ runs in a separate Task that gets the bounded `summary` result, not the model ke
 Any of it can contain text that steers the model (prompt injection), and the
 model can simply make a wrong call. We can't make the model trustworthy, so we
 make it **harmless**: the pod limits what it can reach, Codex config limits what
-it tries, and the only credential it holds is spend-capped.
+it tries, and the only credential it is given is spend-capped (see
+[Secrets](#secrets) for the image-pull secret OpenShift adds).
 
 | Asset | Protected by |
 |---|---|
@@ -149,7 +176,7 @@ it tries, and the only credential it holds is spend-capped.
 | The image and its policy | Non-root, `readOnlyRootFilesystem`, root-owned `/etc/codex`, no privilege escalation, all capabilities dropped, `seccompProfile: RuntimeDefault` |
 | The model API key | Excluded from every command the model runs; dedicated project key with a spend limit |
 | Other services (Slack, ...) | Their credentials live only in separate Tasks |
-| Pipeline result | Hard timeout; `ignore-errors` keeps the advisory agent from failing the run |
+| Pipeline result | Hard timeouts; `onError: continue` keeps the advisory agent from failing the run |
 
 ### Codex policy (`codex/`)
 
