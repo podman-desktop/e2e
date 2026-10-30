@@ -24,7 +24,7 @@ hardening or Tekton YAML to review.
 |---|---|---|
 | `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path; a prompt that uses it needs an input. Name the skill explicitly (`$skill-name`). |
 | `/opt/agent/task/output.schema.json` | yes | JSON schema the final answer must match (`codex exec --output-schema`). |
-| `/opt/agent/task/post.sh` | no | Bundle-specific checks, run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
+| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
 | `/etc/codex/skills/<name>/` | no | Skills, in Codex's admin skill location (root-owned, read-only). |
 
 Runtime environment:
@@ -35,7 +35,8 @@ Runtime environment:
 | `CODEX_API_KEY` | — (required) | OpenAI API key. See [Secrets](#secrets). |
 | `AGENT_MODEL` | `gpt-6-luna` | Model alias or id. |
 | `AGENT_REASONING_EFFORT` | `high` | Model reasoning effort: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Higher costs more tokens and time. |
-| `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit (GNU `timeout` syntax). Keep it below the pipelineTask timeout (15m in the examples). |
+| `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit for the agent (GNU `timeout` syntax). |
+| `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples), so `ignore-errors` still applies. |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
@@ -147,8 +148,15 @@ most that limit and can be rotated without touching anything else:
 oc create secret generic codex-api-key --from-literal=api-key="$OPENAI_PROJECT_KEY"
 ```
 
-No other credential is ever given to the agent pod. Reporting (Slack, etc.)
-runs in a separate Task that gets the bounded `summary` result, not the model key.
+Don't give the agent pod any other credential. Reporting (Slack, etc.) runs in
+a separate Task that gets the bounded `summary` result, not the model key.
+
+One exception is outside the Task's control: Tekton copies docker-type secrets
+linked to the ServiceAccount into `/tekton/creds-secrets` and the step's `HOME`
+(`/tekton/home`), where the agent can read them. On OpenShift every
+ServiceAccount gets such an image-pull secret for the internal registry. Link no
+other secrets to `agent-runner`, and treat that pull secret as readable by the
+agent.
 
 ## Security model
 
@@ -156,7 +164,8 @@ runs in a separate Task that gets the bounded `summary` result, not the model ke
 Any of it can contain text that steers the model (prompt injection), and the
 model can simply make a wrong call. We can't make the model trustworthy, so we
 make it **harmless**: the pod limits what it can reach, Codex config limits what
-it tries, and the only credential it holds is spend-capped.
+it tries, and the only credential it is given is spend-capped (see
+[Secrets](#secrets) for the image-pull secret OpenShift adds).
 
 | Asset | Protected by |
 |---|---|
