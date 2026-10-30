@@ -15,23 +15,26 @@ metadata:
     tekton.dev/platforms: "linux/amd64"
 spec:
   description: >-
-    Runs a headless Codex agent bundle (an image built FROM agent-runner) over
-    a read-only input directory. The full JSON report goes to the step log; a
-    short summary, if the bundle produces one, goes to the `summary` result.
-    Run it with the agent-runner ServiceAccount (no API token), see README.md.
+    Runs a headless Codex agent bundle (an image built FROM agent-runner),
+    optionally over a read-only input directory. The full JSON report goes to
+    the step log; a short summary, if the bundle produces one, goes to the
+    `summary` result. Run it with the agent-runner ServiceAccount (no API
+    token), see README.md.
 
   workspaces:
   - name: input
     description: >-
-      Input the agent reads. Bind it with a subPath that holds only this run's
-      data, e.g. the e2e-runner results of this PipelineRun.
+      Optional input the agent reads. Bind it with a subPath that holds only
+      this run's data, e.g. the e2e-runner results of this PipelineRun. Leave
+      it unbound for a job that needs no input data.
     readOnly: true
+    optional: true
 
   params:
   - name: image
     description: 'Agent bundle image, ie: ghcr.io/podman-desktop/evaluation-agent:v0.2.0'
   - name: input-path
-    description: Path inside the input workspace the agent works on
+    description: Path inside the input workspace the agent works on; ignored without it
     default: '.'
 
   # The API key is injected from a Secret into this step only, never a param.
@@ -84,8 +87,13 @@ spec:
         secretKeyRef:
           name: $(params.api-key-secret)
           key: api-key
-    - name: INPUT_DIR
-      value: $(workspaces.input.path)/$(params.input-path)
+    # The script sets INPUT_DIR only when the input workspace is bound.
+    - name: INPUT_BOUND
+      value: $(workspaces.input.bound)
+    - name: INPUT_ROOT
+      value: $(workspaces.input.path)
+    - name: INPUT_PATH
+      value: $(params.input-path)
     - name: AGENT_MODEL
       value: $(params.agent-model)
     - name: AGENT_REASONING_EFFORT
@@ -117,6 +125,9 @@ spec:
     script: |
       #!/usr/bin/env bash
       set -uo pipefail
+      if [[ "$INPUT_BOUND" == "true" ]]; then
+        export INPUT_DIR="$INPUT_ROOT/$INPUT_PATH"
+      fi
       /usr/local/bin/agent-runner
       rc=$?
       if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
