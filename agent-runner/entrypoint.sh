@@ -2,8 +2,9 @@
 # Generic headless Codex runner. Runs the task bundle in $AGENT_TASK_DIR:
 #   prompt.md           required; {{INPUT_DIR}} is replaced with the input path
 #   output.schema.json  required; the final answer must match it
-#   post.sh             optional; post.sh <report.json> <input-dir>, may write
+#   post.sh             optional; post.sh <report.json> [<input-dir>], may write
 #                       a short summary to $AGENT_SUMMARY_FILE
+# INPUT_DIR is optional: a job without input data runs with nothing mounted.
 # Exit codes: 2 bad configuration, 124 timeout, other non-zero agent failure.
 set -euo pipefail
 
@@ -25,8 +26,12 @@ input_dir="${INPUT_DIR:-${1:-}}"
 [[ -n "${CODEX_API_KEY:-}" ]] || die 2 "CODEX_API_KEY is required"
 [[ -r "$task_dir/prompt.md" ]] || die 2 "bundle has no $task_dir/prompt.md"
 [[ -r "$task_dir/output.schema.json" ]] || die 2 "bundle has no $task_dir/output.schema.json"
-[[ -n "$input_dir" && -d "$input_dir" && -r "$input_dir" ]] \
-  || die 2 "INPUT_DIR must name a readable directory: '${input_dir}'"
+if [[ -n "$input_dir" ]]; then
+  [[ -d "$input_dir" && -r "$input_dir" ]] \
+    || die 2 "INPUT_DIR must name a readable directory: '${input_dir}'"
+elif grep -qF '{{INPUT_DIR}}' "$task_dir/prompt.md"; then
+  die 2 "prompt.md uses {{INPUT_DIR}} but no INPUT_DIR was given"
+fi
 # GNU timeout treats 0 as "no limit", so require a non-zero duration.
 [[ "$agent_timeout" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$agent_timeout" =~ [1-9] ]] \
   || die 2 "AGENT_TIMEOUT must be a positive duration, e.g. 5m"
@@ -35,8 +40,12 @@ input_dir="${INPUT_DIR:-${1:-}}"
 [[ -d "$state_root" && -w "$state_root" ]] \
   || die 2 "mount a writable directory at AGENT_STATE_DIR ($state_root)"
 
-input_dir="$(cd -- "$input_dir" && pwd -P)"
-export INPUT_DIR="$input_dir"
+if [[ -n "$input_dir" ]]; then
+  input_dir="$(cd -- "$input_dir" && pwd -P)"
+  export INPUT_DIR="$input_dir"
+else
+  unset INPUT_DIR
+fi
 
 # A fresh Codex home per run: no config, auth or history carries over. Codex
 # refuses helper executables under the system temp dir, hence the state root.
@@ -59,7 +68,7 @@ prompt="${prompt//'{{INPUT_DIR}}'/$input_dir}"
 model_toml="$(jq -Rn --arg m "$model" '$m')"
 report="$run_dir/report.json"
 
-log "agent-runner: model=$model effort=$effort timeout=$agent_timeout input=$input_dir"
+log "agent-runner: model=$model effort=$effort timeout=$agent_timeout input=${input_dir:-none}"
 cd "$run_dir/work"
 env CODEX_HOME="$run_dir/home" XDG_CACHE_HOME="$run_dir/cache" \
   timeout --signal=TERM --kill-after=10s "$agent_timeout" \
@@ -87,7 +96,7 @@ fi
 summary="$run_dir/summary"
 # The post-check is bundle code; it never needs the model credential.
 env -u CODEX_API_KEY AGENT_SUMMARY_FILE="$summary" \
-  "$task_dir/post.sh" "$report" "$input_dir" || die 1 "post-check failed"
+  "$task_dir/post.sh" "$report" ${input_dir:+"$input_dir"} || die 1 "post-check failed"
 
 if [[ -n "$summary_out" && -s "$summary" ]]; then
   size="$(wc -c <"$summary")"

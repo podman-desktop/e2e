@@ -22,16 +22,16 @@ hardening or Tekton YAML to review.
 
 | Path in the bundle image | Required | Purpose |
 |---|---|---|
-| `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path. Name the skill explicitly (`$skill-name`). |
+| `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path; a prompt that uses it needs an input. Name the skill explicitly (`$skill-name`). |
 | `/opt/agent/task/output.schema.json` | yes | JSON schema the final answer must match (`codex exec --output-schema`). |
-| `/opt/agent/task/post.sh` | no | Bundle-specific checks, run as `post.sh <report.json> <input-dir>`. Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
+| `/opt/agent/task/post.sh` | no | Bundle-specific checks, run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
 | `/etc/codex/skills/<name>/` | no | Skills, in Codex's admin skill location (root-owned, read-only). |
 
 Runtime environment:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `INPUT_DIR` | — (required) | Directory the agent works on (read-only mount). |
+| `INPUT_DIR` | — | Optional directory the agent works on (read-only mount). Leave it unset for a job that needs no input data. |
 | `CODEX_API_KEY` | — (required) | OpenAI API key. See [Secrets](#secrets). |
 | `AGENT_MODEL` | `gpt-6-luna` | Model alias or id. |
 | `AGENT_REASONING_EFFORT` | `high` | Model reasoning effort: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Higher costs more tokens and time. |
@@ -40,7 +40,8 @@ Runtime environment:
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
 
-Flow: validate the configuration → create a fresh Codex home for this run →
+Flow: validate the configuration (an `INPUT_DIR`, when set, must be readable)
+→ create a fresh Codex home for this run →
 `codex exec --ephemeral --output-schema … -o report.json` under `timeout` → check
 the answer is a JSON object → print it to the log → run `post.sh` → publish the
 summary.
@@ -100,6 +101,10 @@ tasks:
     # Only this run's results; other runs on the shared PVC stay invisible.
     subPath: $(tasks.correlate.results.workspace-resources-path)/qe-results
 ```
+
+The `input` workspace is optional. A job that needs no input data leaves it
+unbound, along with `input-path` and the `when` expression, and the agent then
+has no PVC mounted at all.
 
 The task runs under its own ServiceAccount, which the namespace that runs the
 pipeline creates. It holds no RoleBindings and mounts no token, so a
