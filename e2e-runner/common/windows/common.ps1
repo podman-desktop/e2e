@@ -211,6 +211,8 @@ function Collect-Logs($folder) {
         Get-ChildItem -Path "$source" -Name "plugins" -Directory -Recurse | Remove-Item -Recurse -Force
         write-host "Removing safe-storage from pd home dir"
         Get-ChildItem -Path "$source" -Name "safe-storage" -Directory -Recurse | Remove-Item -Recurse -Force
+        write-host "Removing AI Lab cloned recipes from pd home dir - thousands of small files, slow to scp"
+        Get-ChildItem -Path "$source" -Filter "redhat.ai-lab" -Directory -Recurse | Where-Object { $_.Parent.Name -eq "extensions-storage" } | Remove-Item -Recurse -Force
         write-host "Removing browser resources from test artifacts"
         Get-ChildItem -Path "$source\browser\resources" -Directory -Recurse | Remove-Item -Recurse -Force
     }
