@@ -1,0 +1,6 @@
+# Used explicitly with the repository-root build context by the Makefile.
+*
+!.skills/evaluate-e2e-results
+!evaluation-agent/task
+__pycache__/
+*.pyc

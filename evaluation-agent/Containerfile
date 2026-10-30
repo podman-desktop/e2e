@@ -1,0 +1,14 @@
+# Evaluation bundle: the evaluate-e2e-results skill on top of agent-runner.
+# Build context is the repository root, so the skill comes from .skills/.
+ARG AGENT_RUNNER_IMAGE=ghcr.io/podman-desktop/agent-runner:v0.1.0
+FROM ${AGENT_RUNNER_IMAGE}
+
+LABEL org.opencontainers.image.title="Podman Desktop E2E evaluation agent" \
+      org.opencontainers.image.description="Headless triage of Podman Desktop E2E test failures"
+
+USER 0
+COPY .skills/evaluate-e2e-results /etc/codex/skills/evaluate-e2e-results
+COPY evaluation-agent/task/ /opt/agent/task/
+RUN chmod -R a+rX,go-w /etc/codex/skills /opt/agent/task \
+    && chmod 0755 /opt/agent/task/post.sh
+USER 1001
