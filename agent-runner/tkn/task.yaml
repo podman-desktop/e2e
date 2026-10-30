@@ -63,12 +63,6 @@ spec:
     description: Link to the full artifacts, exported as ARTIFACTS_URL
     default: ''
 
-  - name: ignore-errors
-    description: >-
-      When 'true' (default) an agent failure is logged and the step still
-      succeeds with summary SKIP: the agent is advisory and must never fail the
-      PipelineRun.
-    default: 'true'
 
   results:
   - name: summary
@@ -78,6 +72,10 @@ spec:
   - name: run
     image: $(params.image)
     imagePullPolicy: Always
+    # The agent is advisory: a failure is recorded as the step's exit code and
+    # never fails the PipelineRun. The entrypoint writes summary SKIP before
+    # anything can fail, so `when` expressions on the result keep working.
+    onError: continue
     env:
     # Tekton writes registry credentials into HOME; the image rootfs is read-only.
     - name: HOME
@@ -106,8 +104,6 @@ spec:
       value: $(params.pipeline-name)
     - name: ARTIFACTS_URL
       value: $(params.artifacts-url)
-    - name: IGNORE_ERRORS
-      value: $(params.ignore-errors)
     # Compatible with restricted-v2: no fixed UID, the SCC assigns one.
     securityContext:
       runAsNonRoot: true
@@ -124,18 +120,12 @@ spec:
       mountPath: /var/lib/agent-runner
     script: |
       #!/usr/bin/env bash
-      set -uo pipefail
+      set -u
       if [[ "$INPUT_BOUND" == "true" ]]; then
         export INPUT_DIR="$INPUT_ROOT/$INPUT_PATH"
       fi
-      /usr/local/bin/agent-runner
-      rc=$?
-      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
-        echo "WARNING: agent failed (rc=$rc); ignore-errors=true, continuing." >&2
-        printf 'SKIP' >"$AGENT_SUMMARY_OUT"
-        exit 0
-      fi
-      exit "$rc"
+      # exec: Tekton's TERM reaches the entrypoint, which stops the agent.
+      exec /usr/local/bin/agent-runner
     resources:
       requests:
         memory: "256Mi"

@@ -36,7 +36,7 @@ Runtime environment:
 | `AGENT_MODEL` | `gpt-6-luna` | Model alias or id. |
 | `AGENT_REASONING_EFFORT` | `high` | Model reasoning effort: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Higher costs more tokens and time. |
 | `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit for the agent (GNU `timeout` syntax). |
-| `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples), so `ignore-errors` still applies. |
+| `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples): a TaskRun killed by that timeout fails despite `onError: continue`. |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
@@ -48,8 +48,10 @@ the answer is a JSON object → print it to the log → run `post.sh` → publis
 summary.
 
 Exit codes: `2` bad configuration, `124` timeout, any other non-zero is an agent
-or post-check failure. In Tekton, `ignore-errors=true` (default) turns every
-failure into a warning with summary `SKIP`.
+or post-check failure. Every failure leaves summary `SKIP`. In Tekton the
+`run-agent` step has `onError: continue`: the exit code is recorded on the step
+and the TaskRun still succeeds, so the advisory agent never fails the
+PipelineRun.
 
 ## Adding a bundle
 
@@ -174,7 +176,7 @@ it tries, and the only credential it is given is spend-capped (see
 | The image and its policy | Non-root, `readOnlyRootFilesystem`, root-owned `/etc/codex`, no privilege escalation, all capabilities dropped, `seccompProfile: RuntimeDefault` |
 | The model API key | Excluded from every command the model runs; dedicated project key with a spend limit |
 | Other services (Slack, ...) | Their credentials live only in separate Tasks |
-| Pipeline result | Hard timeout; `ignore-errors` keeps the advisory agent from failing the run |
+| Pipeline result | Hard timeouts; `onError: continue` keeps the advisory agent from failing the run |
 
 ### Codex policy (`codex/`)
 
