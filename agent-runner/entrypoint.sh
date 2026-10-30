@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Generic headless Codex runner. Runs the task bundle in $AGENT_TASK_DIR:
+#   prompt.md           required; {{INPUT_DIR}} is replaced with the input path
+#   output.schema.json  required; the final answer must match it
+#   post.sh             optional, executable; post.sh <report.json> [<input-dir>],
+#                       may write a short summary to $AGENT_SUMMARY_FILE
+# INPUT_DIR is optional: a job without input data runs with nothing mounted.
+# Exit codes: 2 bad configuration, 124 timeout, other non-zero agent failure.
+set -euo pipefail
+
+log() { printf '%s\n' "$*" >&2; }
+die() { log "ERROR: $2"; exit "$1"; }
+# GNU timeout treats 0 as "no limit", so require a non-zero duration.
+is_duration() { [[ "$1" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$1" =~ [1-9] ]]; }
+
+task_dir="${AGENT_TASK_DIR:-/opt/agent/task}"
+state_root="${AGENT_STATE_DIR:-/var/lib/agent-runner}"
+model="${AGENT_MODEL:-gpt-6-luna}"
+effort="${AGENT_REASONING_EFFORT:-high}"
+agent_timeout="${AGENT_TIMEOUT:-12m}"
+post_timeout="${AGENT_POST_TIMEOUT:-1m}"
+summary_out="${AGENT_SUMMARY_OUT:-}"
+summary_max_bytes="${AGENT_SUMMARY_MAX_BYTES:-3072}"
+input_dir="${INPUT_DIR:-${1:-}}"
+
+# Consumers (e.g. a Slack task) skip on SKIP, so set it before anything fails.
+[[ -z "$summary_out" ]] || printf 'SKIP' >"$summary_out"
+
+[[ -n "${CODEX_API_KEY:-}" ]] || die 2 "CODEX_API_KEY is required"
+[[ -r "$task_dir/prompt.md" ]] || die 2 "bundle has no $task_dir/prompt.md"
+[[ -r "$task_dir/output.schema.json" ]] || die 2 "bundle has no $task_dir/output.schema.json"
+# A post-check that can't run must not be skipped silently.
+[[ ! -e "$task_dir/post.sh" || -x "$task_dir/post.sh" ]] \
+  || die 2 "bundle has $task_dir/post.sh but it is not executable"
+if [[ -n "$input_dir" ]]; then
+  [[ -d "$input_dir" && -r "$input_dir" ]] \
+    || die 2 "INPUT_DIR must name a readable directory: '${input_dir}'"
+elif grep -qF '{{INPUT_DIR}}' "$task_dir/prompt.md"; then
+  die 2 "prompt.md uses {{INPUT_DIR}} but no INPUT_DIR was given"
+fi
+is_duration "$agent_timeout" || die 2 "AGENT_TIMEOUT must be a positive duration, e.g. 5m"
+is_duration "$post_timeout" || die 2 "AGENT_POST_TIMEOUT must be a positive duration, e.g. 1m"
+# Checked before (( )) uses it: bash arithmetic would evaluate any expression.
+[[ "$summary_max_bytes" =~ ^[0-9]+$ ]] || die 2 "AGENT_SUMMARY_MAX_BYTES must be a number of bytes"
+[[ "$effort" =~ ^(none|minimal|low|medium|high|xhigh)$ ]] \
+  || die 2 "AGENT_REASONING_EFFORT must be one of none|minimal|low|medium|high|xhigh"
+[[ -d "$state_root" && -w "$state_root" ]] \
+  || die 2 "mount a writable directory at AGENT_STATE_DIR ($state_root)"
+
+if [[ -n "$input_dir" ]]; then
+  input_dir="$(cd -- "$input_dir" && pwd -P)"
+  export INPUT_DIR="$input_dir"
+else
+  unset INPUT_DIR
+fi
+
+# A fresh Codex home per run: no config, auth or history carries over. Codex
+# refuses helper executables under the system temp dir, hence the state root.
+run_dir="$(mktemp -d "$state_root/run.XXXXXXXX")"
+mkdir -p "$run_dir/home" "$run_dir/cache" "$run_dir/work"
+agent_pid=''
+trap 'rm -rf -- "$run_dir"' EXIT
+# Forward Tekton's TERM to the agent so it stops before the pod is killed.
+on_signal() {
+  trap '' TERM INT
+  [[ -z "$agent_pid" ]] || { kill -TERM "$agent_pid" 2>/dev/null; wait "$agent_pid" 2>/dev/null; }
+  exit "$1"
+}
+trap 'on_signal 143' TERM
+trap 'on_signal 130' INT
+
+prompt="$(<"$task_dir/prompt.md")"
+# bash 5.2+ would expand a '&' in the path to the matched text.
+shopt -u patsub_replacement 2>/dev/null || true
+prompt="${prompt//'{{INPUT_DIR}}'/$input_dir}"
+# Encode the model as a TOML string so the value cannot inject other config.
+model_toml="$(jq -Rn --arg m "$model" '$m')"
+report="$run_dir/report.json"
+
+log "agent-runner: model=$model effort=$effort timeout=$agent_timeout input=${input_dir:-none}"
+cd "$run_dir/work"
+env CODEX_HOME="$run_dir/home" XDG_CACHE_HOME="$run_dir/cache" \
+  timeout --signal=TERM --kill-after=10s "$agent_timeout" \
+  codex exec -c "model=$model_toml" -c "model_reasoning_effort=\"$effort\"" \
+    --ephemeral --skip-git-repo-check \
+    --output-schema "$task_dir/output.schema.json" \
+    --output-last-message "$report" "$prompt" </dev/null &
+agent_pid=$!
+rc=0
+wait "$agent_pid" || rc=$?
+agent_pid=''
+
+(( rc != 124 )) || die 124 "agent timed out after $agent_timeout"
+(( rc == 0 )) || die "$rc" "agent exited with code $rc"
+jq -e 'type == "object"' "$report" >/dev/null 2>&1 \
+  || die 1 "agent did not return a JSON object; first bytes: $(head -c 300 "$report" 2>/dev/null)"
+
+# The full report always goes to the log; results only carry the summary.
+jq . "$report"
+if [[ -n "${OUTPUT_DIR:-}" ]]; then
+  cp -- "$report" "$OUTPUT_DIR/report.json"
+fi
+
+[[ -e "$task_dir/post.sh" ]] || exit 0
+summary="$run_dir/summary"
+# The post-check is bundle code; it never needs the model credential. Its own
+# deadline keeps a hung check inside the pipelineTask timeout.
+rc=0
+env -u CODEX_API_KEY AGENT_SUMMARY_FILE="$summary" \
+  timeout --signal=TERM --kill-after=5s "$post_timeout" \
+  "$task_dir/post.sh" "$report" ${input_dir:+"$input_dir"} || rc=$?
+(( rc != 124 )) || die 124 "post-check timed out after $post_timeout"
+(( rc == 0 )) || die 1 "post-check failed (exit $rc)"
+
+if [[ -n "$summary_out" && -s "$summary" ]]; then
+  size="$(( $(wc -c <"$summary") ))"
+  (( size <= summary_max_bytes )) \
+    || die 1 "summary is $size bytes, over AGENT_SUMMARY_MAX_BYTES=$summary_max_bytes"
+  cp -- "$summary" "$summary_out"
+fi
