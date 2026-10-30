@@ -85,7 +85,7 @@ jobs:
 
     - name: Install Podman
       id: podman-install
-      uses: redhat-actions/podman-install@4a5b244246ee7d71f896e53bbde9d98a503ddb9b # v0.3.0
+      uses: redhat-actions/podman-install@aea6ff44f2a4a82da13d22061ce73443a125925d # v0.3.0
       with:
         podman-version-input: ${{ github.event.inputs.podman_version || 'latest' }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
