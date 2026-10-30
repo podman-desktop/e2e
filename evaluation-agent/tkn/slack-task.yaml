@@ -31,14 +31,13 @@ spec:
   - name: webhook-secret
     description: Secret holding the Workflow Builder trigger URL under the url key
     default: slack-webhook
-  - name: ignore-errors
-    description: When 'true' (default) a delivery failure is logged and does not fail the PipelineRun
-    default: 'true'
 
   steps:
   - name: post
     image: $(params.image)
     imagePullPolicy: Always
+    # A failed delivery is recorded on the step and never fails the PipelineRun.
+    onError: continue
     env:
     - name: HOME
       value: /tekton/home
@@ -51,8 +50,6 @@ spec:
       value: $(params.text)
     - name: SLACK_WORKFLOW_VAR
       value: $(params.workflow-var)
-    - name: IGNORE_ERRORS
-      value: $(params.ignore-errors)
     securityContext:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
@@ -64,8 +61,8 @@ spec:
     # The image has no curl by design, so post with the Python stdlib.
     script: |
       #!/usr/bin/env bash
-      set -uo pipefail
-      python3 - <<'PY'
+      set -u
+      exec python3 - <<'PY'
       import json, os, sys, urllib.request
 
       url = os.environ["SLACK_WEBHOOK_URL"]
@@ -80,12 +77,6 @@ spec:
       with urllib.request.urlopen(request, timeout=30) as response:
           print(f"Slack responded {response.status}")
       PY
-      rc=$?
-      if [[ $rc -ne 0 && "$IGNORE_ERRORS" == "true" ]]; then
-        echo "WARNING: Slack delivery failed (rc=$rc); ignore-errors=true, continuing." >&2
-        exit 0
-      fi
-      exit "$rc"
     resources:
       requests:
         memory: "64Mi"
