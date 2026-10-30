@@ -32,7 +32,7 @@ jobs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Log in to quay.io Registry
-      uses: redhat-actions/podman-login@v1
+      uses: redhat-actions/podman-login@v2
       with:
         registry: quay.io
         username: ${{ secrets.QUAY_IO_USERNAME }}
