@@ -1,0 +1,143 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: run-agent
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.24.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, ai, agent
+    tekton.dev/displayName: "Run a headless agent bundle"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Runs a headless Codex agent bundle (an image built FROM agent-runner),
+    optionally over a read-only input directory. The full JSON report goes to
+    the step log; a short summary, if the bundle produces one, goes to the
+    `summary` result. Run it with the agent-runner ServiceAccount (no API
+    token), see README.md.
+
+  workspaces:
+  - name: input
+    description: >-
+      Optional input the agent reads. Bind it with a subPath that holds only
+      this run's data, e.g. the e2e-runner results of this PipelineRun. Leave
+      it unbound for a job that needs no input data.
+    readOnly: true
+    optional: true
+
+  params:
+  - name: image
+    description: 'Agent bundle image, ie: ghcr.io/podman-desktop/evaluation-agent:v0.2.0'
+  - name: input-path
+    description: Path inside the input workspace the agent works on; ignored without it
+    default: '.'
+
+  # The API key is injected from a Secret into this step only, never a param.
+  - name: api-key-secret
+    description: Secret holding a dedicated, spend-limited OpenAI project key under the api-key key
+    default: codex-api-key
+
+  - name: agent-model
+    description: Model alias or id
+    default: 'gpt-6-luna'
+  - name: agent-reasoning-effort
+    description: Model reasoning effort, one of none, minimal, low, medium, high, xhigh
+    default: 'high'
+  - name: agent-timeout
+    description: >-
+      Wall-clock cap for the agent (GNU timeout syntax). Keep it well below the
+      pipelineTask timeout (15m in the README) so the agent stops cleanly and
+      logs why. High reasoning effort needs several minutes.
+    default: '12m'
+
+  # Run metadata for bundles that link back to the run (e.g. a Slack digest).
+  - name: pipeline-name
+    description: Pipeline identifier, exported as PIPELINE_NAME
+    default: ''
+  - name: artifacts-url
+    description: Link to the full artifacts, exported as ARTIFACTS_URL
+    default: ''
+
+
+  results:
+  - name: summary
+    description: Bounded summary from the bundle post-check (at most 3072 bytes), or SKIP
+
+  steps:
+  - name: run
+    image: $(params.image)
+    imagePullPolicy: Always
+    # The agent is advisory: a failure is recorded as the step's exit code and
+    # never fails the PipelineRun. The entrypoint writes summary SKIP before
+    # anything can fail, so `when` expressions on the result keep working.
+    onError: continue
+    env:
+    # Tekton writes registry credentials into HOME; the image rootfs is read-only.
+    - name: HOME
+      value: /tekton/home
+    - name: CODEX_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: $(params.api-key-secret)
+          key: api-key
+    # The script sets INPUT_DIR only when the input workspace is bound.
+    - name: INPUT_BOUND
+      value: $(workspaces.input.bound)
+    - name: INPUT_ROOT
+      value: $(workspaces.input.path)
+    - name: INPUT_PATH
+      value: $(params.input-path)
+    - name: AGENT_MODEL
+      value: $(params.agent-model)
+    - name: AGENT_REASONING_EFFORT
+      value: $(params.agent-reasoning-effort)
+    - name: AGENT_TIMEOUT
+      value: $(params.agent-timeout)
+    - name: AGENT_SUMMARY_OUT
+      value: $(results.summary.path)
+    - name: PIPELINE_NAME
+      value: $(params.pipeline-name)
+    - name: ARTIFACTS_URL
+      value: $(params.artifacts-url)
+    # Compatible with restricted-v2: no fixed UID, the SCC assigns one.
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+    - name: agent-state
+      mountPath: /var/lib/agent-runner
+    script: |
+      #!/usr/bin/env bash
+      set -u
+      if [[ "$INPUT_BOUND" == "true" ]]; then
+        export INPUT_DIR="$INPUT_ROOT/$INPUT_PATH"
+      fi
+      # exec: Tekton's TERM reaches the entrypoint, which stops the agent.
+      exec /usr/local/bin/agent-runner
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "1"
+
+  volumes:
+  - name: tmp
+    emptyDir:
+      sizeLimit: 1Gi
+  - name: agent-state
+    emptyDir:
+      sizeLimit: 256Mi
