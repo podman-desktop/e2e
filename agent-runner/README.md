@@ -101,8 +101,19 @@ tasks:
     subPath: $(tasks.correlate.results.workspace-resources-path)/qe-results
 ```
 
-And the PipelineRun binds the token-less ServiceAccount (`tkn/serviceaccount.yaml`)
-to that task only:
+The task runs under its own ServiceAccount, which the namespace that runs the
+pipeline creates. It holds no RoleBindings and mounts no token, so a
+prompt-injected agent cannot use the Kubernetes API:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent-runner
+automountServiceAccountToken: false
+```
+
+The PipelineRun binds it to that task only:
 
 ```yaml
 apiVersion: tekton.dev/v1
