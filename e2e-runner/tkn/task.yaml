@@ -46,7 +46,7 @@ spec:
 
   # Podman Configuration
   - name: podman-download-url
-    description: URL to download podman installer (supports .zip, .pkg, .exe, .msi)
+    description: URL to download podman installer (supports .zip, .pkg, .exe, .msi, or GitHub Actions artifact archive_download_url which requires the github-podmandesktop-ci-bot-actions-token secret)
     default: "''"
   - name: podman-path
     description: Path to existing podman binary (skips installation if provided)
@@ -172,6 +172,13 @@ spec:
     # We do not have a strict control on versions (as so they can be override)
     # force here to pull everytime just in case it is overriden
     imagePullPolicy: Always
+    env:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: github-podmandesktop-ci-bot-actions-token
+          key: token
+          optional: true
     script: |
       #!/bin/bash
 
@@ -187,6 +194,7 @@ spec:
       TARGET_CLEANUP=$(params.target-cleanup)
       OUTPUT_FOLDER=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
       mkdir -p "${OUTPUT_FOLDER}"
+      ASSETS_FOLDER=/opt/e2e-runner
 
       # get the secret file into target host
       # Warning: The assets folder on target where we copy the file must be the same as target folder in the image
@@ -196,6 +204,17 @@ spec:
         cp $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file) /opt/e2e-runner/
       else
         echo "No secret file provided, property is empty"
+      fi
+
+      # Never pass GITHUB_TOKEN as a literal CLI argument: it would end up in the
+      # remote process's argv (visible via ps/Task Manager/command-line auditing
+      # on the target host). Instead, drop it into a file inside ASSETS_FOLDER so
+      # entrypoint.sh's existing asset scp carries it to the target as file content,
+      # and pass only the (non-sensitive) file path to runner.sh/runner.ps1.
+      TARGET_TOKEN_FILE="${TARGET_FOLDER}/github-token"
+      if [[ -n "${GITHUB_TOKEN}" ]]; then
+        echo -n "${GITHUB_TOKEN}" > "${ASSETS_FOLDER}/github-token"
+        chmod 600 "${ASSETS_FOLDER}/github-token"
       fi
 
       # Create command - command to substitute from GHA workflow using images
@@ -233,6 +252,9 @@ spec:
         fi
         if [[ -n "$(params.podman-download-url)" ]]; then
           cmd="$cmd -podmanDownloadUrl $(params.podman-download-url) "
+        fi
+        if [[ -n "${GITHUB_TOKEN}" ]]; then
+          cmd="$cmd -githubTokenFile ${TARGET_TOKEN_FILE} "
         fi
         cmd="$cmd -initialize $(params.podman-initialize) "
         cmd="$cmd -start $(params.podman-start) "
@@ -289,6 +311,9 @@ spec:
         if [[ -n "$(params.podman-download-url)" ]]; then
           cmd="$cmd --podmanDownloadUrl $(params.podman-download-url) "
         fi
+        if [[ -n "${GITHUB_TOKEN}" ]]; then
+          cmd="$cmd --githubTokenFile ${TARGET_TOKEN_FILE} "
+        fi
         cmd="$cmd --saveTraces $(params.save-traces) "
         cmd="$cmd --cleanMachine $(params.clean-machine) "
         cmd="$cmd --debugScript $(params.debug-script) "
@@ -323,6 +348,9 @@ spec:
 
       # Exec
       . entrypoint.sh "${cmd}"
+
+      # Token file was copied to the target via assets; remove the local copy too.
+      rm -f "${ASSETS_FOLDER}/github-token"
 
       # Results
       echo "Storing duration result..."

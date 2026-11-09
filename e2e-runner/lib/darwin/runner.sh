@@ -40,6 +40,7 @@ saveTraces=1
 cleanMachine=1
 scriptPaths=""
 podmanDownloadUrl=""
+githubTokenFile=""
 resignApp=0
 debugScript=0
 
@@ -70,6 +71,7 @@ while [[ $# -gt 0 ]]; do
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
+        --githubTokenFile) githubTokenFile="$2"; shift ;;
         --resignApp) resignApp="$2"; shift ;;
         --debugScript) debugScript="$2"; shift ;;
         --nodeVersion) nodeVersion="$2"; shift ;;
@@ -78,6 +80,19 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+# Read the token from disk (never accept it as a literal CLI argument - that
+# would leave it visible in this process's argv/ps output) and shred the file
+# immediately so it doesn't linger on disk longer than necessary.
+githubToken=""
+if [ -n "$githubTokenFile" ]; then
+    if [ -f "$githubTokenFile" ]; then
+        githubToken=$(cat "$githubTokenFile")
+        rm -f "$githubTokenFile"
+    else
+        echo "Warning: githubTokenFile '$githubTokenFile' not found"
+    fi
+fi
 
 ####################################################################
 # SCRIPT ENVIRONMENT INITIALIZATION
@@ -110,6 +125,7 @@ if [ "$debugScript" == "1" ]; then
     echo "cleanMachine=$cleanMachine"
     echo "scriptPaths=$scriptPaths"
     echo "podmanDownloadUrl=$podmanDownloadUrl"
+    echo "githubTokenFile=$githubTokenFile"
     echo "resignApp=$resignApp"
     echo "debugScript=$debugScript"
     echo "nodeVersion=$nodeVersion"
@@ -230,28 +246,74 @@ echo "Installing pnpm"
 sudo npm install -g pnpm@$pnpmVersion
 echo "pnpm Version: $(pnpm --version)"
 
+download_file() {
+    local url="$1"
+    local outfile="$2"
+    if [ -n "$githubToken" ]; then
+        curl -o "$outfile" -L \
+            -H "Authorization: Bearer ${githubToken}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url"
+    else
+        curl -o "$outfile" -L "$url"
+    fi
+}
+
 # Podman Installation (if needed)
 if [ -z "$podmanPath" ]; then
     if ! command -v podman &> /dev/null; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman
-            curl -o "$toolsInstallDir/podman-archive" -L "$podmanDownloadUrl"
+            # Download Podman (authenticated when githubTokenFile was provided)
+            download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
             fileType=$(file -b --mime-type "$toolsInstallDir/podman-archive")
             echo "Archive file type: $fileType"
+            isActionsArtifact=false
+            if echo "$podmanDownloadUrl" | grep -Eq '/actions/artifacts/.+/zip'; then
+                isActionsArtifact=true
+            fi
 
-            if [ "$fileType" == "application/zip" ]; then
-                # ZIP installation
+            if [ "$isActionsArtifact" = true ]; then
+                # Actions artifact archive_download_url is a zip containing a .pkg
+                if [ -z "$githubToken" ]; then
+                    echo "Error: githubToken is required to download GitHub Actions artifact archives"
+                    exit 1
+                fi
+                echo "Installing from GitHub Actions artifact archive..."
+                [ -d "$toolsInstallDir/podman-artifact" ] && rm -rf "$toolsInstallDir/podman-artifact"
+                mkdir -p "$toolsInstallDir/podman-artifact"
+                mv "$toolsInstallDir/podman-archive" "$toolsInstallDir/podman-artifact.zip"
+                unzip -o "$toolsInstallDir/podman-artifact.zip" -d "$toolsInstallDir/podman-artifact"
+                pkgFound=$(find "$toolsInstallDir/podman-artifact" -type f -name '*.pkg' | head -n1)
+                if [ -z "$pkgFound" ]; then
+                    echo "Error: No PKG file found inside Actions artifact archive"
+                    find "$toolsInstallDir/podman-artifact" -type f
+                    exit 1
+                fi
+                mv "$pkgFound" "$toolsInstallDir/podman.pkg"
+                sudo installer -pkg "$toolsInstallDir/podman.pkg" -target /
+                podmanPath="/opt/podman/bin"
+
+            elif [ "$fileType" == "application/zip" ]; then
+                # ZIP installation (remote-release layout or zip containing a .pkg)
                 echo "Installing from ZIP archive..."
                 [ -d "$toolsInstallDir/podman" ] && rm -rf "$toolsInstallDir/podman"
                 mkdir -p "$toolsInstallDir/podman"
                 mv "$toolsInstallDir/podman-archive" "$toolsInstallDir/podman.zip"
                 unzip -o "$toolsInstallDir/podman.zip" -d "$toolsInstallDir/podman"
-                podmanFolder=$(ls "$toolsInstallDir/podman")
-                podmanPath="$toolsInstallDir/podman/$podmanFolder/usr/bin"
+                pkgFound=$(find "$toolsInstallDir/podman" -type f -name '*.pkg' | head -n1)
+                if [ -n "$pkgFound" ]; then
+                    mv "$pkgFound" "$toolsInstallDir/podman.pkg"
+                    sudo installer -pkg "$toolsInstallDir/podman.pkg" -target /
+                    podmanPath="/opt/podman/bin"
+                else
+                    podmanFolder=$(ls "$toolsInstallDir/podman")
+                    podmanPath="$toolsInstallDir/podman/$podmanFolder/usr/bin"
+                fi
 
             elif [ "$fileType" == "application/x-xar" ]; then
                 # PKG installation

@@ -28,6 +28,7 @@ extBranch=""
 npmTarget="test:e2e"
 podmanPath=""
 podmanDownloadUrl=""
+githubTokenFile=""
 podmanVersion=""
 rootful=0
 envVars=""
@@ -55,6 +56,7 @@ while [[ $# -gt 0 ]]; do
         --npmTarget) npmTarget="$2"; shift ;;
         --podmanPath) podmanPath="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
+        --githubTokenFile) githubTokenFile="$2"; shift ;;
         --podmanVersion) podmanVersion="$2"; shift ;;
         --envVars) envVars="$2"; shift ;;
         --secretFile) secretFile="$2"; shift ;;
@@ -68,10 +70,37 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# Read the token from disk (never accept it as a literal CLI argument - that
+# would leave it visible in this process's argv/ps output) and shred the file
+# immediately so it doesn't linger on disk longer than necessary.
+githubToken=""
+if [ -n "$githubTokenFile" ]; then
+    if [ -f "$githubTokenFile" ]; then
+        githubToken=$(cat "$githubTokenFile")
+        rm -f "$githubTokenFile"
+    else
+        echo "Warning: githubTokenFile '$githubTokenFile' not found"
+    fi
+fi
+
 # Functions
 download_pd() {
     echo "Downloading Podman Desktop App from $pdUrl"
     curl -L -O "$pdUrl"
+}
+
+download_file() {
+    local url="$1"
+    local outfile="$2"
+    if [ -n "$githubToken" ]; then
+        curl -o "$outfile" -L \
+            -H "Authorization: Bearer ${githubToken}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url"
+    else
+        curl -o "$outfile" -L "$url"
+    fi
 }
 
 echo "Reading envVars in script: '$envVars'"
@@ -220,10 +249,10 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman
+            # Download Podman (authenticated when githubTokenFile was provided)
             toolsInstallDir="$HOME/tools"
             mkdir -p "$toolsInstallDir"
-            curl -o "$toolsInstallDir/podman-archive" -L "$podmanDownloadUrl"
+            download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
             fileType=$(file -b --mime-type "$toolsInstallDir/podman-archive")
