@@ -105,7 +105,10 @@ function Download-File {
         [string]$OutFile,
         [string]$Token = ''
     )
-    if (-not [string]::IsNullOrWhiteSpace($Token)) {
+    # Only attach the token for the GitHub API origin (Actions artifact URLs).
+    # Never send it to arbitrary download hosts.
+    $useToken = (-not [string]::IsNullOrWhiteSpace($Token)) -and ($Uri -match '^https://api\.github\.com/')
+    if ($useToken) {
         $headers = @{
             Authorization = "Bearer $Token"
             Accept = "application/vnd.github+json"

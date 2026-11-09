@@ -215,6 +215,8 @@ spec:
       if [[ -n "${GITHUB_TOKEN}" ]]; then
         echo -n "${GITHUB_TOKEN}" > "${ASSETS_FOLDER}/github-token"
         chmod 600 "${ASSETS_FOLDER}/github-token"
+        # Ensure the local token copy is removed even if entrypoint.sh exits early.
+        trap 'rm -f "${ASSETS_FOLDER}/github-token"' EXIT
       fi
 
       # Create command - command to substitute from GHA workflow using images

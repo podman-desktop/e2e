@@ -249,14 +249,23 @@ echo "pnpm Version: $(pnpm --version)"
 download_file() {
     local url="$1"
     local outfile="$2"
-    if [ -n "$githubToken" ]; then
-        curl -o "$outfile" -L \
+    # Only attach the token for the GitHub API origin (Actions artifact URLs).
+    # Never send it to arbitrary download hosts. curl -L does not forward
+    # Authorization across host redirects by default.
+    if [ -n "$githubToken" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
+        curl -fsSL -o "$outfile" \
             -H "Authorization: Bearer ${githubToken}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$url"
+            "$url" || {
+            echo "Error: failed to download Podman from $url (HTTP error)"
+            exit 1
+        }
     else
-        curl -o "$outfile" -L "$url"
+        curl -fsSL -o "$outfile" "$url" || {
+            echo "Error: failed to download Podman from $url (HTTP error)"
+            exit 1
+        }
     fi
 }
 
