@@ -74,6 +74,29 @@ download_pd() {
     curl -L -O "$pdUrl"
 }
 
+download_file() {
+    local url="$1"
+    local outfile="$2"
+    # Prefer GITHUB_TOKEN from the environment (secret-file → load_secrets).
+    # Only attach it for the GitHub API origin. curl -L does not forward
+    # Authorization across host redirects by default.
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
+        curl -fsSL -o "$outfile" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url" || {
+            echo "Error: failed to download Podman from $url (HTTP error)"
+            exit 1
+        }
+    else
+        curl -fsSL -o "$outfile" "$url" || {
+            echo "Error: failed to download Podman from $url (HTTP error)"
+            exit 1
+        }
+    fi
+}
+
 echo "Reading envVars in script: '$envVars'"
 
 # Adopt display variables from the GNOME session
@@ -220,10 +243,13 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman
+            # Download Podman (authenticated via GITHUB_TOKEN when set).
+            # Unlike darwin/windows, RHEL does not unpack GitHub Actions artifact
+            # archives here: Linux nightlies are not shipped that way (dnf or a
+            # plain remote-release zip).
             toolsInstallDir="$HOME/tools"
             mkdir -p "$toolsInstallDir"
-            curl -o "$toolsInstallDir/podman-archive" -L "$podmanDownloadUrl"
+            download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
             fileType=$(file -b --mime-type "$toolsInstallDir/podman-archive")

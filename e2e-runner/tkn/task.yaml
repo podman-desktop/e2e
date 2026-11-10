@@ -46,7 +46,7 @@ spec:
 
   # Podman Configuration
   - name: podman-download-url
-    description: URL to download podman installer (supports .zip, .pkg, .exe, .msi)
+    description: URL to download podman installer (supports .zip, .pkg, .exe, .msi, or GitHub Actions artifact archive_download_url which requires GITHUB_TOKEN via secret-file / github-podmandesktop-ci-bot-actions-token)
     default: "''"
   - name: podman-path
     description: Path to existing podman binary (skips installation if provided)
@@ -172,6 +172,13 @@ spec:
     # We do not have a strict control on versions (as so they can be override)
     # force here to pull everytime just in case it is overriden
     imagePullPolicy: Always
+    env:
+    - name: GITHUB_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: github-podmandesktop-ci-bot-actions-token
+          key: token
+          optional: true
     script: |
       #!/bin/bash
 
@@ -187,15 +194,45 @@ spec:
       TARGET_CLEANUP=$(params.target-cleanup)
       OUTPUT_FOLDER=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
       mkdir -p "${OUTPUT_FOLDER}"
+      ASSETS_FOLDER=/opt/e2e-runner
+
+      # Secret file basename/path passed to the remote runner (load_secrets → env vars).
+      REMOTE_SECRET_FILE="$(params.secret-file)"
+      if [ "${REMOTE_SECRET_FILE}" = "''" ]; then
+        REMOTE_SECRET_FILE=""
+      fi
 
       # get the secret file into target host
       # Warning: The assets folder on target where we copy the file must be the same as target folder in the image
-      if [ "$(params.secret-file)" != "''" ] && [ -n "$(params.secret-file)" ]; then
-        secretFile=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file)
-        echo "Copying secret file: $(params.secret-file) from $secretFile to assets folder (/opt/e2e-runner) of the image"
-        cp $(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.secret-file) /opt/e2e-runner/
+      if [ -n "${REMOTE_SECRET_FILE}" ]; then
+        secretFile=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/${REMOTE_SECRET_FILE}
+        echo "Copying secret file: ${REMOTE_SECRET_FILE} from $secretFile to assets folder (/opt/e2e-runner) of the image"
+        cp "${secretFile}" /opt/e2e-runner/
       else
         echo "No secret file provided, property is empty"
+      fi
+
+      # Never pass GITHUB_TOKEN as a literal CLI argument / envVars value: it would
+      # end up in the remote process's argv. Instead, inject it into the secret-file
+      # that entrypoint.sh already scp's to the target; load_secrets then exports it
+      # as GITHUB_TOKEN for runner.sh/runner.ps1 (same pattern as install_minikube.sh).
+      if [[ -n "${GITHUB_TOKEN}" ]]; then
+        if [ -n "${REMOTE_SECRET_FILE}" ]; then
+          ASSET_SECRET="${ASSETS_FOLDER}/$(basename "${REMOTE_SECRET_FILE}")"
+        else
+          REMOTE_SECRET_FILE="secrets.txt"
+          ASSET_SECRET="${ASSETS_FOLDER}/secrets.txt"
+          : > "${ASSET_SECRET}"
+        fi
+        if [ -f "${ASSET_SECRET}" ]; then
+          grep -v '^GITHUB_TOKEN=' "${ASSET_SECRET}" > "${ASSET_SECRET}.tmp" || true
+          mv "${ASSET_SECRET}.tmp" "${ASSET_SECRET}"
+        fi
+        echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> "${ASSET_SECRET}"
+        chmod 600 "${ASSET_SECRET}"
+        echo "Injected GITHUB_TOKEN into secret file for remote load_secrets"
+        # Best-effort cleanup of the container-local copy on early exit.
+        trap 'rm -f "${ASSET_SECRET}"' EXIT
       fi
 
       # Create command - command to substitute from GHA workflow using images
@@ -226,7 +263,9 @@ spec:
           cmd="$cmd -extBranch $(params.ext-branch) "
         fi
         cmd="$cmd -envVars $(params.env-vars) "
-        cmd="$cmd -secretFile $(params.secret-file) "
+        if [ -n "${REMOTE_SECRET_FILE}" ]; then
+          cmd="$cmd -secretFile ${REMOTE_SECRET_FILE} "
+        fi
         cmd="$cmd -npmTarget $(params.npm-target) "
         if [[ -n "$(params.podman-path)" ]]; then
           cmd="$cmd -podmanPath $(params.podman-path) "
@@ -276,7 +315,7 @@ spec:
           cmd="$cmd --extBranch $(params.ext-branch) "
         fi
         cmd="$cmd --envVars '$(params.env-vars)' "
-        cmd="$cmd --secretFile $(params.secret-file) "
+        cmd="$cmd --secretFile ${REMOTE_SECRET_FILE} "
         cmd="$cmd --fork $(params.fork) "
         cmd="$cmd --branch $(params.branch) "
         cmd="$cmd --repo $(params.repo) "

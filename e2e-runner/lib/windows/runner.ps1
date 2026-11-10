@@ -49,7 +49,7 @@ param(
     $saveTraces='1',
     [Parameter(HelpMessage = 'Run tests as admin')]
     $runAsAdmin = '0',
-    [Parameter(HelpMessage = 'Podman download URL for installation')]
+    [Parameter(HelpMessage = 'Podman download URL for installation (supports .zip/.exe/.msi or GitHub Actions artifact archive_download_url; the latter requires GITHUB_TOKEN via secret-file)')]
     [string]$podmanDownloadUrl = "",
     [Parameter(HelpMessage = 'Install WSL on Windows, default is 0/false')]
     $installWSL = '0',
@@ -82,6 +82,30 @@ $global:envVarDefs = @()
 # Source common functions
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\windows\common\common.ps1"
+
+function Download-File {
+    param (
+        [string]$Uri,
+        [string]$OutFile,
+        [string]$Token = ''
+    )
+    # Prefer GITHUB_TOKEN from the environment (secret-file → Load-Secrets).
+    # Only attach it for the GitHub API origin.
+    if ([string]::IsNullOrWhiteSpace($Token)) {
+        $Token = $env:GITHUB_TOKEN
+    }
+    $useToken = (-not [string]::IsNullOrWhiteSpace($Token)) -and ($Uri -match '^https://api\.github\.com/')
+    if ($useToken) {
+        $headers = @{
+            Authorization = "Bearer $Token"
+            Accept = "application/vnd.github+json"
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        Invoke-WebRequest -Uri $Uri -Headers $headers -OutFile $OutFile
+    } else {
+        Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+    }
+}
 
 # Debug output
 if ($debugScript -eq "1") {
@@ -291,11 +315,47 @@ if (-not (Command-Exists "podman")) {
         $podmanProgramFiles="$env:ProgramFiles\RedHat\Podman\"
         $podmanPath=""
         $useUserScope=$false  # Track whether to use User or Machine scope for PATH
-        if ($extension -eq '.zip') {
+        $isActionsArtifact = $podmanDownloadUrl -match '/actions/artifacts/.+/zip'
+
+        if ($isActionsArtifact) {
+            if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+                Throw "GITHUB_TOKEN is required to download GitHub Actions artifact archives"
+            }
+            write-host "Downloading Podman Actions artifact archive from $podmanDownloadUrl"
+            $zipPath = "$toolsInstallDir\podman-artifact.zip"
+            $extractDir = "$toolsInstallDir\podman-artifact"
+            Download-File -Uri $podmanDownloadUrl -OutFile $zipPath
+            if (Test-Path $extractDir) {
+                Remove-Item -Recurse -Force $extractDir
+            }
+            New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+            Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+            $msiFound = Get-ChildItem -Path $extractDir -Recurse -Filter '*.msi' | Select-Object -First 1
+            if (-not $msiFound) {
+                Get-ChildItem -Path $extractDir -Recurse | ForEach-Object { write-host $_.FullName }
+                Throw "No MSI file found inside Actions artifact archive"
+            }
+            $msiPath = "$toolsInstallDir\podman.msi"
+            Copy-Item -Force $msiFound.FullName $msiPath
+            write-host "Installing Podman MSI silently from Actions artifact..."
+            $msiLogFile = "$targetLocation\podman-msi.log"
+            $msiArgs = @("/package", $msiPath, "/quiet", "/l*v", $msiLogFile)
+            $process = Start-Process msiexec.exe -ArgumentList $msiArgs -PassThru -Wait
+            write-host "Install process exit code: " $process.ExitCode
+            if ($process.ExitCode -ne 0) {
+                if (Test-Path $msiLogFile) {
+                    write-host "MSI Installation Log:"
+                    Get-Content $msiLogFile | ForEach-Object { write-host $_ }
+                }
+                Throw "Podman MSI installation failed with exit code: $($process.ExitCode). Check log above for details."
+            }
+            $podmanPath="$env:LOCALAPPDATA\Programs\Podman\"
+            $useUserScope=$true  # MSI installs to user directory (no admin required)
+        } elseif ($extension -eq '.zip') {
             $podmanFolder="podman-remote-release-windows_amd64"
             write-host "Downloading podman archive from $podmanDownloadUrl"
             if (-not (Test-Path -Path "$toolsInstallDir\podman" -PathType Container)) {
-                Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.zip"
+                Download-File -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.zip"
                 mkdir -p "$toolsInstallDir\podman"
                 Expand-Archive -Path "$toolsInstallDir\podman.zip" -DestinationPath "$toolsInstallDir\podman" -Force
             }
@@ -321,7 +381,7 @@ if (-not (Command-Exists "podman")) {
             }
         } elseif ($extension -eq '.exe') {
             write-host "Downloading podman setup.exe from $podmanDownloadUrl"
-            Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.exe"
+            Download-File -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.exe"
             # Install the setup.exe
             write-host "Install Podman from setup.exe silently.."
             $process = Start-Process -FilePath "$toolsInstallDir\podman.exe" -ArgumentList "/S" -PassThru -Wait
@@ -337,7 +397,7 @@ if (-not (Command-Exists "podman")) {
             $useUserScope=$false  # EXE installs to Program Files (system-wide)
         } elseif ($extension -eq '.msi') {
             write-host "Downloading podman MSI installer from $podmanDownloadUrl"
-            Invoke-WebRequest -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.msi"
+            Download-File -Uri $podmanDownloadUrl -OutFile "$toolsInstallDir\podman.msi"
             # Install MSI using user-scope installation (default, no admin required)
             write-host "Installing Podman MSI silently..."
             $msiLogFile = "$targetLocation\podman-msi.log"
