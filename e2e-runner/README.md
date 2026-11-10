@@ -384,6 +384,16 @@ Additional Windows-specific parameter:
 
 ## Tekton Task Usage
 
+The optional `target-folder` parameter sets the remote directory for runner assets
+and execution. When empty (the default), it selects `/opt/pd-e2e` for RHEL and
+`pd-e2e` for Windows and macOS. Set it explicitly to use another location.
+
+For RHEL, the task creates the selected directory on the remote host with ownership assigned
+to the SSH user. Assets, repository checkouts, results, and tool downloads use
+this directory to avoid filling the small `/home` filesystem on Azure RHEL
+images. The SSH user needs passwordless sudo to prepare the directory. Result
+collection and `target-cleanup` use the same remote directory.
+
 The unified Tekton task combines all parameters from both original tasks:
 
 ```yaml

@@ -31,11 +31,14 @@ spec:
   - name: key
     description: key file name to connect to the provisioned machine within the workspace resources path
   - name: os
-    description: type of platform per target host (windows, darwin)
+    description: type of platform per target host (windows, darwin, rhel)
     default: windows
   - name: arch
     description: type of arch per target host for windows only amd64, for darwin amd64 or arm64
     default: amd64
+  - name: target-folder
+    description: 'Remote directory for runner assets and execution. Empty selects /opt/pd-e2e for RHEL and pd-e2e for other platforms.'
+    default: ''
   - name: workspace-resources-path
     description: path on workspace to find resources to connect to the target machine
 
@@ -182,7 +185,21 @@ spec:
       TARGET_HOST_USERNAME=$(params.username)
       TARGET_HOST_KEY_PATH=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.key)
       chmod 600 ${TARGET_HOST_KEY_PATH}
-      TARGET_FOLDER=pd-e2e
+      TARGET_FOLDER="$(params.target-folder)"
+      if [[ -z "$TARGET_FOLDER" ]]; then
+        if [[ "$(params.os)" == "rhel" ]]; then
+          # Use the expanded root filesystem instead of RHEL's small /home filesystem.
+          TARGET_FOLDER=/opt/pd-e2e
+        else
+          TARGET_FOLDER=pd-e2e
+        fi
+      fi
+      if [[ "$(params.os)" == "rhel" ]]; then
+        ssh -i "${TARGET_HOST_KEY_PATH}" \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          "${TARGET_HOST_USERNAME}@${TARGET_HOST}" \
+          "sudo mkdir -p '${TARGET_FOLDER}' && sudo chown '${TARGET_HOST_USERNAME}:${TARGET_HOST_USERNAME}' '${TARGET_FOLDER}'" || exit 1
+      fi
       TARGET_RESULTS=$(params.results-folder)
       TARGET_CLEANUP=$(params.target-cleanup)
       OUTPUT_FOLDER=$(workspaces.pipelines-data.path)/$(params.workspace-resources-path)/$(params.workspace-qe-subpath)
