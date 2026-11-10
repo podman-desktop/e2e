@@ -243,7 +243,7 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman (authenticated when githubTokenFile was provided)
+            # Download Podman (authenticated via GITHUB_TOKEN when set)
             toolsInstallDir="$HOME/tools"
             mkdir -p "$toolsInstallDir"
             download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
