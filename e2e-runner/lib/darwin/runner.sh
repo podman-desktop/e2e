@@ -259,23 +259,25 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
+            isActionsArtifact=false
+            if echo "$podmanDownloadUrl" | grep -Eq '/actions/artifacts/.+/zip'; then
+                isActionsArtifact=true
+            fi
+            # Fail fast with a clear error before curl (Windows does the same).
+            if [ "$isActionsArtifact" = true ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+                echo "Error: GITHUB_TOKEN is required to download GitHub Actions artifact archives"
+                exit 1
+            fi
+
             # Download Podman (authenticated via GITHUB_TOKEN when set)
             download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
             fileType=$(file -b --mime-type "$toolsInstallDir/podman-archive")
             echo "Archive file type: $fileType"
-            isActionsArtifact=false
-            if echo "$podmanDownloadUrl" | grep -Eq '/actions/artifacts/.+/zip'; then
-                isActionsArtifact=true
-            fi
 
             if [ "$isActionsArtifact" = true ]; then
                 # Actions artifact archive_download_url is a zip containing a .pkg
-                if [ -z "${GITHUB_TOKEN:-}" ]; then
-                    echo "Error: GITHUB_TOKEN is required to download GitHub Actions artifact archives"
-                    exit 1
-                fi
                 echo "Installing from GitHub Actions artifact archive..."
                 [ -d "$toolsInstallDir/podman-artifact" ] && rm -rf "$toolsInstallDir/podman-artifact"
                 mkdir -p "$toolsInstallDir/podman-artifact"

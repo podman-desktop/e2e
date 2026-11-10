@@ -243,7 +243,10 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman (authenticated via GITHUB_TOKEN when set)
+            # Download Podman (authenticated via GITHUB_TOKEN when set).
+            # Unlike darwin/windows, RHEL does not unpack GitHub Actions artifact
+            # archives here: Linux nightlies are not shipped that way (dnf or a
+            # plain remote-release zip).
             toolsInstallDir="$HOME/tools"
             mkdir -p "$toolsInstallDir"
             download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
