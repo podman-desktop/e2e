@@ -40,7 +40,6 @@ saveTraces=1
 cleanMachine=1
 scriptPaths=""
 podmanDownloadUrl=""
-githubTokenFile=""
 resignApp=0
 debugScript=0
 
@@ -71,7 +70,6 @@ while [[ $# -gt 0 ]]; do
         --cleanMachine) cleanMachine="$2"; shift ;;
         --scriptPaths) scriptPaths="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
-        --githubTokenFile) githubTokenFile="$2"; shift ;;
         --resignApp) resignApp="$2"; shift ;;
         --debugScript) debugScript="$2"; shift ;;
         --nodeVersion) nodeVersion="$2"; shift ;;
@@ -80,19 +78,6 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-
-# Read the token from disk (never accept it as a literal CLI argument - that
-# would leave it visible in this process's argv/ps output) and shred the file
-# immediately so it doesn't linger on disk longer than necessary.
-githubToken=""
-if [ -n "$githubTokenFile" ]; then
-    if [ -f "$githubTokenFile" ]; then
-        githubToken=$(cat "$githubTokenFile")
-        rm -f "$githubTokenFile"
-    else
-        echo "Warning: githubTokenFile '$githubTokenFile' not found"
-    fi
-fi
 
 ####################################################################
 # SCRIPT ENVIRONMENT INITIALIZATION
@@ -125,7 +110,6 @@ if [ "$debugScript" == "1" ]; then
     echo "cleanMachine=$cleanMachine"
     echo "scriptPaths=$scriptPaths"
     echo "podmanDownloadUrl=$podmanDownloadUrl"
-    echo "githubTokenFile=$githubTokenFile"
     echo "resignApp=$resignApp"
     echo "debugScript=$debugScript"
     echo "nodeVersion=$nodeVersion"
@@ -249,12 +233,12 @@ echo "pnpm Version: $(pnpm --version)"
 download_file() {
     local url="$1"
     local outfile="$2"
-    # Only attach the token for the GitHub API origin (Actions artifact URLs).
-    # Never send it to arbitrary download hosts. curl -L does not forward
-    # Authorization across host redirects by default.
-    if [ -n "$githubToken" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
+    # Prefer GITHUB_TOKEN from the environment (secret-file → load_secrets, or
+    # caller-exported). Only attach it for the GitHub API origin. curl -L does
+    # not forward Authorization across host redirects by default.
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
         curl -fsSL -o "$outfile" \
-            -H "Authorization: Bearer ${githubToken}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$url" || {
@@ -275,7 +259,7 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman (authenticated when githubTokenFile was provided)
+            # Download Podman (authenticated via GITHUB_TOKEN when set)
             download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
@@ -288,8 +272,8 @@ if [ -z "$podmanPath" ]; then
 
             if [ "$isActionsArtifact" = true ]; then
                 # Actions artifact archive_download_url is a zip containing a .pkg
-                if [ -z "$githubToken" ]; then
-                    echo "Error: githubToken is required to download GitHub Actions artifact archives"
+                if [ -z "${GITHUB_TOKEN:-}" ]; then
+                    echo "Error: GITHUB_TOKEN is required to download GitHub Actions artifact archives"
                     exit 1
                 fi
                 echo "Installing from GitHub Actions artifact archive..."

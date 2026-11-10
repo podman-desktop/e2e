@@ -28,7 +28,6 @@ extBranch=""
 npmTarget="test:e2e"
 podmanPath=""
 podmanDownloadUrl=""
-githubTokenFile=""
 podmanVersion=""
 rootful=0
 envVars=""
@@ -56,7 +55,6 @@ while [[ $# -gt 0 ]]; do
         --npmTarget) npmTarget="$2"; shift ;;
         --podmanPath) podmanPath="$2"; shift ;;
         --podmanDownloadUrl) podmanDownloadUrl="$2"; shift ;;
-        --githubTokenFile) githubTokenFile="$2"; shift ;;
         --podmanVersion) podmanVersion="$2"; shift ;;
         --envVars) envVars="$2"; shift ;;
         --secretFile) secretFile="$2"; shift ;;
@@ -70,19 +68,6 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Read the token from disk (never accept it as a literal CLI argument - that
-# would leave it visible in this process's argv/ps output) and shred the file
-# immediately so it doesn't linger on disk longer than necessary.
-githubToken=""
-if [ -n "$githubTokenFile" ]; then
-    if [ -f "$githubTokenFile" ]; then
-        githubToken=$(cat "$githubTokenFile")
-        rm -f "$githubTokenFile"
-    else
-        echo "Warning: githubTokenFile '$githubTokenFile' not found"
-    fi
-fi
-
 # Functions
 download_pd() {
     echo "Downloading Podman Desktop App from $pdUrl"
@@ -92,12 +77,12 @@ download_pd() {
 download_file() {
     local url="$1"
     local outfile="$2"
-    # Only attach the token for the GitHub API origin (Actions artifact URLs).
-    # Never send it to arbitrary download hosts. curl -L does not forward
+    # Prefer GITHUB_TOKEN from the environment (secret-file → load_secrets).
+    # Only attach it for the GitHub API origin. curl -L does not forward
     # Authorization across host redirects by default.
-    if [ -n "$githubToken" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
         curl -fsSL -o "$outfile" \
-            -H "Authorization: Bearer ${githubToken}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "$url" || {
