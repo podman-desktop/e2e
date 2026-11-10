@@ -263,7 +263,9 @@ spec:
           cmd="$cmd -extBranch $(params.ext-branch) "
         fi
         cmd="$cmd -envVars $(params.env-vars) "
-        cmd="$cmd -secretFile ${REMOTE_SECRET_FILE} "
+        if [ -n "${REMOTE_SECRET_FILE}" ]; then
+          cmd="$cmd -secretFile ${REMOTE_SECRET_FILE} "
+        fi
         cmd="$cmd -npmTarget $(params.npm-target) "
         if [[ -n "$(params.podman-path)" ]]; then
           cmd="$cmd -podmanPath $(params.podman-path) "
