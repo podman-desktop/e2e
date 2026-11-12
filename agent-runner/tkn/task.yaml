@@ -8,7 +8,8 @@ metadata:
     redhat.com/product: podman-desktop
     dev.lifecycle.io/phase: testing
   annotations:
-    tekton.dev/pipelines.minVersion: "0.24.x"
+    # Step onError is stable from 0.29 (alpha and flag-gated in 0.27-0.28).
+    tekton.dev/pipelines.minVersion: "0.29.x"
     tekton.dev/categories: podman-desktop
     tekton.dev/tags: podman-desktop, testing, ai, agent
     tekton.dev/displayName: "Run a headless agent bundle"
@@ -63,12 +64,6 @@ spec:
     description: Link to the full artifacts, exported as ARTIFACTS_URL
     default: ''
 
-  - name: service-account
-    description: >-
-      ServiceAccount the pod must run as. The task fails before the agent
-      starts if it runs as any other one or has an API token mounted.
-    default: agent-runner
-
   results:
   - name: summary
     description: Bounded summary from the bundle post-check (at most 3072 bytes), or SKIP
@@ -78,7 +73,8 @@ spec:
   # cannot enforce. Without that binding the agent would run as the namespace's
   # default ServiceAccount, with its token and permissions, so check the pod
   # before the agent starts. A wrong identity is a configuration error: this
-  # step fails the TaskRun, and the agent and its key never run.
+  # step fails the TaskRun, and the agent and its key never run. The name is
+  # fixed, not a param, so a PipelineTask cannot trust another identity.
   - name: verify-identity
     image: $(params.image)
     env:
@@ -86,8 +82,6 @@ spec:
       valueFrom:
         fieldRef:
           fieldPath: spec.serviceAccountName
-    - name: EXPECTED_SA
-      value: $(params.service-account)
     securityContext:
       runAsNonRoot: true
       readOnlyRootFilesystem: true
@@ -99,8 +93,8 @@ spec:
     script: |
       #!/usr/bin/env bash
       set -u
-      if [[ "$POD_SA" != "$EXPECTED_SA" ]]; then
-        echo "ERROR: running as ServiceAccount '$POD_SA', not '$EXPECTED_SA'; bind it with taskRunSpecs (see README.md)" >&2
+      if [[ "$POD_SA" != agent-runner ]]; then
+        echo "ERROR: running as ServiceAccount '$POD_SA', not 'agent-runner'; bind it with taskRunSpecs (see README.md)" >&2
         exit 1
       fi
       if [[ -e /var/run/secrets/kubernetes.io/serviceaccount/token ]]; then
