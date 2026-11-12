@@ -387,12 +387,20 @@ Additional Windows-specific parameter:
 The optional `target-folder` parameter sets the remote directory for runner assets
 and execution. When empty (the default), it selects `/opt/pd-e2e` for RHEL and
 `pd-e2e` for Windows and macOS. Set it explicitly to use another location.
+Paths may contain letters, digits, dots, underscores, hyphens, and forward
+slashes, but must not start with a hyphen or contain `.` or `..` components.
+Spaces and shell characters are rejected before connecting to the host because
+the transfer utility does not support quoting them. The filesystem root is not
+a valid target.
 
 For RHEL, the task creates the selected directory on the remote host with ownership assigned
-to the SSH user. Assets, repository checkouts, results, and tool downloads use
-this directory to avoid filling the small `/home` filesystem on Azure RHEL
-images. The SSH user needs passwordless sudo to prepare the directory. Result
-collection and `target-cleanup` use the same remote directory.
+to the SSH user. Assets, repository checkouts, and results use this directory
+to avoid filling the small `/home` filesystem on Azure RHEL images. Tool
+downloads use a sibling directory with a `-tools` suffix (by default,
+`/opt/pd-e2e-tools`). This directory is retained during `target-cleanup` so the
+returned `podman-path` remains usable. The SSH user needs passwordless sudo to
+prepare both directories. Result collection and `target-cleanup` use the
+selected remote directory.
 
 The unified Tekton task combines all parameters from both original tasks:
 
