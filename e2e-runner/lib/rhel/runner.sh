@@ -117,11 +117,8 @@ export PNPM_STORE_DIR="$workingDir/.pnpm-store"
 export XDG_CONFIG_HOME="$workingDir/.config"
 export XDG_DATA_HOME="$workingDir/.local/share"
 
-# Specify the user profile directory
-userProfile="$HOME"
-
-# Specify the shared tools directory
-toolsInstallDir="$userProfile/tools"
+# Keep tool downloads alongside the checkout, off the small /home filesystem.
+toolsInstallDir="$workingDir/tools"
 
 # Output file for built podman desktop binary
 outputFile="binary-path.log"
@@ -221,7 +218,6 @@ if [ -z "$podmanPath" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
             # Download Podman
-            toolsInstallDir="$HOME/tools"
             mkdir -p "$toolsInstallDir"
             curl -o "$toolsInstallDir/podman-archive" -L "$podmanDownloadUrl"
 
