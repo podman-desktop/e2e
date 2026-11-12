@@ -59,6 +59,8 @@ but never the model key or the results:
   params:
   - {name: image, value: ghcr.io/podman-desktop/evaluation-agent:v0.2.0}
   - {name: input-path, value: podman-desktop}   # Playwright output inside qe-results
+  - {name: api-key-secret, value: codex-api-key}
+  - {name: api-key-secret-key, value: api-key}
   - {name: pipeline-name, value: $(context.pipelineRun.name)}
   - {name: artifacts-url, value: $(params.artifacts-url)}
   workspaces:
@@ -86,7 +88,8 @@ Bind the `agent-runner` ServiceAccount (no token) to both tasks with
 
 Secrets (created by the namespace owner):
 
-- `codex-api-key`, key `api-key`: a dedicated, spend-limited OpenAI project key.
+- A dedicated, spend-limited OpenAI project key, in the Secret and key named by
+  `api-key-secret` and `api-key-secret-key` (`codex-api-key` and `api-key` above).
 - `slack-webhook`, key `url`: the Workflow Builder trigger URL. The trigger takes
   one flat variable (default `text`); there is no Slack app or incoming webhook.
 
