@@ -8,7 +8,8 @@ metadata:
     redhat.com/product: podman-desktop
     dev.lifecycle.io/phase: testing
   annotations:
-    tekton.dev/pipelines.minVersion: "0.24.x"
+    # Step onError is stable from 0.29 (alpha and flag-gated in 0.27-0.28).
+    tekton.dev/pipelines.minVersion: "0.29.x"
     tekton.dev/categories: podman-desktop
     tekton.dev/tags: podman-desktop, testing, slack
     tekton.dev/displayName: "Post E2E evaluation to Slack"
