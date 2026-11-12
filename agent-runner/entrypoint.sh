@@ -113,8 +113,16 @@ env -u CODEX_API_KEY AGENT_SUMMARY_FILE="$summary" \
 (( rc == 0 )) || die 1 "post-check failed (exit $rc)"
 
 if [[ -n "$summary_out" && -s "$summary" ]]; then
-  size="$(( $(wc -c <"$summary") ))"
+  # Tekton stores results JSON-encoded in the 4096-byte termination message,
+  # and Go escapes <, > and & as <. Bound that size, not the file's:
+  # 6 bytes per such character, 2 per short escape, UTF-8 length otherwise.
+  size="$(jq -Rrs '[explode[]
+      | if . == 60 or . == 62 or . == 38 or . == 8232 or . == 8233 or . == 65533
+           or (. < 32 and . != 9 and . != 10 and . != 13) then 6
+        elif . == 34 or . == 92 or . == 9 or . == 10 or . == 13 then 2
+        elif . < 128 then 1 elif . < 2048 then 2 elif . < 65536 then 3 else 4 end]
+    | add // 0' "$summary")"
   (( size <= summary_max_bytes )) \
-    || die 1 "summary is $size bytes, over AGENT_SUMMARY_MAX_BYTES=$summary_max_bytes"
+    || die 1 "summary is $size bytes JSON-encoded, over AGENT_SUMMARY_MAX_BYTES=$summary_max_bytes"
   cp -- "$summary" "$summary_out"
 fi

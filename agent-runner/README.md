@@ -24,7 +24,7 @@ hardening or Tekton YAML to review.
 |---|---|---|
 | `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path; a prompt that uses it needs an input. Name the skill explicitly (`$skill-name`). |
 | `/opt/agent/task/output.schema.json` | yes | JSON schema the final answer must match (`codex exec --output-schema`). |
-| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It never sees the API key. |
+| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It does not inherit the API key. |
 | `/etc/codex/skills/<name>/` | no | Skills, in Codex's admin skill location (root-owned, read-only). |
 
 Runtime environment:
@@ -38,7 +38,7 @@ Runtime environment:
 | `AGENT_TIMEOUT` | `12m` | Hard wall-clock limit for the agent (GNU `timeout` syntax). |
 | `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples): a TaskRun killed by that timeout fails despite `onError: continue`. |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
-| `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary, under Tekton's 4096-byte result limit. |
+| `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary as Tekton stores it, JSON-encoded (`<`, `>` and `&` take 6 bytes each), under Tekton's 4096-byte result limit. |
 | `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
 
 Flow: validate the configuration (an `INPUT_DIR`, when set, must be readable)
@@ -79,7 +79,9 @@ error.
 
 ## Running in OpenShift Pipelines
 
-`tkn/task.yaml` is a generic `run-agent` Task. A pipeline uses it like this:
+`tkn/task.yaml` is a generic `run-agent` Task. It needs Tekton Pipelines 0.29 or
+later, where step `onError` is stable, and is tested on OpenShift Pipelines 1.20
+(Tekton 1.3). A pipeline uses it like this:
 
 ```yaml
 tasks:
@@ -144,8 +146,9 @@ PipelineRun. Without it the task would run as the namespace's default
 ServiceAccount (`pipeline` on OpenShift Pipelines), which can read Secrets and
 create pods, with its token mounted. The first step, `verify-identity`, checks
 the pod before the agent starts. If the pod runs as any ServiceAccount other
-than the `service-account` param (default `agent-runner`), or has an API token
-mounted, it fails the TaskRun, and the agent and its key never run. This is a
+than `agent-runner`, or has an API token mounted, it fails the TaskRun, and the
+agent and its key never run. The name is fixed, not a param, so a PipelineTask
+cannot point the check at a ServiceAccount with more rights. This is a
 configuration error, so unlike an agent failure it does fail the PipelineRun.
 
 To check what the ServiceAccount can do (every answer should be `no`):
