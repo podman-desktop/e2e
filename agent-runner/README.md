@@ -51,7 +51,9 @@ Exit codes: `2` bad configuration, `124` timeout, any other non-zero is an agent
 or post-check failure. Every failure leaves summary `SKIP`. In Tekton the
 `run-agent` step has `onError: continue`: the exit code is recorded on the step
 and the TaskRun still succeeds, so the advisory agent never fails the
-PipelineRun.
+PipelineRun. The one exception is a wrong pod identity, which
+[`verify-identity`](#running-in-openshift-pipelines) treats as a configuration
+error.
 
 ## Adding a bundle
 
@@ -111,7 +113,7 @@ has no PVC mounted at all.
 
 The task runs under its own ServiceAccount, which the namespace that runs the
 pipeline creates. It holds no RoleBindings and mounts no token, so a
-prompt-injected agent cannot use the Kubernetes API:
+prompt-injected agent cannot read Secrets, start pods or change pipelines:
 
 ```yaml
 apiVersion: v1
@@ -135,9 +137,22 @@ spec:
 ```
 
 In a `tekton.dev/v1beta1` PipelineRun the fields are `taskServiceAccountName`
-and `taskPodTemplate`. The API silently drops the v1 names there, and the task
-then runs as `pipeline` with its token mounted. Check the pod's
-`spec.serviceAccountName` after the first run.
+and `taskPodTemplate`. The API silently drops the v1 names there.
+
+A Task cannot choose its ServiceAccount, so the binding depends on every
+PipelineRun. Without it the task would run as the namespace's default
+ServiceAccount (`pipeline` on OpenShift Pipelines), which can read Secrets and
+create pods, with its token mounted. The first step, `verify-identity`, checks
+the pod before the agent starts. If the pod runs as any ServiceAccount other
+than the `service-account` param (default `agent-runner`), or has an API token
+mounted, it fails the TaskRun, and the agent and its key never run. This is a
+configuration error, so unlike an agent failure it does fail the PipelineRun.
+
+To check what the ServiceAccount can do (every answer should be `no`):
+
+```bash
+bash -c 'for a in "get secrets" "create pods" "create pods/exec" "get pods/log" "create pipelineruns.tekton.dev" "get configmaps"; do echo "$a: $(oc auth can-i $a --as=system:serviceaccount:$(oc project -q):agent-runner)"; done'
+```
 
 ### Secrets
 
@@ -156,9 +171,10 @@ a separate Task that gets the bounded `summary` result, not the model key.
 One exception is outside the Task's control: Tekton copies docker-type secrets
 linked to the ServiceAccount into `/tekton/creds-secrets` and the step's `HOME`
 (`/tekton/home`), where the agent can read them. On OpenShift every
-ServiceAccount gets such an image-pull secret for the internal registry. Link no
-other secrets to `agent-runner`, and treat that pull secret as readable by the
-agent.
+ServiceAccount gets such an image-pull secret for the internal registry, and it
+holds a token for `agent-runner` itself. That is why the ServiceAccount must
+have no RoleBindings: whatever that token can do, a prompt-injected agent can
+do. Link no other secrets to `agent-runner`.
 
 ## Security model
 
@@ -171,7 +187,7 @@ it tries, and the only credential it is given is spend-capped (see
 
 | Asset | Protected by |
 |---|---|
-| Kubernetes API, other secrets | ServiceAccount without a token or RoleBindings |
+| Kubernetes API, other secrets | ServiceAccount without RoleBindings or a mounted token; `verify-identity` stops the task if the pod runs as anything else |
 | Other runs' data on the shared PVC | Read-only workspace bound with a run-scoped `subPath` |
 | The image and its policy | Non-root, `readOnlyRootFilesystem`, root-owned `/etc/codex`, no privilege escalation, all capabilities dropped, `seccompProfile: RuntimeDefault` |
 | The model API key | Excluded from every command the model runs; dedicated project key with a spend limit |

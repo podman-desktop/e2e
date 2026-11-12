@@ -18,8 +18,8 @@ spec:
     Runs a headless Codex agent bundle (an image built FROM agent-runner),
     optionally over a read-only input directory. The full JSON report goes to
     the step log; a short summary, if the bundle produces one, goes to the
-    `summary` result. Run it with the agent-runner ServiceAccount (no API
-    token), see README.md.
+    `summary` result. It fails before the agent starts unless the pod runs
+    as the agent-runner ServiceAccount with no API token, see README.md.
 
   workspaces:
   - name: input
@@ -63,12 +63,59 @@ spec:
     description: Link to the full artifacts, exported as ARTIFACTS_URL
     default: ''
 
+  - name: service-account
+    description: >-
+      ServiceAccount the pod must run as. The task fails before the agent
+      starts if it runs as any other one or has an API token mounted.
+    default: agent-runner
 
   results:
   - name: summary
     description: Bounded summary from the bundle post-check (at most 3072 bytes), or SKIP
 
   steps:
+  # The ServiceAccount comes from the PipelineRun's taskRunSpecs, which a Task
+  # cannot enforce. Without that binding the agent would run as the namespace's
+  # default ServiceAccount, with its token and permissions, so check the pod
+  # before the agent starts. A wrong identity is a configuration error: this
+  # step fails the TaskRun, and the agent and its key never run.
+  - name: verify-identity
+    image: $(params.image)
+    env:
+    - name: POD_SA
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.serviceAccountName
+    - name: EXPECTED_SA
+      value: $(params.service-account)
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    script: |
+      #!/usr/bin/env bash
+      set -u
+      if [[ "$POD_SA" != "$EXPECTED_SA" ]]; then
+        echo "ERROR: running as ServiceAccount '$POD_SA', not '$EXPECTED_SA'; bind it with taskRunSpecs (see README.md)" >&2
+        exit 1
+      fi
+      if [[ -e /var/run/secrets/kubernetes.io/serviceaccount/token ]]; then
+        echo "ERROR: a Kubernetes API token is mounted; set automountServiceAccountToken: false in taskRunSpecs" >&2
+        exit 1
+      fi
+      echo "identity ok: ServiceAccount $POD_SA, no API token mounted"
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+
   - name: run
     image: $(params.image)
     imagePullPolicy: Always
