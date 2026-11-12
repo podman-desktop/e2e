@@ -101,6 +101,8 @@ tasks:
   params:
   - {name: image, value: ghcr.io/podman-desktop/evaluation-agent:v0.2.0}
   - {name: input-path, value: podman-desktop}
+  - {name: api-key-secret, value: codex-api-key}
+  - {name: api-key-secret-key, value: api-key}
   - {name: pipeline-name, value: $(context.pipelineRun.name)}
   workspaces:
   - name: input
@@ -159,10 +161,11 @@ bash -c 'for a in "get secrets" "create pods" "create pods/exec" "get pods/log" 
 
 ### Secrets
 
-The Task reads one Secret, named by the `api-key-secret` param (default
-`codex-api-key`), with the key under `api-key`. Use a **dedicated OpenAI project
-key with a spend limit**, used only by CI agents, so that a leaked key costs at
-most that limit and can be rotated without touching anything else:
+The Task reads one Secret: the required `api-key-secret` param names it and
+`api-key-secret-key` names the key that holds the OpenAI key, so an existing
+Secret can be used as it is. Use a **dedicated OpenAI project key with a spend
+limit**, used only by CI agents, so that a leaked key costs at most that limit
+and can be rotated without touching anything else:
 
 ```bash
 oc create secret generic codex-api-key --from-literal=api-key="$OPENAI_PROJECT_KEY"

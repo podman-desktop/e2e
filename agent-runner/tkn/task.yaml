@@ -40,8 +40,9 @@ spec:
 
   # The API key is injected from a Secret into this step only, never a param.
   - name: api-key-secret
-    description: Secret holding a dedicated, spend-limited OpenAI project key under the api-key key
-    default: codex-api-key
+    description: Secret holding a dedicated, spend-limited OpenAI project key
+  - name: api-key-secret-key
+    description: Key of api-key-secret that holds the OpenAI key
 
   - name: agent-model
     description: Model alias or id
@@ -125,7 +126,7 @@ spec:
       valueFrom:
         secretKeyRef:
           name: $(params.api-key-secret)
-          key: api-key
+          key: $(params.api-key-secret-key)
     # The script sets INPUT_DIR only when the input workspace is bound.
     - name: INPUT_BOUND
       value: $(workspaces.input.bound)
