@@ -394,13 +394,10 @@ the transfer utility does not support quoting them. The filesystem root is not
 a valid target.
 
 For RHEL, the task creates the selected directory on the remote host with ownership assigned
-to the SSH user. Assets, repository checkouts, and results use this directory
-to avoid filling the small `/home` filesystem on Azure RHEL images. Tool
-downloads use a sibling directory with a `-tools` suffix (by default,
-`/opt/pd-e2e-tools`). This directory is retained during `target-cleanup` so the
-returned `podman-path` remains usable. The SSH user needs passwordless sudo to
-prepare both directories. Result collection and `target-cleanup` use the
-selected remote directory.
+to the SSH user. Assets, repository checkouts, results, and tool downloads use
+this directory to avoid filling the small `/home` filesystem on Azure RHEL
+images. The SSH user needs passwordless sudo to prepare the directory. Result
+collection and `target-cleanup` use the same remote directory.
 
 The unified Tekton task combines all parameters from both original tasks:
 

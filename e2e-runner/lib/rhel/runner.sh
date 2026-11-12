@@ -117,8 +117,8 @@ export PNPM_STORE_DIR="$workingDir/.pnpm-store"
 export XDG_CONFIG_HOME="$workingDir/.config"
 export XDG_DATA_HOME="$workingDir/.local/share"
 
-# Keep tools off /home and outside target cleanup so the returned Podman path survives.
-toolsInstallDir="${workingDir}-tools"
+# Keep tool downloads alongside the checkout, off the small /home filesystem.
+toolsInstallDir="$workingDir/tools"
 
 # Output file for built podman desktop binary
 outputFile="binary-path.log"
@@ -134,9 +134,10 @@ load_variables
 # load secrets
 load_secrets
 
-# The working directory's parent (normally /opt) may require elevated permissions.
-sudo mkdir -p "$toolsInstallDir" &&
-    sudo chown "$(id -u):$(id -g)" "$toolsInstallDir" || exit 1
+# Create the tools directory if it doesn't exist
+if [ ! -d "$toolsInstallDir" ]; then
+    mkdir -p "$toolsInstallDir"
+fi
 
 # node installation
 if ! command -v node &> /dev/null; then
