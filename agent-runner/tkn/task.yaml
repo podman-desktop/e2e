@@ -8,8 +8,9 @@ metadata:
     redhat.com/product: podman-desktop
     dev.lifecycle.io/phase: testing
   annotations:
-    # Step onError is stable from 0.29 (alpha and flag-gated in 0.27-0.28).
-    tekton.dev/pipelines.minVersion: "0.29.x"
+    # Isolated (step) workspaces are beta from 0.50, on with the default
+    # enable-api-fields: beta. Step onError is stable from 0.29.
+    tekton.dev/pipelines.minVersion: "0.50.x"
     tekton.dev/categories: podman-desktop
     tekton.dev/tags: podman-desktop, testing, ai, agent
     tekton.dev/displayName: "Run a headless agent bundle"
@@ -29,6 +30,13 @@ spec:
       this run's data, e.g. the e2e-runner results of this PipelineRun. Leave
       it unbound for a job that needs no input data.
     readOnly: true
+    optional: true
+  - name: output
+    description: >-
+      Optional per-run directory that receives the agent's outputs: report.json
+      and any file the bundle's post.sh writes to $OUTPUT_DIR. Only the publish
+      step mounts it, after the agent has exited; the agent can never write to
+      it. Leave it unbound when the summary result is enough.
     optional: true
 
   params:
@@ -63,6 +71,11 @@ spec:
     default: ''
   - name: artifacts-url
     description: Link to the full artifacts, exported as ARTIFACTS_URL
+    default: ''
+  - name: run-info
+    description: >-
+      key=value lines describing the run (version, platform, ...), exported as
+      RUN_INFO for the bundle to report; agent-runner does not read them
     default: ''
 
   results:
@@ -146,6 +159,8 @@ spec:
       value: $(params.pipeline-name)
     - name: ARTIFACTS_URL
       value: $(params.artifacts-url)
+    - name: RUN_INFO
+      value: $(params.run-info)
     # Compatible with restricted-v2: no fixed UID, the SCC assigns one.
     securityContext:
       runAsNonRoot: true
@@ -166,6 +181,9 @@ spec:
       if [[ "$INPUT_BOUND" == "true" ]]; then
         export INPUT_DIR="$INPUT_ROOT/$INPUT_PATH"
       fi
+      # Outputs stay in the pod until the publish step copies them.
+      export OUTPUT_DIR=/var/lib/agent-runner/out
+      mkdir -p "$OUTPUT_DIR"
       # exec: Tekton's TERM reaches the entrypoint, which stops the agent.
       exec /usr/local/bin/agent-runner
     resources:
@@ -175,6 +193,52 @@ spec:
       limits:
         memory: "1Gi"
         cpu: "1"
+
+  # Copies the outputs to the output workspace. A separate step: the agent's
+  # container has exited, with any process the agent left behind, and only this
+  # step mounts the workspace (an isolated workspace). Plain files only, at
+  # most 1 MiB each, so the agent cannot plant a link or fill the volume.
+  - name: publish
+    image: $(params.image)
+    onError: continue
+    workspaces:
+    - name: output
+    env:
+    # Tekton writes registry credentials into HOME; the image rootfs is read-only.
+    - name: HOME
+      value: /tekton/home
+    - name: OUTPUT_BOUND
+      value: $(workspaces.output.bound)
+    - name: OUTPUT_PATH
+      value: $(workspaces.output.path)
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    volumeMounts:
+    - name: agent-state
+      mountPath: /var/lib/agent-runner
+    script: |
+      #!/usr/bin/env bash
+      set -u
+      src=/var/lib/agent-runner/out
+      [[ "$OUTPUT_BOUND" == "true" ]] || exit 0
+      [[ -d "$src" && ! -L "$src" ]] || { echo "no outputs to publish"; exit 0; }
+      # -links 1: a hard link could pass off another file of the volume as output.
+      find "$src" -maxdepth 1 -type f -links 1 -size -1025k -print0 \
+        | xargs -0 -r cp -t "$OUTPUT_PATH" --
+      ls -l "$OUTPUT_PATH"
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
 
   volumes:
   - name: tmp
