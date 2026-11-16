@@ -7,9 +7,12 @@ E2E failures. It reads the Playwright results of a run (`json-results.json`,
 produces:
 
 - the full JSON report (schema: `task/output.schema.json`) in the step log;
-- a plain-text digest in the `summary` result, which `tkn/slack-task.yaml`
-  posts to a Slack Workflow Builder trigger. It lists as many failures as fit
-  in 2600 characters and the 3072-byte result limit, and says how many it left out.
+- a Slack digest that `tkn/slack-task.yaml` posts to a Slack Workflow Builder
+  trigger. With run-agent's `output` workspace bound, `post.sh` writes every
+  failure to `digest.json` as Slack-sized messages: an overview of the run, then
+  each failure group, worst first, with its reason once and every test it hit.
+  The `summary` result always holds the overview alone (at most 3072 bytes), the
+  go/no-go for the Slack task and its fallback.
 
 ## Layout
 
@@ -19,7 +22,7 @@ produces:
 | `task/prompt.md` | Asks for the skill on `{{INPUT_DIR}}` and states the null/omission conventions of the schema |
 | `task/output.schema.json` | Strict report schema: summary, failures, skipped analysis, platform |
 | `task/post.sh` | Checks the report against `json-results.json`, then renders the Slack digest |
-| `tkn/slack-task.yaml` | `post-evaluation-to-slack`: posts the digest; holds the Slack secret only |
+| `tkn/slack-task.yaml` | `post-evaluation-to-slack`: posts the digest messages in order; holds the Slack secret only |
 
 ## What `post.sh` checks
 
@@ -32,16 +35,26 @@ The output schema checks the report's shape. `post.sh` checks that it describes
 - failures are listed when `failed > 0`, and `skipped_analysis` is present when
   `skipped > 0`.
 
-Then it removes the null fields that the schema requires and the skill omits, and
-runs the skill's `scripts/slack_formatter.py` to make the digest. The formatter
-limits characters and the result limit is in bytes, so `post.sh` tries 2600
-characters first and steps down until the digest fits in 3072 bytes.
+Then it removes the null fields that the schema requires and the skill omits,
+adds the run's start time and, when the skill hit its 20-failure budget, the
+failed tests it never reached (from `json-results.json`, listed without a
+verdict), and runs the skill's `scripts/slack_formatter.py`:
+
+- `--max-bytes 3072` → the `summary` result: the overview, fitted to the result
+  limit as Tekton measures it (JSON-encoded);
+- `--split-chars 3500` → `$OUTPUT_DIR/digest.json` (`{"parts": [...]}`), when
+  run-agent sets `OUTPUT_DIR`: every failure, nothing left out.
+
+The digest header names the run from `RUN_INFO` (run-agent's `run-info` param):
+`pd_version`, `trigger`, `os`, `os_version`, `arch`, `podman_version`,
+`provider`, `rootful`, `user_networking`. Without it, the formatter guesses OS and
+backend from `PIPELINE_NAME`.
 
 ## Pipeline wiring
 
 The evaluation runs as the generic `run-agent` Task with this image. Slack
-delivery is a separate TaskRun that gets the bounded digest and the webhook,
-but never the model key or the results:
+delivery is a separate TaskRun that gets the digest (read-only) and the
+webhook, but never the model key or the results:
 
 ```yaml
 - name: evaluate-results
@@ -63,10 +76,20 @@ but never the model key or the results:
   - {name: api-key-secret-key, value: api-key}
   - {name: pipeline-name, value: $(context.pipelineRun.name)}
   - {name: artifacts-url, value: $(params.artifacts-url)}
+  - name: run-info
+    value: |
+      pd_version=$(params.tag-name)
+      trigger=$(params.trigger-event)
+      os=$(tasks.host-info.results.os)
+      podman_version=$(params.podman-version)
+      provider=$(params.podman-provider)
   workspaces:
   - name: input
     workspace: pipelines-data
     subPath: $(tasks.correlate.results.workspace-resources-path)/qe-results
+  - name: output
+    workspace: pipelines-data
+    subPath: $(tasks.correlate.results.workspace-resources-path)/evaluation
 
 - name: post-evaluation-to-slack
   runAfter: [evaluate-results]
@@ -81,7 +104,18 @@ but never the model key or the results:
     - {name: kind, value: task}
   params:
   - {name: text, value: $(tasks.evaluate-results.results.summary)}
+  workspaces:
+  - name: digest
+    workspace: pipelines-data
+    subPath: $(tasks.correlate.results.workspace-resources-path)/evaluation
 ```
+
+The Slack task needs the same `when` on the `correlate` result as
+`evaluate-results` when it binds the subPath. Without the `digest` workspace it
+posts the `summary` overview as one message. With it, it posts each message of
+`digest.json` in order, 2 s apart, at most 15 per run (the 15th says how many
+more were left out), and falls back to the overview when the file is missing,
+a link, over 256 KiB or not a list of messages.
 
 Bind the `agent-runner` ServiceAccount (no token) to both tasks with
 `taskRunSpecs`, as shown in the agent-runner README.

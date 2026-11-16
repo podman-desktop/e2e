@@ -3,7 +3,8 @@
 #   post.sh <report.json> <results-dir>
 # 1. The report must agree with json-results.json, so a hallucinated or
 #    truncated triage never reaches Slack.
-# 2. Writes the Slack digest text to $AGENT_SUMMARY_FILE.
+# 2. Writes the digest overview to $AGENT_SUMMARY_FILE and, when OUTPUT_DIR is
+#    set, every failure as Slack messages to $OUTPUT_DIR/digest.json.
 set -euo pipefail
 
 report="$1"
@@ -37,21 +38,31 @@ if [[ -n "$problems" ]]; then
 fi
 
 # The schema needs every key; the skill's convention is to omit unknown ones.
-evaluation="$(jq '
+# Also from the results, which are ground truth: when the run started, and,
+# when the skill hit its failure budget, the failed tests it never reached,
+# so the digest can still name them (title, file and line; no verdict).
+evaluation="$(jq --slurpfile s "$results" '
   if .skipped_analysis == null then del(.skipped_analysis) else . end
   | .platform |= with_entries(select(.value != null))
   | if .platform == {} then del(.platform) else . end
   | if .truncated == false then del(.truncated, .truncated_count) else . end
+  | ($s[0].stats.startTime // null) as $started
+  | if $started then .run_started = $started else . end
+  | if .truncated then
+      .unanalysed = ([$s[0] | .. | objects | select(has("specs")) | .specs[]?
+                      | select(any(.tests[]?; .status == "unexpected"))
+                      | {test: .title, spec_file: .file, line: .line}] | .[:500])
+    else . end
 ' "$report")"
 
-# Show as many failures as fit. The formatter drops whole failures to meet a
-# character limit, but the Tekton result is capped in bytes and the text may
-# be multi-byte, so step the limit down until the digest fits.
-max_bytes="${AGENT_SUMMARY_MAX_BYTES:-3072}"
-for max_chars in 2600 2000 1500 1000; do
-  SLACK_MAX_CHARS="$max_chars" python3 "$formatter" <<<"$evaluation" \
-    | jq -r '.text' >"$AGENT_SUMMARY_FILE"
-  (( $(wc -c <"$AGENT_SUMMARY_FILE") <= max_bytes )) && exit 0
-done
-echo "ERROR: the digest is over $max_bytes bytes even at $max_chars characters" >&2
-exit 1
+# The bounded digest is the summary result: the overview alone, fitted to the
+# result limit as Tekton measures it (JSON-encoded), like the entrypoint does.
+python3 "$formatter" --max-bytes "${AGENT_SUMMARY_MAX_BYTES:-3072}" <<<"$evaluation" \
+  | jq -j '.text' >"$AGENT_SUMMARY_FILE"
+
+# The full digest goes to OUTPUT_DIR when the run publishes outputs: every
+# failure, in Slack-sized messages, for post-evaluation-to-slack to send.
+if [[ -n "${OUTPUT_DIR:-}" ]]; then
+  python3 "$formatter" --split-chars "${SLACK_SPLIT_CHARS:-3500}" <<<"$evaluation" \
+    >"$OUTPUT_DIR/digest.json"
+fi

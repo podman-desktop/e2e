@@ -31,7 +31,12 @@ runs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y qemu-user-static
+        . /etc/os-release
+        if dpkg --compare-versions "$VERSION_ID" ge 26.04; then
+          sudo apt-get install -y qemu-user-binfmt
+        else
+          sudo apt-get install -y qemu-user-static
+        fi
       shell: bash
 
     - name: Set cgroup_manager to 'cgroupfs' instead of systemd

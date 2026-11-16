@@ -472,11 +472,20 @@ if ($extTests -eq "1") {
 }
 
 # pnpm INSTALL AND TEST PART
+# The directory checkout must be kept here so that Execute-scripts can find the scripts on expected path
+# Also required for running scripts with hyperv in individual process
 $thisDir="$workingDir\$repo"
 cd $thisDir
 
+# Expose the target folder to the executed scripts (it is only a runner.ps1
+# parameter otherwise, not an environment variable on the Windows host).
+$env:TARGET_FOLDER = $workingDir
+
 # Execute the arbitrary code from external source
 Execute-Scripts
+
+# Safeguard that directory did not change
+write-host "Actual directory $(pwd)"
 
 write-host "Installing dependencies of $repo"
 pnpm install --frozen-lockfile 2>&1 | Tee-Object -FilePath 'output.log' -Append

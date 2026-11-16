@@ -24,7 +24,7 @@ hardening or Tekton YAML to review.
 |---|---|---|
 | `/opt/agent/task/prompt.md` | yes | The request. `{{INPUT_DIR}}` is replaced with the input path; a prompt that uses it needs an input. Name the skill explicitly (`$skill-name`). |
 | `/opt/agent/task/output.schema.json` | yes | JSON schema the final answer must match (`codex exec --output-schema`). |
-| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`. It does not inherit the API key. |
+| `/opt/agent/task/post.sh` | no | Bundle-specific checks; must be executable (a non-executable file fails with exit 2). Run as `post.sh <report.json> [<input-dir>]` (the input dir only when there is one). Non-zero fails the run. May write a short summary to `$AGENT_SUMMARY_FILE`, and, when `OUTPUT_DIR` is set, larger outputs to it (plain files of at most 1 MiB each). It does not inherit the API key. |
 | `/etc/codex/skills/<name>/` | no | Skills, in Codex's admin skill location (root-owned, read-only). |
 
 Runtime environment:
@@ -39,7 +39,9 @@ Runtime environment:
 | `AGENT_POST_TIMEOUT` | `1m` | Hard wall-clock limit for `post.sh`. Keep `AGENT_TIMEOUT` + `AGENT_POST_TIMEOUT` plus the image pull below the pipelineTask timeout (15m in the examples): a TaskRun killed by that timeout fails despite `onError: continue`. |
 | `AGENT_SUMMARY_OUT` | — | Where to copy the post-check summary (the Tekton result). `SKIP` unless the run fully succeeds. |
 | `AGENT_SUMMARY_MAX_BYTES` | `3072` | Upper bound on the summary as Tekton stores it, JSON-encoded (`<`, `>` and `&` take 6 bytes each), under Tekton's 4096-byte result limit. |
-| `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json`. |
+| `OUTPUT_DIR` | — | Optional writable directory that also receives `report.json` and whatever `post.sh` writes there. The Tekton Task sets it to a pod-local directory and copies it to the `output` workspace after the agent exits. |
+| `PIPELINE_NAME`, `ARTIFACTS_URL` | — | Run metadata for bundles that link back to the run. |
+| `RUN_INFO` | — | Free-form `key=value` lines describing the run, for the bundle to report. agent-runner does not read them. |
 
 Flow: validate the configuration (an `INPUT_DIR`, when set, must be readable)
 → create a fresh Codex home for this run →
@@ -79,9 +81,10 @@ error.
 
 ## Running in OpenShift Pipelines
 
-`tkn/task.yaml` is a generic `run-agent` Task. It needs Tekton Pipelines 0.29 or
-later, where step `onError` is stable, and is tested on OpenShift Pipelines 1.20
-(Tekton 1.3). A pipeline uses it like this:
+`tkn/task.yaml` is a generic `run-agent` Task. It needs Tekton Pipelines 0.50 or
+later, where step `onError` is stable and isolated (step-level) workspaces are
+on with the default `enable-api-fields: beta`. It is tested on OpenShift
+Pipelines 1.20 (Tekton 1.3). A pipeline uses it like this:
 
 ```yaml
 tasks:
@@ -114,6 +117,20 @@ tasks:
 The `input` workspace is optional. A job that needs no input data leaves it
 unbound, along with `input-path` and the `when` expression, and the agent then
 has no PVC mounted at all.
+
+The `output` workspace is optional too. Bind it to a per-run directory when the
+bundle writes outputs that don't fit the 3072-byte `summary` result:
+
+```yaml
+  - name: output
+    workspace: pipelines-data
+    subPath: $(tasks.correlate.results.workspace-resources-path)/evaluation
+```
+
+The agent never sees it. The agent's container writes to a pod-local
+`OUTPUT_DIR`; after it exits, a separate `publish` step, the only one that
+mounts the workspace, copies the plain files of at most 1 MiB each. Symlinks,
+hard links, directories and larger files stay behind.
 
 The task runs under its own ServiceAccount, which the namespace that runs the
 pipeline creates. It holds no RoleBindings and mounts no token, so a
@@ -172,7 +189,8 @@ oc create secret generic codex-api-key --from-literal=api-key="$OPENAI_PROJECT_K
 ```
 
 Don't give the agent pod any other credential. Reporting (Slack, etc.) runs in
-a separate Task that gets the bounded `summary` result, not the model key.
+a separate Task that gets the bounded `summary` result or the `output`
+workspace, not the model key.
 
 One exception is outside the Task's control: Tekton copies docker-type secrets
 linked to the ServiceAccount into `/tekton/creds-secrets` and the step's `HOME`
