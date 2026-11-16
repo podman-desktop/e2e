@@ -273,10 +273,12 @@ def _triage(failures: list) -> tuple[str, list[str]]:
         )
     elif counts["unknown"]:
         headline = f"{counts['unknown']} failure(s) could not be classified — needs a look"
-    elif counts["test_bug"]:
-        headline = "test-code failures only — no product impact identified"
-    elif counts["infra"] or counts["flaky"]:
-        headline = "infrastructure/flake only — no product impact identified"
+    elif failures:
+        # Name every kind present: "test-code failures only" over a run that
+        # is mostly infrastructure sends the reader to the wrong team.
+        kinds = [name for key, name in (("infra", "infrastructure"), ("test_bug", "test code"),
+                                         ("flaky", "flaky tests")) if counts[key]]
+        headline = f"{' and '.join(kinds) or 'non-product'} failures only — no product impact identified"
     else:
         headline = "no failures"
 
