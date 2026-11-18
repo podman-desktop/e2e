@@ -90,11 +90,11 @@ function Download-File {
         [string]$Token = ''
     )
     # Prefer GITHUB_TOKEN from the environment (secret-file → Load-Secrets).
-    # Only attach it for the GitHub API origin.
+    # Only attach it for github.com / api.github.com.
     if ([string]::IsNullOrWhiteSpace($Token)) {
         $Token = $env:GITHUB_TOKEN
     }
-    $useToken = (-not [string]::IsNullOrWhiteSpace($Token)) -and ($Uri -match '^https://api\.github\.com/')
+    $useToken = (-not [string]::IsNullOrWhiteSpace($Token)) -and ($Uri -match '^https://(api\.)?github\.com/')
     if ($useToken) {
         $headers = @{
             Authorization = "Bearer $Token"

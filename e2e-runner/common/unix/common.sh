@@ -7,14 +7,15 @@ detect_file_type() {
     file -b --mime-type "$file_path"
 }
 
-# Download a file with optional GitHub API authentication.
+# Download a file with optional GitHub authentication.
 # Uses GITHUB_TOKEN from the environment (secret-file → load_secrets, or
-# caller-exported). Only attaches the token for https://api.github.com/ URLs.
-# curl -L does not forward Authorization across host redirects by default.
+# caller-exported). Only attaches the token for https://github.com/ and
+# https://api.github.com/ URLs. curl -L does not forward Authorization across
+# host redirects by default.
 download_file() {
     local url="$1"
     local outfile="$2"
-    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://(api\.)?github\.com/'; then
         curl -fsSL -o "$outfile" \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \

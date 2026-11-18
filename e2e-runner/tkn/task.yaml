@@ -315,7 +315,9 @@ spec:
           cmd="$cmd --extBranch $(params.ext-branch) "
         fi
         cmd="$cmd --envVars '$(params.env-vars)' "
-        cmd="$cmd --secretFile ${REMOTE_SECRET_FILE} "
+        if [ -n "${REMOTE_SECRET_FILE}" ]; then
+          cmd="$cmd --secretFile ${REMOTE_SECRET_FILE} "
+        fi
         cmd="$cmd --fork $(params.fork) "
         cmd="$cmd --branch $(params.branch) "
         cmd="$cmd --repo $(params.repo) "
