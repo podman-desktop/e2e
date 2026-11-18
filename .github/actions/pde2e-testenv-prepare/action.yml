@@ -39,13 +39,16 @@ runs:
         fi
       shell: bash
 
-    - name: Set cgroup_manager to 'cgroupfs' instead of systemd
+    - name: Set cgroup_manager to 'cgroupfs' instead of systemd, and lower stop_timeout
       if: runner.os == 'Linux'
       run: |
         mkdir -p ~/.config/containers
+        # stop_timeout: test images such as alpine run /bin/sh as PID 1, which ignores SIGTERM,
+        # so every stop or delete of a running container would wait the full 10s default.
         cat <<EOT >> ~/.config/containers/containers.conf
         [engine]
         cgroup_manager="cgroupfs"
+        stop_timeout=2
         EOT
         podman info
       shell: bash
