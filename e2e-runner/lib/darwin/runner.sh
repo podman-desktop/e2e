@@ -230,29 +230,6 @@ echo "Installing pnpm"
 sudo npm install -g pnpm@$pnpmVersion
 echo "pnpm Version: $(pnpm --version)"
 
-download_file() {
-    local url="$1"
-    local outfile="$2"
-    # Prefer GITHUB_TOKEN from the environment (secret-file → load_secrets, or
-    # caller-exported). Only attach it for the GitHub API origin. curl -L does
-    # not forward Authorization across host redirects by default.
-    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://api\.github\.com/'; then
-        curl -fsSL -o "$outfile" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "$url" || {
-            echo "Error: failed to download Podman from $url (HTTP error)"
-            exit 1
-        }
-    else
-        curl -fsSL -o "$outfile" "$url" || {
-            echo "Error: failed to download Podman from $url (HTTP error)"
-            exit 1
-        }
-    fi
-}
-
 # Podman Installation (if needed)
 if [ -z "$podmanPath" ]; then
     if ! command -v podman &> /dev/null; then
