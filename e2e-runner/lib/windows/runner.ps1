@@ -315,7 +315,9 @@ if (-not (Command-Exists "podman")) {
         $podmanProgramFiles="$env:ProgramFiles\RedHat\Podman\"
         $podmanPath=""
         $useUserScope=$false  # Track whether to use User or Machine scope for PATH
-        $isActionsArtifact = $podmanDownloadUrl -match '/actions/artifacts/.+/zip'
+        # Only treat the GitHub API artifact archive endpoint as an Actions
+        # artifact (not a URL that merely contains that path substring).
+        $isActionsArtifact = $podmanDownloadUrl -match '^https://api\.github\.com/repos/[^/]+/[^/]+/actions/artifacts/\d+/zip(\?.*)?$'
 
         if ($isActionsArtifact) {
             if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
@@ -324,6 +326,11 @@ if (-not (Command-Exists "podman")) {
             write-host "Downloading Podman Actions artifact archive from $podmanDownloadUrl"
             $zipPath = "$toolsInstallDir\podman-artifact.zip"
             $extractDir = "$toolsInstallDir\podman-artifact"
+            # Drop any leftover archive so a failed download cannot leave a
+            # previous build for Expand-Archive to install.
+            if (Test-Path $zipPath) {
+                Remove-Item -Force $zipPath
+            }
             Download-File -Uri $podmanDownloadUrl -OutFile $zipPath
             if (Test-Path $extractDir) {
                 Remove-Item -Recurse -Force $extractDir
@@ -339,7 +346,8 @@ if (-not (Command-Exists "podman")) {
             Copy-Item -Force $msiFound.FullName $msiPath
             write-host "Installing Podman MSI silently from Actions artifact..."
             $msiLogFile = "$targetLocation\podman-msi.log"
-            $msiArgs = @("/package", $msiPath, "/quiet", "/l*v", $msiLogFile)
+            # Quote paths: Start-Process joins ArgumentList without quoting.
+            $msiArgs = @("/package", "`"$msiPath`"", "/quiet", "/l*v", "`"$msiLogFile`"")
             $process = Start-Process msiexec.exe -ArgumentList $msiArgs -PassThru -Wait
             write-host "Install process exit code: " $process.ExitCode
             if ($process.ExitCode -ne 0) {
@@ -401,7 +409,8 @@ if (-not (Command-Exists "podman")) {
             # Install MSI using user-scope installation (default, no admin required)
             write-host "Installing Podman MSI silently..."
             $msiLogFile = "$targetLocation\podman-msi.log"
-            $msiArgs = @("/package", "$toolsInstallDir\podman.msi", "/quiet", "/l*v", $msiLogFile)
+            # Quote paths: Start-Process joins ArgumentList without quoting.
+            $msiArgs = @("/package", "`"$toolsInstallDir\podman.msi`"", "/quiet", "/l*v", "`"$msiLogFile`"")
             $process = Start-Process msiexec.exe -ArgumentList $msiArgs -PassThru -Wait
             write-host "Install process exit code: " $process.ExitCode
             if ($process.ExitCode -ne 0) {

@@ -236,8 +236,10 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
+            # Only treat the GitHub API artifact archive endpoint as an Actions
+            # artifact (not a URL that merely contains that path substring).
             isActionsArtifact=false
-            if echo "$podmanDownloadUrl" | grep -Eq '/actions/artifacts/.+/zip'; then
+            if echo "$podmanDownloadUrl" | grep -Eq '^https://api\.github\.com/repos/[^/]+/[^/]+/actions/artifacts/[0-9]+/zip(\?.*)?$'; then
                 isActionsArtifact=true
             fi
             # Fail fast with a clear error before curl (Windows does the same).
