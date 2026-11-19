@@ -74,6 +74,8 @@ download_pd() {
     curl -L -O "$pdUrl"
 }
 
+# download_file comes from unix/common/common.sh (sourced above).
+
 echo "Reading envVars in script: '$envVars'"
 
 # Adopt display variables from the GNOME session
@@ -217,9 +219,12 @@ if [ -z "$podmanPath" ]; then
         if [ -n "$podmanDownloadUrl" ]; then
             echo "Podman not found, installing from $podmanDownloadUrl..."
 
-            # Download Podman
+            # Download Podman (authenticated via GITHUB_TOKEN when set).
+            # Unlike darwin/windows, RHEL does not unpack GitHub Actions artifact
+            # archives here: Linux nightlies are not shipped that way (dnf or a
+            # plain remote-release zip).
             mkdir -p "$toolsInstallDir"
-            curl -o "$toolsInstallDir/podman-archive" -L "$podmanDownloadUrl"
+            download_file "$podmanDownloadUrl" "$toolsInstallDir/podman-archive"
 
             # Detect file type and install
             fileType=$(file -b --mime-type "$toolsInstallDir/podman-archive")

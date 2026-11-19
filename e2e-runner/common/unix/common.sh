@@ -7,6 +7,31 @@ detect_file_type() {
     file -b --mime-type "$file_path"
 }
 
+# Download a file with optional GitHub authentication.
+# Uses GITHUB_TOKEN from the environment (secret-file → load_secrets, or
+# caller-exported). Only attaches the token for https://github.com/ and
+# https://api.github.com/ URLs. curl -L does not forward Authorization across
+# host redirects by default.
+download_file() {
+    local url="$1"
+    local outfile="$2"
+    if [ -n "${GITHUB_TOKEN:-}" ] && echo "$url" | grep -Eq '^https://(api\.)?github\.com/'; then
+        curl -fsSL -o "$outfile" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url" || {
+            echo "Error: failed to download from $url (HTTP error)"
+            exit 1
+        }
+    else
+        curl -fsSL -o "$outfile" "$url" || {
+            echo "Error: failed to download from $url (HTTP error)"
+            exit 1
+        }
+    fi
+}
+
 # Add path to PATH environment variable if not already present
 add_to_path() {
     local new_path="$1"
