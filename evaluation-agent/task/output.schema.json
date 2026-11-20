@@ -1,0 +1,98 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer" },
+        "passed": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "skipped": { "type": "integer" },
+        "flaky": { "type": "integer" },
+        "duration_s": { "type": "number" }
+      },
+      "required": ["total", "passed", "failed", "skipped", "flaky", "duration_s"]
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "test": { "type": "string" },
+          "suite": { "type": "string" },
+          "spec_file": { "type": "string" },
+          "line": { "type": ["integer", "null"] },
+          "duration_ms": { "type": ["number", "null"] },
+          "attempts": { "type": "integer" },
+          "status": { "type": "string", "enum": ["failed", "timedOut", "interrupted"] },
+          "error": { "type": "string" },
+          "classification": { "type": "string", "enum": ["regression", "test_bug", "flaky", "infra", "unknown"] },
+          "confidence": { "type": "string", "enum": ["confirmed", "likely", "uncertain"] },
+          "title": { "type": "string" },
+          "root_cause": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "recommended_action": { "type": "string" },
+          "layer": { "type": "integer", "enum": [1, 2, 3] }
+        },
+        "required": ["test", "suite", "spec_file", "line", "duration_ms", "attempts", "status", "error", "classification", "confidence", "title", "root_cause", "evidence", "recommended_action", "layer"]
+      }
+    },
+    "skipped_analysis": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "total_skipped": { "type": "integer" },
+        "by_design": { "type": "integer" },
+        "cascade": { "type": "integer" },
+        "unresolved": { "type": "integer" },
+        "by_design_reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "reason": { "type": "string" },
+              "count": { "type": "integer" },
+              "spec_file": { "type": "string" }
+            },
+            "required": ["reason", "count", "spec_file"]
+          }
+        },
+        "cascade_details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "skipped_test": { "type": "string" },
+              "caused_by_failure": { "type": "string" },
+              "spec_file": { "type": "string" }
+            },
+            "required": ["skipped_test", "caused_by_failure", "spec_file"]
+          }
+        }
+      },
+      "required": ["total_skipped", "by_design", "cascade", "unresolved", "by_design_reasons", "cascade_details"]
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "os": { "type": ["string", "null"] },
+        "arch": { "type": ["string", "null"] },
+        "node_version": { "type": ["string", "null"] },
+        "playwright_version": { "type": ["string", "null"] },
+        "ci_url": { "type": ["string", "null"] },
+        "commit": { "type": ["string", "null"] },
+        "branch": { "type": ["string", "null"] }
+      },
+      "required": ["os", "arch", "node_version", "playwright_version", "ci_url", "commit", "branch"]
+    },
+    "truncated": { "type": "boolean" },
+    "truncated_count": { "type": "integer" }
+  },
+  "required": ["summary", "failures", "skipped_analysis", "platform", "truncated", "truncated_count"]
+}

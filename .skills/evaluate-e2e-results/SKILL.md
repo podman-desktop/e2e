@@ -336,6 +336,24 @@ cat /tmp/evaluation-raw.txt | python3 /path/to/slack_formatter.py \
 
 Environment variables `ARTIFACTS_URL`, `PIPELINE_NAME`, `SLACK_WORKFLOW_VAR` can substitute for CLI args.
 
+The digest opens with an overview: the run (from `RUN_INFO`, `key=value` lines
+such as `pd_version`, `trigger`, `os`, `os_version`, `arch`, `podman_version`,
+`provider`, `rootful`, `user_networking`; else guessed from the pipeline name),
+the results, the verdict and every failure group by name. The groups follow,
+worst first (product bug, unclassified, infra, test bug, flaky), each with its
+reason once and then every test it hit. The formatter does this ordering, so
+keep reporting failures in test order.
+
+| Mode | Output | Use |
+|------|--------|-----|
+| default | `{"text": ...}`, the whole digest; the overview alone over `SLACK_MAX_CHARS` (3500) | one message |
+| `--split-chars N` | `{"parts": [...]}`, the overview, then every group in messages of at most N characters | post each part in order; nothing is left out |
+| `--max-bytes N` | `{"text": ...}`, the overview fitted to N bytes of JSON-encoded text | a size-capped Tekton result |
+
+A post-processing step may add `run_started` (ISO 8601) and `unanalysed`
+(`[{test, spec_file, line}]`, failed tests past the 20-failure budget) to the
+JSON; the digest shows the start time and lists those tests without a verdict.
+
 ## Constraints
 
 - **No questions** — never ask for clarification; work with available evidence
