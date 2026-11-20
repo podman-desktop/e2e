@@ -109,7 +109,7 @@ jobs:
       run: OS=${{ matrix.os }} ARCH=${{ matrix.arch }} E2E_BINARY=pd-e2e.exe make oci-build
 
     - name: Log in to quay.io Registry
-      uses: redhat-actions/podman-login@v1
+      uses: redhat-actions/podman-login@v2
       if: github.event_name == 'push'
       with:
         registry: quay.io
@@ -153,7 +153,7 @@ jobs:
       run: OS=${{ matrix.os }} ARCH=${{ matrix.arch }} E2E_BINARY=pd-e2e make oci-build
 
     - name: Log in to quay.io Registry
-      uses: redhat-actions/podman-login@v1
+      uses: redhat-actions/podman-login@v2
       if: github.event_name == 'push'
       with:
         registry: quay.io
