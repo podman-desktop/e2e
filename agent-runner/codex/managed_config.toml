@@ -1,0 +1,23 @@
+# Managed Codex defaults for every agent bundle built on agent-runner.
+# They override user config.toml and `-c` flags. See README.md "Security model".
+
+approval_policy = "never"
+
+# The pod is the sandbox. Codex's inner sandbox (bubblewrap) cannot create
+# user namespaces in an OpenShift Pipelines pod, and we do not weaken the
+# cluster to make it start. Upgrade path: README.md "Inner sandbox".
+sandbox_mode = "danger-full-access"
+
+web_search = "disabled"
+
+# Pinned in the image; a CI run never checks for or offers updates.
+check_for_update_on_startup = false
+
+[history]
+persistence = "none"
+
+# Commands the model runs see the task environment (INPUT_DIR, ...) but never
+# credentials. The default excludes (*KEY*, *SECRET*, *TOKEN*) stay on.
+[shell_environment_policy]
+inherit = "all"
+exclude = ["*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*", "*CREDENTIAL*", "*WEBHOOK*"]
