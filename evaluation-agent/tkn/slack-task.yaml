@@ -1,0 +1,195 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: post-evaluation-to-slack
+  labels:
+    app.kubernetes.io/version: "0.1"
+    redhat.com/product: podman-desktop
+    dev.lifecycle.io/phase: testing
+  annotations:
+    # Step onError is stable from 0.29 (alpha and flag-gated in 0.27-0.28).
+    tekton.dev/pipelines.minVersion: "0.29.x"
+    tekton.dev/categories: podman-desktop
+    tekton.dev/tags: podman-desktop, testing, slack
+    tekton.dev/displayName: "Post E2E evaluation to Slack"
+    tekton.dev/platforms: "linux/amd64"
+spec:
+  description: >-
+    Posts the evaluation digest to a Slack Workflow Builder trigger as one flat
+    text variable per message: every message of digest.json from the optional
+    digest workspace, else the `text` param (run-agent's bounded `summary`
+    result). This TaskRun gets the Slack secret only: no model API key, no
+    model-run code, and the digest read-only.
+
+  workspaces:
+  - name: digest
+    description: >-
+      Optional, read-only: run-agent's output workspace for this run, holding
+      digest.json ({"parts": [...]}) from the bundle's post.sh. Without it, or
+      without a valid digest.json, the task posts the `text` param.
+    readOnly: true
+    optional: true
+
+  params:
+  - name: image
+    description: Any image with python3; the agent-runner base is used by default
+    default: 'ghcr.io/podman-desktop/agent-runner:v0.1.0'
+  - name: text
+    description: Digest text, ie $(tasks.evaluate-results.results.summary); the fallback with a digest workspace
+  - name: workflow-var
+    description: Slack Workflow Builder variable name
+    default: text
+  - name: webhook-secret
+    description: Secret holding the Workflow Builder trigger URL under the url key
+    default: slack-webhook
+
+  steps:
+  - name: post
+    image: $(params.image)
+    imagePullPolicy: Always
+    # A failed delivery is recorded on the step and never fails the PipelineRun.
+    onError: continue
+    env:
+    - name: HOME
+      value: /tekton/home
+    - name: SLACK_TEXT
+      value: $(params.text)
+    - name: SLACK_WORKFLOW_VAR
+      value: $(params.workflow-var)
+    - name: DIGEST_BOUND
+      value: $(workspaces.digest.bound)
+    - name: DIGEST_PATH
+      value: $(workspaces.digest.path)
+    # Last: Kubernetes expands $(VAR) only to variables declared earlier, so
+    # digest text holding $(SLACK_WEBHOOK_URL) cannot pull in the secret.
+    - name: SLACK_WEBHOOK_URL
+      valueFrom:
+        secretKeyRef:
+          name: $(params.webhook-secret)
+          key: url
+    securityContext:
+      runAsNonRoot: true
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    # The image has no curl by design, so post with the Python stdlib.
+    script: |
+      #!/usr/bin/env bash
+      set -u
+      exec python3 -I - <<'PY'
+      import json, os, stat, sys, time, urllib.error, urllib.request
+
+      MAX_FILE = 256 * 1024   # digest.json, bytes
+      MAX_PART = 4000         # characters per message
+      MAX_PARTS = 15          # messages per run
+      PAUSE_S = 2             # between messages, to keep them in order
+      REQUEST_S = 10          # per request
+      DEADLINE_S = 90         # for all messages: a pipelineTask timeout fails
+                              # the PipelineRun, which onError cannot prevent
+
+      url = os.environ["SLACK_WEBHOOK_URL"]
+      var = os.environ["SLACK_WORKFLOW_VAR"]
+      if not url.startswith("https://"):
+          sys.exit("ERROR: the webhook URL must use https")
+
+
+      def read_digest():
+          """The messages of digest.json, or None to fall back to the text param.
+
+          The file comes from the agent's run, so treat it as untrusted: no
+          symlinks, a regular file of bounded size, a list of bounded strings.
+          """
+          if os.environ.get("DIGEST_BOUND") != "true":
+              return None
+          path = os.path.join(os.environ["DIGEST_PATH"], "digest.json")
+          try:
+              fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+          except OSError as e:
+              print(f"no digest.json ({e.strerror}); posting the summary result")
+              return None
+          with os.fdopen(fd, "rb") as f:
+              st = os.fstat(f.fileno())
+              if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_FILE:
+                  print("digest.json is not a regular file under 256 KiB; posting the summary result")
+                  return None
+              raw = f.read(MAX_FILE + 1)
+          try:
+              parts = json.loads(raw)["parts"]
+          except (ValueError, KeyError, TypeError):
+              print("digest.json is not {\"parts\": [...]}; posting the summary result")
+              return None
+          if (not isinstance(parts, list) or not parts
+                  or not all(isinstance(p, str) and 0 < len(p) <= MAX_PART for p in parts)):
+              print(f"digest.json parts must be 1+ strings of at most {MAX_PART} characters; posting the summary result")
+              return None
+          if len(parts) > MAX_PARTS:
+              note = f"\n\n➕ {len(parts) - MAX_PARTS} more message(s) not posted — see the artifacts"
+              parts = parts[:MAX_PARTS]
+              parts[-1] = parts[-1][:MAX_PART - len(note)] + note
+          return parts
+
+
+      def retry_after(headers, left):
+          """Seconds to wait from Retry-After (5 when missing or a date), or None
+          when the wait and the retry do not fit in the time left."""
+          try:
+              wait = max(0, int(headers.get("Retry-After") or 5))
+          except ValueError:
+              wait = 5
+          return wait if wait + REQUEST_S < left else None
+
+
+      def post(text):
+          body = json.dumps({var: text}, ensure_ascii=False).encode()
+          for attempt in (1, 2):
+              left = deadline - time.monotonic()
+              if left < 1:
+                  return "deadline"
+              try:
+                  request = urllib.request.Request(
+                      url, data=body, method="POST", headers={"Content-Type": "application/json"})
+                  with urllib.request.urlopen(request, timeout=min(REQUEST_S, left)) as response:
+                      return response.status
+              except urllib.error.HTTPError as e:
+                  wait = retry_after(e.headers, deadline - time.monotonic())
+                  if e.code != 429 or attempt == 2 or wait is None:
+                      return e.code
+                  time.sleep(wait)
+              except Exception as e:
+                  # The type only: some messages carry the URL, which is the secret.
+                  print(f"  error: {type(e).__name__}")
+                  return None
+
+
+      parts = read_digest()
+      if parts is None:
+          text = os.environ["SLACK_TEXT"]
+          if not text or text == "SKIP":
+              sys.exit("ERROR: no digest to post")
+          parts = [text]
+
+      deadline = time.monotonic() + DEADLINE_S
+      failed = 0
+      for i, text in enumerate(parts, 1):
+          if i > 1:
+              time.sleep(PAUSE_S)
+          status = post(text)
+          if status == "deadline":
+              print(f"stopped after {DEADLINE_S}s: messages {i}-{len(parts)} not posted")
+              failed += len(parts) - i + 1
+              break
+          print(f"message {i}/{len(parts)}: Slack responded {status}")
+          failed += status != 200
+      sys.exit(1 if failed else 0)
+      PY
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "500m"
