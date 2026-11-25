@@ -106,7 +106,9 @@ load_secrets() {
                 exit 1
             }
             chmod 600 "$DEFERRED_SECRETS_FILE"
-            trap cleanup_environment EXIT
+            # No trap here: the runners register their own EXIT handler, which
+            # calls cleanup_environment (and so removes this file), and setting
+            # one here would replace it.
             while IFS='=' read -r key value || [ -n "$key" ]; do
                 # Ignore comments and empty lines
                 if [[ ! $key =~ ^[[:space:]]*# && $key =~ [^[:space:]] ]]; then

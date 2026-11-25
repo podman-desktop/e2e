@@ -27,9 +27,10 @@ function Copy-Exists($source, $target) {
 
 # Clone repository and checkout specific branch
 function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github.com") {
-    # Guard against an empty or path-like repository name: an empty name
-    # would otherwise resolve to the whole working directory and delete it.
-    if ([string]::IsNullOrWhiteSpace($repo) -or $repo -match '[\\/]' -or $repo -in @('.', '..')) {
+    # Guard against an empty, path-like or wildcard repository name: an empty
+    # name would resolve to the whole working directory, and a wildcard such as
+    # '*' would match unrelated entries in it; both would then be removed.
+    if ([string]::IsNullOrWhiteSpace($repo) -or $repo -match '[\\/*?\[\]]' -or $repo -in @('.', '..')) {
         throw "Invalid repository name '$repo'"
     }
     cd $workingDir
@@ -41,9 +42,9 @@ function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github
     # Reuse the folder only when it is a usable checkout of the expected
     # remote (e.g. one left behind by the builder); anything else, such as
     # the leftovers of an aborted run, is removed so the clone starts clean.
-    if (Test-Path -Path $repoPath) {
+    if (Test-Path -LiteralPath $repoPath) {
         $validCheckout = $false
-        if (Test-Path -Path "$repoPath\.git") {
+        if (Test-Path -LiteralPath (Join-Path $repoPath ".git")) {
             git -C $repoPath rev-parse -q --verify HEAD *> $null
             $hasHead = ($LASTEXITCODE -eq 0)
             $originURL = "$(git -C $repoPath remote get-url origin 2>$null)".Trim()
@@ -58,7 +59,7 @@ function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github
         } else {
             write-host "$repoPath is not a valid checkout of $repositoryURL, removing it"
             try {
-                Remove-Item -Path $repoPath -Recurse -Force -ErrorAction Stop
+                Remove-Item -LiteralPath $repoPath -Recurse -Force -ErrorAction Stop
             } catch {
                 # Remove-Item can fail under Windows PowerShell 5.1, e.g. on
                 # pnpm junctions inside node_modules or on files locked by a
@@ -66,12 +67,12 @@ function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github
                 write-host "Remove-Item failed, retrying with rd: $_"
                 cmd /c rd /s /q "$repoPath"
             }
-            if (Test-Path -Path $repoPath) {
+            if (Test-Path -LiteralPath $repoPath) {
                 throw "Failed to remove $repoPath, cannot ensure a clean clone"
             }
         }
     }
-    if (-not (Test-Path -Path $repoPath)) {
+    if (-not (Test-Path -LiteralPath $repoPath)) {
         write-host "Checking out" $repositoryURL
         git clone $repositoryURL $repoPath
         if ($LASTEXITCODE -ne 0) {
@@ -79,7 +80,7 @@ function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github
         }
     }
     # Checkout correct branch
-    cd $repoPath
+    Set-Location -LiteralPath $repoPath
     write-host "Fetch all refs"
     git fetch --all
     if ($LASTEXITCODE -ne 0) {

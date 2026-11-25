@@ -15,8 +15,26 @@ declare -a script_env_vars
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/unix/common/common.sh"
 
-# Ensure secrets are cleaned up also when the script exits early on an error
-trap cleanup_environment EXIT
+# Set by the pre-test cleanup when cleanMachine is 1, so that the podman machines
+# are reset once more at the end of the run, also when it exits early on an error
+machineResetPending=0
+
+reset_podman_machines() {
+    if (( machineResetPending == 1 )); then
+        echo "Cleaning up the podman machines"
+        podman machine reset -f
+        machineResetPending=0
+    fi
+}
+
+cleanup_on_exit() {
+    cleanup_environment
+    reset_podman_machines
+}
+
+# Ensure secrets and podman machines are cleaned up also when the script exits
+# early on an error
+trap cleanup_on_exit EXIT
 
 pdUrl=""
 pdPath=""
@@ -329,6 +347,7 @@ if (( cleanMachine == 1 )); then
     # remove old podman system connections from user space
     rm -rf ~/.config/containers/podman-connections.json*
     rm -rf ~/.config/containers/podman
+    machineResetPending=1
     # Detach any stale DMG volumes from previous runs
     for vol in "/Volumes/${appName}"*; do
         if [ -d "$vol" ]; then
@@ -527,11 +546,7 @@ fi
 # Cleaning up, env vars - secrets
 echo "Cleaning the host"
 cleanup_environment
-
-if (( cleanMachine == 1 )); then
-    echo "Cleaning up the podman machines"
-    podman machine reset -f
-fi
+reset_podman_machines
 
 if [ -n "$podmanDesktopBinary" ]; then
     # removing installed app
