@@ -10,6 +10,9 @@ declare -a script_env_vars
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/unix/common/common.sh"
 
+# Ensure secrets are cleaned up also when the script exits early on an error
+trap cleanup_environment EXIT
+
 pdUrl=""
 pdPath=""
 targetFolder=""
@@ -373,7 +376,7 @@ if [[ "$extTests" -eq 1 ]] && [ -n "$podmanDesktopBinary" ] ; then
     echo "Running ext. tests and podman Desktop binary is specified, skipping checkout for podman-desktop"
 else
     echo "Checking out Podman Desktop repository"
-    clone_checkout "podman-desktop" $fork $branch
+    clone_checkout "podman-desktop" "$fork" "$branch"
     cd "$workingDir/podman-desktop"
     echo "Installing dependencies and storing pnpm run output in: $testsOutputLog"
     pnpm install --frozen-lockfile 2>&1 | tee -a $testsOutputLog
@@ -387,7 +390,7 @@ fi
 # Checkout extension's repository
 if [[ "$extTests" -eq 1 ]]; then
     echo "Checking out extension repository: $extRepo"
-    clone_checkout $extRepo $extFork $extBranch
+    clone_checkout "$extRepo" "$extFork" "$extBranch"
 fi
 
 # Execute the scripts
@@ -420,13 +423,7 @@ fi
 
 # Cleaning up, env vars - secrets
 echo "Cleaning the host"
-unset "${script_env_vars[@]}"
-
-# Remove secrets file
-if [ -f "$resourcesPath/$secretFile" ]; then
-    echo "Removing secrets file: $resourcesPath/$secretFile"
-    rm "$resourcesPath/$secretFile"
-fi
+cleanup_environment
 
 if (( cleanMachine == 1 )); then
     echo "Cleaning up podman"

@@ -15,6 +15,9 @@ declare -a script_env_vars
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/unix/common/common.sh"
 
+# Ensure secrets are cleaned up also when the script exits early on an error
+trap cleanup_environment EXIT
+
 pdUrl=""
 pdPath=""
 targetFolder=""
@@ -482,7 +485,7 @@ fi
 # Checkout extension's repository
 if [[ "$extTests" -eq 1 ]]; then
     echo "Checking out extension repository: $extRepo"
-    clone_checkout $extRepo $extFork $extBranch
+    clone_checkout "$extRepo" "$extFork" "$extBranch"
 fi
 
 # Execute the scripts
@@ -523,13 +526,7 @@ fi
 
 # Cleaning up, env vars - secrets
 echo "Cleaning the host"
-unset "${script_env_vars[@]}"
-
-# Remove secrets file
-if [ -f "$resourcesPath/$secretFile" ]; then
-    echo "Removing secrets file: $resourcesPath/$secretFile"
-    rm "$resourcesPath/$secretFile"
-fi
+cleanup_environment
 
 if (( cleanMachine == 1 )); then
     echo "Cleaning up the podman machines"

@@ -106,7 +106,7 @@ load_secrets() {
                 exit 1
             }
             chmod 600 "$DEFERRED_SECRETS_FILE"
-            trap cleanup_deferred_secrets EXIT
+            trap cleanup_environment EXIT
             while IFS='=' read -r key value || [ -n "$key" ]; do
                 # Ignore comments and empty lines
                 if [[ ! $key =~ ^[[:space:]]*# && $key =~ [^[:space:]] ]]; then
@@ -160,28 +160,58 @@ cleanup_deferred_secrets() {
     rm -f "$DEFERRED_SECRETS_FILE"
 }
 
+# Remove the secrets file and unset runner-set environment variables.
+# Registered on EXIT so early failures do not leave secrets behind.
+cleanup_environment() {
+    if [ -n "${secretFile:-}" ] && [ -n "${resourcesPath:-}" ] && [ -f "${resourcesPath:-}/$secretFile" ]; then
+        echo "Removing secrets file: ${resourcesPath:-}/$secretFile"
+        rm -f "${resourcesPath:-}/$secretFile"
+    fi
+    if [ "${#script_env_vars[@]}" -gt 0 ]; then
+        unset "${script_env_vars[@]}" 2>/dev/null || true
+    fi
+    cleanup_deferred_secrets
+}
+
 # Clone repository and checkout specific branch
 clone_checkout() {
     local_repo=$1
     local_fork=$2
     local_branch=$3
     local_git_provider_url="${4:-https://github.com}"
+    # Guard against an empty or path-like repository name: an empty name
+    # would otherwise resolve to the whole working directory and delete it.
+    case "$local_repo" in
+        ""|.|..|*/*) echo "ERROR: invalid repository name '$local_repo'"; exit 1 ;;
+    esac
+    repositoryURL="$local_git_provider_url/$local_fork/$local_repo.git"
+    repo_path="$workingDir/$local_repo"
     echo "Working Dir: $workingDir"
-    cd $workingDir || exit
+    cd "$workingDir" || exit 1
     echo "Cloning $local_repo"
-    if [ -d "$local_repo" ]; then
-        echo "$local_repo repo exists"
-    else
-        repositoryURL="$local_git_provider_url/$local_fork/$local_repo.git"
+    # Reuse the folder only when it is a usable checkout of the expected
+    # remote (e.g. one left behind by the builder); anything else, such as
+    # the leftovers of an aborted run, is removed so the clone starts clean.
+    if [ -d "$repo_path" ]; then
+        if [ -d "$repo_path/.git" ] \
+           && git -C "$repo_path" rev-parse -q --verify HEAD >/dev/null 2>&1 \
+           && [ "$(git -C "$repo_path" remote get-url origin 2>/dev/null)" = "$repositoryURL" ]; then
+            echo "Reusing existing checkout of $repositoryURL"
+        else
+            echo "$repo_path is not a valid checkout of $repositoryURL, removing it"
+            rm -rf "$repo_path" || { echo "ERROR: failed to remove $repo_path"; exit 1; }
+        fi
+    fi
+    if [ ! -d "$repo_path" ]; then
         echo "Checking out $repositoryURL"
-        git clone "$repositoryURL"
+        git clone "$repositoryURL" "$repo_path" || { echo "ERROR: failed to clone $repositoryURL"; exit 1; }
     fi
 
-    cd $local_repo || exit
+    cd "$repo_path" || exit 1
     echo "Fetching all branches and tags"
-    git fetch --all
+    git fetch --all || { echo "ERROR: failed to fetch refs for $local_repo"; exit 1; }
     echo "Checking out branch: $local_branch"
-    git checkout $local_branch
+    git checkout "$local_branch" || { echo "ERROR: failed to checkout branch $local_branch in $local_repo"; exit 1; }
 }
 
 # Copy files if source exists
