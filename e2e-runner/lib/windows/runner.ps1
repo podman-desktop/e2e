@@ -162,7 +162,12 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
     if (-not [string]::IsNullOrWhiteSpace($pdUrl)) {
         # set binary path
         if ($pdUrl.Contains('setup')) {
-            Download-App('pd-setup.exe')
+            try {
+                Download-App('pd-setup.exe')
+            } catch {
+                Cleanup-Environment
+                throw
+            }
             write-host "Installing $appName from setup.exe file..."
             Start-Process -Wait -FilePath "$workingDir\pd-setup.exe" -ArgumentList "/S" -PassThru
             $localAppDataPrograms="$env:LOCALAPPDATA\Programs"
@@ -176,6 +181,7 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
                     write-host "$appName installation path: $pdLocalAppData"
                 } else {
                     write-host "$appName installation path is missing..."
+                    Cleanup-Environment
                     exit 1
                 }
             }
@@ -189,10 +195,16 @@ if ([string]::IsNullOrWhiteSpace($pdPath))
             } else {
                 write-host "$appName binary is missing..."
                 ls $pdLocalAppData
+                Cleanup-Environment
                 exit 1
             }
         } else {
-            Download-App('pd.exe')
+            try {
+                Download-App('pd.exe')
+            } catch {
+                Cleanup-Environment
+                throw
+            }
             write-host "Only a binary is available from url..."
             $podmanDesktopBinary="$workingDir\pd.exe"
         }
@@ -465,10 +477,17 @@ if ($initialize -eq "1") {
 
 
 # checkout repository
-Clone-Checkout $repo $fork $branch $gitProviderUrl
+# Clean up secrets and re-throw when a checkout fails, so the run stops with
+# the original error instead of cascading into confusing pnpm errors
+try {
+    Clone-Checkout $repo $fork $branch $gitProviderUrl
 
-if ($extTests -eq "1") {
-    Clone-Checkout $extRepo $extFork $extBranch $gitProviderUrl
+    if ($extTests -eq "1") {
+        Clone-Checkout $extRepo $extFork $extBranch $gitProviderUrl
+    }
+} catch {
+    Cleanup-Environment
+    throw
 }
 
 # pnpm INSTALL AND TEST PART
@@ -536,14 +555,7 @@ if ($extTests -eq "1") {
 }
 
 # Cleaning up (secrets, env. vars.)
-write-host "Purge env vars: $scriptEnvVars"
-foreach ($var in $scriptEnvVars) {
-    Remove-Item -Path "env:\$var"
-}
-if ($secretFile) {
-    Write-Host "Remove secrets file $resourcesPath\$secretFile from the target"
-    Remove-Item -Path "$resourcesPath\$secretFile"
-}
+Cleanup-Environment
 
 # Cleaning up executables
 $exeNames = @("docker-compose", "kubectl", "kind", "minikube", "crc") 

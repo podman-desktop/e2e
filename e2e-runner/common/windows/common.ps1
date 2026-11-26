@@ -27,22 +27,70 @@ function Copy-Exists($source, $target) {
 
 # Clone repository and checkout specific branch
 function Clone-Checkout($repo, $fork, $branch, $gitProviderUrl = "https://github.com") {
+    # Guard against an empty, path-like or wildcard repository name: an empty
+    # name would resolve to the whole working directory, and a wildcard such as
+    # '*' would match unrelated entries in it; both would then be removed.
+    if ([string]::IsNullOrWhiteSpace($repo) -or $repo -match '[\\/*?\[\]]' -or $repo -in @('.', '..')) {
+        throw "Invalid repository name '$repo'"
+    }
     cd $workingDir
     write-host "Working Dir: " $workingDir
     write-host "Cloning " $repo
-    if (Test-Path -Path $repo) {
-        write-host "repository already exists"
-    } else {
-        $repositoryURL = "$gitProviderUrl/$fork/$repo.git"
+    # Use an absolute path so a failed cd cannot point the removal elsewhere
+    $repoPath = Join-Path "$workingDir" $repo
+    $repositoryURL = "$gitProviderUrl/$fork/$repo.git"
+    # Reuse the folder only when it is a usable checkout of the expected
+    # remote (e.g. one left behind by the builder); anything else, such as
+    # the leftovers of an aborted run, is removed so the clone starts clean.
+    if (Test-Path -LiteralPath $repoPath) {
+        $validCheckout = $false
+        if (Test-Path -LiteralPath (Join-Path $repoPath ".git")) {
+            git -C $repoPath rev-parse -q --verify HEAD *> $null
+            $hasHead = ($LASTEXITCODE -eq 0)
+            $originURL = "$(git -C $repoPath remote get-url origin 2>$null)".Trim()
+            # Compare case-sensitively, like the Unix runner: remote URL paths
+            # are case-sensitive, so a different case means a different remote.
+            if ($hasHead -and $originURL -and ($originURL -ceq $repositoryURL)) {
+                $validCheckout = $true
+            }
+        }
+        if ($validCheckout) {
+            write-host "Reusing existing checkout of $repositoryURL"
+        } else {
+            write-host "$repoPath is not a valid checkout of $repositoryURL, removing it"
+            try {
+                Remove-Item -LiteralPath $repoPath -Recurse -Force -ErrorAction Stop
+            } catch {
+                # Remove-Item can fail under Windows PowerShell 5.1, e.g. on
+                # pnpm junctions inside node_modules or on files locked by a
+                # running process; rd handles those better.
+                write-host "Remove-Item failed, retrying with rd: $_"
+                cmd /c rd /s /q "$repoPath"
+            }
+            if (Test-Path -LiteralPath $repoPath) {
+                throw "Failed to remove $repoPath, cannot ensure a clean clone"
+            }
+        }
+    }
+    if (-not (Test-Path -LiteralPath $repoPath)) {
         write-host "Checking out" $repositoryURL
-        git clone $repositoryURL
+        git clone $repositoryURL $repoPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to clone repository from $repositoryURL (exit code $LASTEXITCODE)"
+        }
     }
     # Checkout correct branch
-    cd $repo
+    Set-Location -LiteralPath $repoPath
     write-host "Fetch all refs"
     git fetch --all
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to fetch refs for $repo (exit code $LASTEXITCODE)"
+    }
     write-host "checking out branch: $branch"
     git checkout $branch
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to checkout branch $branch in $repo (exit code $LASTEXITCODE)"
+    }
 }
 
 # Load environment variables from comma-separated string
@@ -107,6 +155,24 @@ function Load-Variables() {
         Set-Item -Path "env:CONTAINERS_MACHINE_PROVIDER" -Value $podmanProvider
         $global:scriptEnvVars += "CONTAINERS_MACHINE_PROVIDER"
         $global:envVarDefs += "CONTAINERS_MACHINE_PROVIDER=$podmanProvider"
+    }
+}
+
+# Remove the secrets file and purge environment variables set by the runner.
+# Safe to call multiple times, and used on early exit paths as well.
+function Cleanup-Environment() {
+    if ($global:scriptEnvVars.Count -gt 0) {
+        write-host "Purge env vars:" $global:scriptEnvVars
+        foreach ($var in $global:scriptEnvVars) {
+            Remove-Item -Path "env:\$var" -ErrorAction Ignore
+        }
+    }
+    if ($secretFile -and $resourcesPath) {
+        $secretFilePath = "$resourcesPath\$secretFile"
+        if (Test-Path -Path $secretFilePath) {
+            Write-Host "Remove secrets file $secretFilePath from the target"
+            Remove-Item -Path $secretFilePath -Force
+        }
     }
 }
 
